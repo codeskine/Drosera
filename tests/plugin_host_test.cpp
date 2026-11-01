@@ -12,6 +12,69 @@ static void setParam(juce::AudioProcessor& p, const char* name, float norm) {
     std::exit(1);
 }
 
+// Saved projects depend on these: IDs and names must never change.
+struct ParamIdentity { const char* id; const char* name; };
+static const ParamIdentity kParamIdentity[] = {
+    {"freq", "Frequency"}, {"fbgain", "Feedback"}, {"body", "Body"}, {"lpf", "Lowpass"}, {"hpf", "Highpass"},
+    {"revmix", "Reverb Mix"}, {"revdecay", "Reverb Decay"}, {"echosend", "Echo Send"}, {"echotime", "Echo Time"},
+    {"echofb", "Echo Feedback"}, {"volume", "Volume"}, {"echohalve", "Echo Warp"}, {"inputgain", "Input Level"},
+    {"midipitch", "MIDI Pitch"}, {"midigate", "MIDI Gate"}, {"echotape", "Echo Tape"}, {"tapewow", "Tape Wow"},
+    {"tapeage", "Tape Age"},
+};
+
+// The values stored in tests/fixtures/state-baseline.bin (written by --write-state).
+struct SavedValue { const char* name; float value; };
+static const SavedValue kSavedValues[] = {
+    {"Frequency", 0.61f}, {"Feedback", 0.83f}, {"Lowpass", 0.37f}, {"Echo Tape", 1.0f}, {"Tape Wow", 0.52f},
+};
+
+static bool checkParameterIdentity(juce::AudioProcessor& inst) {
+    bool pass = true;
+    auto& params = inst.getParameters();
+    int i = 0;
+    for (const auto& expected : kParamIdentity) {
+        auto* hosted = i < params.size() ? dynamic_cast<juce::HostedAudioProcessorParameter*>(params[i]) : nullptr;
+        const auto vstId = juce::String(juce::String(expected.id).hashCode() & 0x7fffffff);
+        if (hosted == nullptr || hosted->getName(64) != expected.name || hosted->getParameterID() != vstId) {
+            std::printf("parameter %d: expected %s (%s, id %s), got %s (id %s)\n", i, expected.name, expected.id, vstId.toRawUTF8(),
+                        hosted ? hosted->getName(64).toRawUTF8() : "nothing", hosted ? hosted->getParameterID().toRawUTF8() : "-");
+            pass = false;
+        }
+        ++i;
+    }
+    std::printf("parameter identity: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool checkSavedState(juce::AudioProcessor& inst, const char* fixture) {
+    juce::MemoryBlock state;
+    if (!juce::File(juce::String::fromUTF8(fixture)).loadFileAsData(state) || state.isEmpty()) {
+        std::printf("saved state: cannot read %s: FAIL\n", fixture);
+        return false;
+    }
+    inst.setStateInformation(state.getData(), (int) state.getSize());
+    bool pass = true;
+    for (const auto& saved : kSavedValues)
+        for (auto* p : inst.getParameters())
+            if (p->getName(64) == saved.name && std::abs(p->getValue() - saved.value) > 0.001f) {
+                std::printf("  %s: expected %.3f, got %.3f\n", saved.name, saved.value, p->getValue());
+                pass = false;
+            }
+    std::printf("saved state from the baseline build: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static int writeState(juce::AudioProcessor& inst, const char* path) {
+    for (const auto& saved : kSavedValues) setParam(inst, saved.name, saved.value);
+    juce::MemoryBlock state;
+    inst.getStateInformation(state);
+    const juce::File file(juce::String::fromUTF8(path));
+    file.getParentDirectory().createDirectory();
+    if (!file.replaceWithData(state.getData(), state.getSize())) { std::printf("FAIL: cannot write %s\n", path); return 1; }
+    std::printf("wrote %zu bytes to %s\n", state.getSize(), path);
+    return 0;
+}
+
 struct Stats { double rms = 0; bool finite = true; };
 
 static Stats rmsOf(const juce::AudioBuffer<float>& b, Stats acc, double& sumSq, long& n) {
@@ -85,7 +148,7 @@ static bool featureTests(juce::VST3PluginFormat& vst3, const juce::PluginDescrip
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) { std::printf("usage: plugin_host_test <path to .vst3>\n"); return 2; }
+    if (argc < 2) { std::printf("usage: plugin_host_test <path to .vst3> [state fixture | --write-state <file>]\n"); return 2; }
     juce::ScopedJuceInitialiser_GUI init;
 
     juce::AudioPluginFormatManager fm;
@@ -97,6 +160,14 @@ int main(int argc, char** argv) {
                 descs[0]->pluginFormatName.toRawUTF8(), (int) descs[0]->isInstrument);
 
     bool ok = true;
+    {
+        juce::String err;
+        auto inst = vst3.createInstanceFromDescription(*descs[0], 48000.0, 512, err);
+        if (!inst) { std::printf("FAIL: create: %s\n", err.toRawUTF8()); return 1; }
+        if (argc > 3 && juce::String(argv[2]) == "--write-state") return writeState(*inst, argv[3]);
+        ok &= checkParameterIdentity(*inst);
+        if (argc > 2) ok &= checkSavedState(*inst, argv[2]);
+    }
     for (double sr : {44100.0, 48000.0, 96000.0}) {
         for (int block : {64, 512, 1000}) {
             juce::String err;
