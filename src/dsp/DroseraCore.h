@@ -73,11 +73,16 @@ public:
         for (size_t i = 0; i < n; ++i)
             if (!std::isfinite(outL[i]) || !std::isfinite(outR[i])) { bad = true; break; }
         if (bad) {
-            engine_->Init(kRate);
-            tracking_ = false;
-            for (auto& l : limiter_) l.Init();
+            Recover();
             for (size_t i = 0; i < n; ++i) outL[i] = outR[i] = 0.0f;
         }
+    }
+
+    /// Clears the engine's state and keeps the current parameters. Safe on the audio thread.
+    void Recover() {
+        engine_->Init(kRate);
+        tracking_ = false;
+        for (auto& l : limiter_) l.Init();
     }
 
 private:

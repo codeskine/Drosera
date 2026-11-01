@@ -36,6 +36,11 @@ class BiquadSection {
 
         void SetCoefficients(const Coefficients coefficients) { coefs_ = coefficients; }
 
+        inline void Reset()
+        {
+            s1_[0] = s1_[1] = s2_[0] = s2_[1] = 0.0f;
+        }
+
         inline float Process(const float in, const int channel)
         {
             assert(channel < 2);
@@ -84,6 +89,7 @@ class BiquadCascade {
             sample_rate_ = sample_rate;
             cutoff_hz_ = sample_rate * 0.25f;
             SetFlatResponse();
+            for (auto &biquad : biquads_) biquad.Reset();
         }
 
         inline void SetCutoff(const float cutoff_hz)

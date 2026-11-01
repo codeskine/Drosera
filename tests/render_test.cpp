@@ -1,9 +1,13 @@
 // Offline sanity test for the host-independent core: renders scenarios at several
 // block sizes, checks for NaN/inf, bounds and non-silence, writes WAVs for listening.
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <limits>
+#include <new>
 #include <string>
 #include <vector>
 #include "DroseraCore.h"
@@ -13,6 +17,17 @@
 #include "SincResampler.h"
 
 using infrasonic::DroseraCore;
+
+// Counts allocations while gCountAllocations is on, to prove the audio path makes none.
+static std::atomic<bool> gCountAllocations { false };
+static std::atomic<int> gAllocations { 0 };
+void* operator new(std::size_t size) {
+    if (gCountAllocations.load()) ++gAllocations;
+    if (void* p = std::malloc(size)) return p;
+    throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 
 static void writeWav(const std::string& path, const std::vector<float>& L, const std::vector<float>& R) {
     FILE* f = fopen(path.c_str(), "wb");
@@ -242,6 +257,70 @@ static bool presetTests(const char* outDir) {
     return ok;
 }
 
+static void applyPreset(DroseraCore& core, const infrasonic::Preset& pr) {
+    for (int k = 0; k < DroseraCore::NumParams; ++k) core.SetParam((DroseraCore::Param)k, pr.knob[k]);
+}
+
+static bool noAllocationOnRender() {
+    static DroseraCore core;
+    core.Init();
+    applyPreset(core, infrasonic::kFactoryPresets[0]);
+    static float L[64], R[64], in[64];
+    gAllocations = 0;
+    gCountAllocations = true;
+    for (int block = 0; block < 1500; ++block) {  // 2 s
+        const bool on = (block / 75) % 2 == 1;    // toggles every 100 ms
+        core.SetMidiPitch(on, 48.0f);
+        core.SetEchoTape(on, 0.35f, 0.2f);
+        core.SetGate(on, true);
+        core.SetEchoWarp(on);
+        in[0] = block == 750 ? std::numeric_limits<float>::quiet_NaN() : 0.0f;
+        if (block == 800) core.Recover();
+        core.Render(in, L, R, 64);
+    }
+    gCountAllocations = false;
+    const int count = gAllocations.load();
+    printf("allocations while rendering, NaN recovery included: %d %s\n", count, count == 0 ? "OK" : "FAIL");
+    return count == 0;
+}
+
+static bool recoversFromNan() {
+    DroseraCore core;
+    core.Init();
+    applyPreset(core, infrasonic::kFactoryPresets[0]);
+    const size_t after = 48000 * 3;
+    std::vector<float> L(after), R(after);
+    float l[64], r[64], in[64] = {};
+    for (int block = 0; block < 750; ++block) core.Render(nullptr, l, r, 64);
+    in[0] = std::numeric_limits<float>::quiet_NaN();
+    core.Render(in, l, r, 64);
+    core.Recover();
+    for (size_t pos = 0; pos + 64 <= after; pos += 64) core.Render(nullptr, &L[pos], &R[pos], 64);
+    bool finite = true;
+    for (size_t i = 0; i + 64 <= after; ++i) finite &= std::isfinite(L[i]) && std::isfinite(R[i]);
+    const double r2 = rmsOf(L, after - 48000, after - 64);
+    const bool pass = finite && r2 > 0.01;
+    printf("recovery from NaN: finite=%d rms of last second=%.4f %s\n", (int)finite, r2, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool filtersClearOnInit() {
+    infrasonic::LPF12 lpf;
+    lpf.Init(48000.0f);
+    lpf.SetQ(0.9f);
+    lpf.SetCutoff(1000.0f);
+    float a = std::numeric_limits<float>::quiet_NaN(), b = a;
+    lpf.ProcessStereo(a, b);
+    lpf.Init(48000.0f);
+    lpf.SetQ(0.9f);
+    lpf.SetCutoff(1000.0f);
+    a = b = 0.5f;
+    lpf.ProcessStereo(a, b);
+    const bool pass = std::isfinite(a) && std::isfinite(b);
+    printf("filter state cleared by Init: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
     //                  freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
@@ -259,6 +338,9 @@ int main(int argc, char** argv) {
     ok &= resamplerTests();
     ok &= tapeTests();
     ok &= presetTests(outDir);
+    ok &= noAllocationOnRender();
+    ok &= recoversFromNan();
+    ok &= filtersClearOnInit();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }

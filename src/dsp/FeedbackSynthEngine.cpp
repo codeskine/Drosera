@@ -10,11 +10,14 @@ static constexpr float kFeedbackTrackingQ = 1.5f;
 void Engine::Init(const float sample_rate) {
   using ED = EchoDelay<kMaxEchoDelaySamp>;
 
-  echo_delay_[0] = std::make_unique<ED>();
-  echo_delay_[1] = std::make_unique<ED>();
-  verb_ = std::make_unique<ReverbSc>();
-  tape_echo_[0] = std::make_unique<TapeEcho>(0u);
-  tape_echo_[1] = std::make_unique<TapeEcho>(1u);
+  // Only the first call allocates: Init also clears the state on the audio thread.
+  if (!verb_) {
+    echo_delay_[0] = std::make_unique<ED>();
+    echo_delay_[1] = std::make_unique<ED>();
+    verb_ = std::make_unique<ReverbSc>();
+    tape_echo_[0] = std::make_unique<TapeEcho>(0u);
+    tape_echo_[1] = std::make_unique<TapeEcho>(1u);
+  }
   echo_tape_ = false;
 
   sample_rate_ = sample_rate;
