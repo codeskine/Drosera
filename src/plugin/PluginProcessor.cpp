@@ -1,13 +1,13 @@
 // JUCE wrapper for the Drosera feedback synth (VST3 / AU / Standalone).
-// The DSP lives in Source/DSP and runs at a fixed 48 kHz; hosts at other
+// The DSP lives in src/dsp and runs at a fixed 48 kHz; hosts at other
 // sample rates are bridged with windowed-sinc resampling (see renderChunk).
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <algorithm>
 #include <cstring>
-#include "DSP/DroseraCore.h"
-#include "DSP/SincResampler.h"
+#include "DroseraCore.h"
+#include "SincResampler.h"
 #include "PluginEditor.h"
 #include "Presets.h"
 

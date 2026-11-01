@@ -24,15 +24,15 @@ target_compile_options(TapeEchoModule PRIVATE -w)
 
 # --- Drosera DSP (host independent) ---
 add_library(DroseraDSP STATIC
-    Source/DSP/BiquadFilters.cpp
-    Source/DSP/FeedbackSynthEngine.cpp
-    Source/DSP/KarplusString.cpp)
-target_include_directories(DroseraDSP PUBLIC Source/DSP)
+    src/dsp/BiquadFilters.cpp
+    src/dsp/FeedbackSynthEngine.cpp
+    src/dsp/KarplusString.cpp)
+target_include_directories(DroseraDSP PUBLIC src/dsp)
 target_link_libraries(DroseraDSP PUBLIC DaisySP TapeEchoModule)
 
 # --- Offline render test ---
 add_executable(render_test tests/render_test.cpp)
-target_include_directories(render_test PRIVATE tests Source)
+target_include_directories(render_test PRIVATE tests src/plugin)
 target_link_libraries(render_test PRIVATE DroseraDSP)
 
 # Measures the pitch produced for MIDI notes (see tests/pitch_probe.cpp)
@@ -40,7 +40,7 @@ add_executable(pitch_probe tests/pitch_probe.cpp)
 target_include_directories(pitch_probe PRIVATE tests)
 target_link_libraries(pitch_probe PRIVATE DroseraDSP)
 
-# Renders reference WAVs for the hardware comparison (hardware-comparison/)
+# Renders reference WAVs for the hardware comparison (tools/hardware-comparison/)
 add_executable(render_cli tests/render_cli.cpp)
 target_link_libraries(render_cli PRIVATE DroseraDSP)
 
@@ -62,7 +62,7 @@ if(DROSERA_BUILD_PLUGIN)
         NEEDS_MIDI_INPUT TRUE
         COPY_PLUGIN_AFTER_BUILD FALSE)
 
-    target_sources(Drosera PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+    target_sources(Drosera PRIVATE src/plugin/PluginProcessor.cpp src/plugin/PluginEditor.cpp)
     target_compile_definitions(Drosera PUBLIC
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
     target_link_libraries(Drosera PRIVATE
@@ -94,7 +94,7 @@ if(DROSERA_BUILD_PLUGIN)
     # cannot be snapshotted): editor_snapshot <out.png> [paramId=normalizedValue ...]
     juce_add_console_app(editor_snapshot PRODUCT_NAME "editor_snapshot")
     target_sources(editor_snapshot PRIVATE
-        tests/editor_snapshot.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+        tests/editor_snapshot.cpp src/plugin/PluginProcessor.cpp src/plugin/PluginEditor.cpp)
     target_compile_definitions(editor_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(editor_snapshot PRIVATE DroseraDSP
         juce::juce_audio_utils juce::juce_recommended_config_flags)
