@@ -143,7 +143,7 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
     ageKnob_ = addKnob(apvts, "tapeage", "Age");
     echoTape_ = apvts.getRawParameterValue("echotape");
     sections_.push_back({"ECHO", {echoSend, echoTime, echoFb, wowKnob_, ageKnob_},
-                         {addToggle(apvts, "echohalve", "TIME / 2"), addToggle(apvts, "echotape", "TAPE")}, {}});
+                         {addToggle(apvts, "echohalve", "WARP"), addToggle(apvts, "echotape", "TAPE")}, {}});
     sections_.push_back({"OUTPUT", {addKnob(apvts, "volume", "Volume"), addKnob(apvts, "inputgain", "Input")}, {}, {}});
     sections_.push_back({"MIDI", {}, {addToggle(apvts, "midipitch", "PITCH"), addToggle(apvts, "midigate", "GATE")}, {}});
 

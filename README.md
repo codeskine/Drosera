@@ -16,6 +16,15 @@ With the plugin-only features off, the DSP is the firmware's own code at a fixed
 - **TAPE:** swaps the echo for the octamad tape echo, adding Wow and Age.
 - **Presets:** 14 factory presets, exposed to the host as programs.
 
+## Readouts
+
+Knob readouts show what the engine really uses, not the knob's position. Echo Feedback is 100 % at unity with
+the firmware echo. With TAPE on the same knob follows the tape echo's steeper law, so its readout is only a
+guide: repeats die off quickly below about 60 % of the knob's travel and self-oscillate above about 70 %.
+
+WARP is the firmware's delay switch. It makes the echo 2.8 to 3.9 times shorter, and the readout does not
+show the change.
+
 ## Build
 
 Needs CMake 3.22+, Ninja and a C++17 compiler. CMake downloads JUCE 8.0.9.

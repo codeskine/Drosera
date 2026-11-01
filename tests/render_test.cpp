@@ -10,6 +10,7 @@
 #include "pitch_estimator.h"
 #include "Presets.h"
 #include "TapeEcho.h"
+#include "SincResampler.h"
 
 using infrasonic::DroseraCore;
 
@@ -41,7 +42,7 @@ static bool run(const Scenario& s, size_t blockSize, const char* outDir) {
     DroseraCore core;
     core.Init();
     for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, s.p[i]);
-    core.SetDelayHalve(s.halve);
+    core.SetEchoWarp(s.halve);
     const size_t total = 48000 * 8;
     std::vector<float> L(total), R(total);
     for (size_t pos = 0; pos < total; pos += blockSize) {
@@ -135,6 +136,39 @@ static bool featureTests() {
     return ok;
 }
 
+// Resampler: passband flat, what lies above the new Nyquist removed, DC and block-splitting exact.
+static bool resamplerTests() {
+    bool ok = true;
+    using infrasonic::SincResampler;
+    auto level = [](double hzIn, double rateIn, double rateOut, double hzMeasure) {
+        SincResampler r; r.Init(rateIn / rateOut);
+        const int n = 1 << 17;
+        std::vector<float> in((size_t)(n * rateIn / rateOut) + 4096), out((size_t)n);
+        for (size_t i = 0; i < in.size(); ++i) in[i] = (float)std::sin(2.0 * M_PI * hzIn * (double)i / rateIn);
+        for (int pos = 0, used = 0; pos < n;) { const int c = std::min(512, n - pos); used += r.Process(&in[(size_t)used], &out[(size_t)pos], c); pos += c; }
+        double re = 0, im = 0;  // single-bin DFT with a Hann window
+        for (int i = 0; i < n; ++i) { const double w = 0.5 - 0.5 * std::cos(2.0 * M_PI * i / n), a = 2.0 * M_PI * hzMeasure * i / rateOut; re += w * out[(size_t)i] * std::cos(a); im += w * out[(size_t)i] * std::sin(a); }
+        return 20.0 * std::log10(std::sqrt(re * re + im * im) / (n * 0.25) + 1e-12);
+    };
+    struct Case { const char* name; double hz, in, out, measure, lo, hi; };
+    const Case cases[] = {
+        {"48k->44.1k 1 kHz passes", 1000, 48000, 44100, 1000, -0.05, 0.05},
+        {"48k->44.1k 15 kHz passes", 15000, 48000, 44100, 15000, -0.5, 0.5},
+        {"48k->44.1k 23 kHz folded image", 23000, 48000, 44100, 44100 - 23000, -300, -60},
+        {"48k->96k 1 kHz passes", 1000, 48000, 96000, 1000, -0.05, 0.05},
+        {"48k->96k 10 kHz image at 38 kHz", 10000, 48000, 96000, 38000, -300, -60},
+        {"96k->48k 30 kHz folded image", 30000, 96000, 48000, 18000, -300, -60},
+        {"44.1k->48k 1 kHz passes", 1000, 44100, 48000, 1000, -0.05, 0.05},
+    };
+    for (const auto& c : cases) {
+        const double db = level(c.hz, c.in, c.out, c.measure);
+        const bool pass = db >= c.lo && db <= c.hi;
+        printf("resampler %-32s %7.2f dB %s\n", c.name, db, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
 // Tape echo module through its float wrapper: delay accuracy, decay, bounded self-oscillation, bad input.
 static bool tapeTests() {
     bool ok = true;
@@ -187,7 +221,7 @@ static bool presetTests(const char* outDir) {
     for (const auto& pr : infrasonic::kFactoryPresets) {
         DroseraCore core; core.Init();
         for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, pr.knob[i]);
-        core.SetDelayHalve(pr.echoHalve);
+        core.SetEchoWarp(pr.echoHalve);
         core.SetEchoTape(pr.echoTape, pr.tapeWow, pr.tapeAge);
         if (pr.midiGate) { core.SetMidiPitch(true, 48.0f); core.SetGate(true, true); }  // as if a note were held
         const size_t total = 48000 * 10;
@@ -222,6 +256,7 @@ int main(int argc, char** argv) {
     for (auto& s : sc)
         for (size_t b : {4, 64, 512, 480}) ok &= run(s, b, outDir);
     ok &= featureTests();
+    ok &= resamplerTests();
     ok &= tapeTests();
     ok &= presetTests(outDir);
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");

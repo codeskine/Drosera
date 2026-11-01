@@ -1,20 +1,22 @@
 // JUCE wrapper for the Drosera feedback synth (VST3 / AU / Standalone).
 // The DSP lives in Source/DSP and runs at a fixed 48 kHz; hosts at other
-// sample rates are bridged with Lagrange interpolation (see processBlock).
+// sample rates are bridged with windowed-sinc resampling (see renderChunk).
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <algorithm>
 #include <cstring>
 #include "DSP/DroseraCore.h"
+#include "DSP/SincResampler.h"
 #include "PluginEditor.h"
 #include "Presets.h"
 
 namespace {
 
 using infrasonic::DroseraCore;
+using infrasonic::SincResampler;
 
-enum class Show { Percent, NoteHz, Db, Millis, Hz, Seconds };
+enum class Show { Percent, ValuePercent, LevelDb, ReverbFeedback, NoteHz, Db, Millis, Hz, Seconds };
 
 struct ParamSpec {
     const char* id;
@@ -33,22 +35,26 @@ const ParamSpec kSpecs[DroseraCore::NumParams] = {
     {"lpf",      "Lowpass",       0.90f, 100.0f, 18000.0f, daisysp::Mapping::LOG,    Show::Hz},
     {"hpf",      "Highpass",      0.20f, 10.0f,  4000.0f,  daisysp::Mapping::LOG,    Show::Hz},
     {"revmix",   "Reverb Mix",    0.30f, 0.0f,   1.0f,     daisysp::Mapping::LINEAR, Show::Percent},
-    {"revdecay", "Reverb Decay",  0.50f, 0.0f,   1.0f,     daisysp::Mapping::LINEAR, Show::Percent},
-    {"echosend", "Echo Send",     0.20f, 0.0f,   1.0f,     daisysp::Mapping::EXP,    Show::Percent},
+    {"revdecay", "Reverb Decay",  0.50f, 0.0f,   1.0f,     daisysp::Mapping::LINEAR, Show::ReverbFeedback},
+    {"echosend", "Echo Send",     0.20f, 0.0f,   1.0f,     daisysp::Mapping::EXP,    Show::ValuePercent},
     {"echotime", "Echo Time",     0.50f, 0.05f,  5.0f,     daisysp::Mapping::EXP,    Show::Seconds},
-    {"echofb",   "Echo Feedback", 0.40f, 0.0f,   1.5f,     daisysp::Mapping::LINEAR, Show::Percent},
-    {"volume",   "Volume",        0.70f, 0.0f,   1.0f,     daisysp::Mapping::EXP,    Show::Percent},
+    {"echofb",   "Echo Feedback", 0.40f, 0.0f,   1.5f,     daisysp::Mapping::LINEAR, Show::ValuePercent},
+    {"volume",   "Volume",        0.70f, 0.0f,   1.0f,     daisysp::Mapping::EXP,    Show::LevelDb},
 };
 
 juce::String formatValue(const ParamSpec& s, float norm) {
     const float v = daisysp::fmap(norm, s.lo, s.hi, s.map);
     switch (s.show) {
+        // The engine's real values, not the knob's position: these curves are far from linear.
+        case Show::ValuePercent:   return juce::String(juce::roundToInt(v * 100.0f)) + " %";
+        case Show::LevelDb:        return v <= 0.0f ? juce::String("-inf dB") : juce::String(juce::Decibels::gainToDecibels(v), 1) + " dB";
+        case Show::ReverbFeedback: return juce::String(juce::roundToInt((0.2f + 0.8f * infrasonic::ftension(norm, -3.0f)) * 100.0f)) + " %";
         case Show::NoteHz:  return juce::String(daisysp::mtof(v), 1) + " Hz";
         case Show::Db:      return juce::String(v, 1) + " dB";
         case Show::Millis:  return juce::String(v * 1000.0f, 1) + " ms";
         case Show::Hz:      return juce::String((int) v) + " Hz";
         case Show::Seconds: return juce::String(v, 2) + " s";
-        default:            return juce::String(norm * 100.0f, 0) + " %";
+        default:            return juce::String(juce::roundToInt(norm * 100.0f)) + " %";
     }
 }
 
@@ -115,7 +121,6 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int) override {
-        hostRate = sampleRate;
         core->Init();  // allocates; only ever called off the audio thread
         ratio = (double) DroseraCore::kRate / sampleRate;   // engine samples consumed per host output sample
         inRatio = sampleRate / (double) DroseraCore::kRate; // host samples consumed per engine input sample
@@ -128,7 +133,7 @@ public:
         in48.assign(kMaxChunk * 2 * maxRatio + 64, 0.0f);
         inMono.assign(kMaxChunk, 0.0f);
         outCount = inCount = 0;
-        interpL.reset(); interpR.reset(); interpIn.reset();
+        resampleL.Init(ratio); resampleR.Init(ratio); resampleIn.Init(inRatio);
 
         heldCount = 0; haveNote = false; bendSemis = 0.0f;
         lastFreqKnob = raw[DroseraCore::Frequency]->load();
@@ -137,6 +142,10 @@ public:
             core->Render(nullptr, outL.data(), outR.data(), kPrime);
             outCount = kPrime;
         }
+        // Input to output delay. Without an input there is nothing to align, so nothing to declare.
+        const auto latency = (double) SincResampler::kLatencyInputSamples
+                           + ((double) kPrime + SincResampler::kLatencyInputSamples) / ratio;
+        setLatencySamples(useResampler && getTotalNumInputChannels() > 0 ? juce::roundToInt(latency) : 0);
         prepared = true;
     }
 
@@ -198,7 +207,7 @@ private:
         }
         for (int i = 0; i < DroseraCore::NumParams; ++i)
             core->SetParam((DroseraCore::Param) i, raw[i]->load());
-        core->SetDelayHalve(halveRaw->load() > 0.5f);
+        core->SetEchoWarp(halveRaw->load() > 0.5f);
         core->SetEchoTape(echoTapeRaw->load() > 0.5f, tapeWowRaw->load(), tapeAgeRaw->load());
         inGain = inGainRaw->load() * 2.0f;
         applyMidiState();
@@ -260,7 +269,7 @@ private:
             inCount += (size_t) n;
             const int k = (int) std::floor(((double) inCount - 8.0) / inRatio);
             if (k > 0) {
-                const size_t used = (size_t) interpIn.process(inRatio, inFifo.data(), in48.data(), k);
+                const size_t used = (size_t) resampleIn.Process(inFifo.data(), in48.data(), k);
                 inCount -= used;
                 std::memmove(inFifo.data(), inFifo.data() + used, inCount * sizeof(float));
                 core->Render(in48.data(), outL.data() + outCount, outR.data() + outCount, (size_t) k);
@@ -276,8 +285,8 @@ private:
             core->Render(nullptr, outL.data() + outCount, outR.data() + outCount, 64);
             outCount += 64;
         }
-        const size_t used = (size_t) interpL.process(ratio, outL.data(), dstL, n);
-        interpR.process(ratio, outR.data(), dstR, n);
+        const size_t used = (size_t) resampleL.Process(outL.data(), dstL, n);
+        resampleR.Process(outR.data(), dstR, n);
         outCount -= used;
         std::memmove(outL.data(), outL.data() + used, outCount * sizeof(float));
         std::memmove(outR.data(), outR.data() + used, outCount * sizeof(float));
@@ -292,7 +301,7 @@ private:
                 juce::ParameterID{s.id, 1}, s.name, juce::NormalisableRange<float>(0.0f, 1.0f), s.def, attrs));
         }
         layout.add(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID{"echohalve", 1}, "Echo Time Halve", false));
+            juce::ParameterID{"echohalve", 1}, "Echo Warp", false));
         // Input gain 0..2x (0.5 = unity); only audible when the host connects the input bus.
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{"inputgain", 1}, "Input Level", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
@@ -307,10 +316,10 @@ private:
             juce::ParameterID{"echotape", 1}, "Echo Tape", false));
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{"tapewow", 1}, "Tape Wow", juce::NormalisableRange<float>(0.0f, 1.0f), 0.35f,
-            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(v * 100.0f, 0) + " %"; })));
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + " %"; })));
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{"tapeage", 1}, "Tape Age", juce::NormalisableRange<float>(0.0f, 1.0f), 0.2f,
-            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(v * 100.0f, 0) + " %"; })));
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + " %"; })));
         return layout;
     }
 
@@ -334,9 +343,9 @@ private:
     std::atomic<bool> midiPitchActive { false };  // read by the editor
 
     // Sample-rate bridging state
-    double hostRate = 48000.0, ratio = 1.0, inRatio = 1.0;
+    double ratio = 1.0, inRatio = 1.0;
     bool useResampler = false, prepared = false;
-    juce::LagrangeInterpolator interpL, interpR, interpIn;
+    SincResampler resampleL, resampleR, resampleIn;
     std::vector<float> outL, outR, inFifo, in48, inMono;
     size_t outCount = 0, inCount = 0;
 

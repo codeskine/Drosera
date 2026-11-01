@@ -146,6 +146,43 @@ int main(int argc, char** argv) {
     }
     ok &= featureTests(vst3, *descs[0]);
 
+    {   // Readouts show the engine's real values, not the knob's position.
+        juce::String err;
+        auto inst = vst3.createInstanceFromDescription(*descs[0], 48000.0, 512, err);
+        auto text = [&](const char* name, float v) { for (auto* p : inst->getParameters()) if (p->getName(64) == name) return p->getText(v, 32); return juce::String("?"); };
+        const struct { const char* name; float v; const char* want; } cases[] = {
+            {"Echo Feedback", 0.4f, "60 %"}, {"Echo Feedback", 1.0f, "150 %"}, {"Echo Send", 0.2f, "4 %"},
+            {"Volume", 0.5f, "-12.0 dB"}, {"Reverb Decay", 0.5f, "85 %"}, {"Reverb Decay", 0.1f, "42 %"}, {"Echo Warp", 1.0f, "On"}};
+        for (const auto& c : cases) {
+            const auto got = text(c.name, c.v);
+            const bool pass = got == c.want;
+            std::printf("readout %-14s %.2f = %s %s\n", c.name, c.v, got.toRawUTF8(), pass ? "OK" : "FAIL");
+            ok &= pass;
+        }
+    }
+
+    // Declared latency matches the real input-to-output delay when the host's rate differs.
+    for (double sr : {44100.0, 48000.0, 96000.0}) {
+        juce::String err;
+        auto inst = vst3.createInstanceFromDescription(*descs[0], sr, 512, err);
+        inst->enableAllBuses();
+        setParam(*inst, "Feedback", 0.0f); setParam(*inst, "Reverb Mix", 0.0f); setParam(*inst, "Echo Send", 0.0f);
+        inst->prepareToPlay(sr, 512);
+        juce::AudioBuffer<float> buf(2, 512); juce::MidiBuffer m;
+        const long at = (long) sr;  // impulse after a second of silence
+        long peakAt = -1; double peak = 0;
+        for (long b = 0; b < (long) (sr * 2 / 512); ++b) {
+            buf.clear();
+            if (at >= b * 512 && at < (b + 1) * 512) { buf.setSample(0, (int) (at - b * 512), 0.9f); buf.setSample(1, (int) (at - b * 512), 0.9f); }
+            inst->processBlock(buf, m);
+            for (int i = 0; i < 512; ++i) if (b * 512 + i >= at && std::abs(buf.getSample(0, i)) > peak) { peak = std::abs(buf.getSample(0, i)); peakAt = b * 512 + i; }
+        }
+        const long measured = peakAt - at; const int declared = inst->getLatencySamples();
+        const bool pass = peak > 1e-3 && std::labs(measured - declared) <= 12;
+        std::printf("sr=%-7.0f latency: declared %d, measured %ld %s\n", sr, declared, measured, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+
     // Tape echo through the bundle: toggling it must change the sound, stay bounded and audible.
     for (double sr : {44100.0, 48000.0}) {
         juce::String err;

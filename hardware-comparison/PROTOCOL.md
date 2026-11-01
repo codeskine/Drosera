@@ -22,7 +22,7 @@ il verso in cui ruoti, conta l'effetto: controlla con l'orecchio che 0 sia davve
 | p03_high_bright | ¾ | ¾ | ¼ | 1 | ¼ | 0 | ½ | 0 | ½ | 0 | ¾ | off |
 | p04_reverb_wash | ½ | ¾ | ½ | ¾ | ¼ | ¾ | ¾ | 0 | ½ | 0 | ¾ | off |
 | p05_echo_swell | ½ | ¾ | ½ | ¾ | ¼ | 0 | ½ | ¾ | ½ | ¾ | ¾ | off |
-| p06_echo_halved | ½ | ¾ | ½ | ¾ | ¼ | 0 | ½ | ¾ | ½ | ¾ | ¾ | **on** (tempo dimezzato) |
+| p06_echo_halved | ½ | ¾ | ½ | ¾ | ¼ | 0 | ½ | ¾ | ½ | ¾ | ¾ | **on** (warp: tempo 3,6 volte più corto) |
 | p07_long_body | ½ | ¾ | 1 | ¾ | ¼ | 0 | ½ | 0 | ½ | 0 | ¾ | off |
 | p08_max_feedback | ½ | 1 | ½ | ¾ | ¼ | 0 | ½ | 0 | ½ | 0 | ¾ | off |
 | p09_dark_filtered | ½ | ¾ | ½ | ¼ | ½ | ¼ | ½ | 0 | ½ | 0 | ¾ | off |

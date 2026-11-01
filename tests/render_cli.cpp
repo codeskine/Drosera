@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
 
         DroseraCore core; core.Init();
         for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, p[i]);
-        core.SetDelayHalve(halve != 0);
+        core.SetEchoWarp(halve != 0);
         const size_t total = (size_t)(seconds * 48000);
         std::vector<float> L(total), R(total);
         for (size_t pos = 0; pos < total; pos += 4)   // firmware block size

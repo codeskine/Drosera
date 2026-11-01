@@ -41,7 +41,9 @@ public:
 
     /// Normalized 0..1, same orientation as the firmware's knobs after ADC inversion.
     void SetParam(Param p, float norm) { norm_[p] = norm; }
-    void SetDelayHalve(bool on)        { delay_halve_ = on; }
+    /// The firmware's delay switch. Halves the knob position before its square-law curve, so the
+    /// echo gets 2.8 to 3.9 times shorter, not twice: a doppler warp rather than a tempo halving.
+    void SetEchoWarp(bool on)          { echo_warp_ = on; }
 
     /// Echo model: the firmware's (default) or the tape echo, with its two extra controls (0..1).
     void SetEchoTape(bool on, float wow, float age) { echo_tape_ = on; tape_wow_ = wow; tape_age_ = age; }
@@ -101,7 +103,7 @@ private:
         // anti-exponential tension curve, as in FeedbackSynthControls::Update
         registry_.UpdateNormalized(ReverbDecay,  ftension(norm_[ReverbDecay], -3.0f), imm);
         registry_.UpdateNormalized(EchoSend,     norm_[EchoSend], imm);
-        registry_.UpdateNormalized(EchoTime,     norm_[EchoTime] * (delay_halve_ ? 0.5f : 1.0f), imm);
+        registry_.UpdateNormalized(EchoTime,     norm_[EchoTime] * (echo_warp_ ? 0.5f : 1.0f), imm);
         registry_.UpdateNormalized(EchoFeedback, norm_[EchoFeedback], imm);
         registry_.UpdateNormalized(OutputVolume, norm_[OutputVolume], imm);
         first_ = false;
@@ -197,7 +199,7 @@ private:
     Registry registry_;
     daisysp::Limiter limiter_[2];
     std::array<float, NumParams> norm_ {};
-    bool delay_halve_ = false, echo_tape_ = false;
+    bool echo_warp_ = false, echo_tape_ = false;
     float tape_wow_ = 0.0f, tape_age_ = 0.0f;
     bool midi_pitch_on_ = false, gate_enabled_ = false, gate_open_ = false;
     float midi_pitch_ = 40.0f;
