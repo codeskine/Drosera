@@ -50,6 +50,8 @@ steps from `INSTALL.txt` and the README.
 ## Checks before the first release
 
 - **Name:** searched on 2026-11-01. The web shows no music product called Drosera. Two software companies outside music
-  use the name: Drosera Network (blockchain security) and a London company in network management. Word mark registers:
-  [USPTO](https://tmsearch.uspto.gov/) has no mark containing "drosera", and [TMview](https://www.tmdn.org/tmview/) in
-  class 9 has only "hidrosera", filed in Turkey on 2026-09-20. This is a search, not legal advice.
+  use the name: Drosera Network (blockchain security) and a London company in network management. In the registers,
+  [TMview](https://www.tmdn.org/tmview/) lists 62 marks containing "drosera" and [USPTO](https://tmsearch.uspto.gov/) one,
+  abandoned. Most live ones are TotalEnergies lubricants in class 4. None is in class 9 or 15, apart from "hidrosera",
+  filed in Turkey on 2026-09-20 in classes 9, 42 and 44. The closest others are DROSERA SARL in France (classes 31 and 42)
+  and a Polish pharmacy (35, 41 and 44). This is a search, not legal advice.
