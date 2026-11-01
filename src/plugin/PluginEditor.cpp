@@ -53,6 +53,7 @@ void DroseraEditor::setTab(int index) {
 void DroseraEditor::selectProgram(int index) {
     if (!juce::isPositiveAndBelow(index, processor.getNumPrograms())) return;
     processor.setCurrentProgram(index);
+    processor.updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withProgramChanged(true));
     presetBox_.setSelectedId(index + 1, juce::dontSendNotification);
 }
 

@@ -13,6 +13,7 @@ public:
     ~DroseraEditor() override;
 
     void setTab(int);
+    void selectProgram(int index);
     int tab() const { return tabs_.tab(); }
 
     /// The timer's body: moves the plant on by dtSeconds and refreshes every readout.
@@ -28,7 +29,6 @@ public:
 
 private:
     void timerCallback() override;
-    void selectProgram(int index);
     const drosera::LabeledKnob* findKnob(const juce::String& paramId) const;
 
     drosera::DroseraLookAndFeel lookAndFeel_;

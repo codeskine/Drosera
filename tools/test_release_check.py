@@ -40,6 +40,9 @@ class ReleaseCheck(unittest.TestCase):
     def test_empty_section(self):
         self.assertEqual(run("v0.1.0", UNRELEASED + "\n## [0.1.0] - 2026-12-01\n\n## [0.0.9] - 2026-01-01\n\n- Old.\n").returncode, 1)
 
+    def test_section_with_only_headings(self):
+        self.assertEqual(run("v0.1.0", UNRELEASED + "\n## [0.1.0] - 2026-12-01\n\n### Added\n\n### Fixed\n").returncode, 1)
+
     def test_rc_uses_unreleased(self):
         r = run("v0.1.0-rc1", UNRELEASED)
         self.assertEqual(r.returncode, 0, r.stderr)

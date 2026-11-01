@@ -167,7 +167,7 @@ public:
         // Sample-accurate MIDI: render up to each event, then apply it.
         for (const auto meta : midi) {
             renderTo(std::min(meta.samplePosition, total));
-            handleMidi(meta.getMessage());
+            if (meta.numBytes <= 3) handleMidi(meta.getMessage());  // nothing longer matters here, and a long message allocates
         }
         renderTo(total);
 
@@ -198,7 +198,7 @@ private:
     bool midiPitchActive() const override { return midiPitchActive_.load(); }
     float soundingNote() const override { return core->PublishedNote(); }
     float bodySeconds() const override { return core->PublishedBodySeconds(); }
-    float echoSeconds() const override { return core->PublishedEchoSeconds(); }
+    float echoSeconds() const override { return DroseraCore::EchoTimeSeconds(raw[DroseraCore::EchoTime]->load(), halveRaw->load() > 0.5f); }
     double hostSampleRate() const override { return hostRate.load(); }
     drosera::SpectrumTap& spectrumTap() override { return tap; }
     int openTab() const override { return uiTab.load(); }

@@ -21,6 +21,7 @@ PlantView::PlantView() {
     feedback_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     feedback_.setRotaryParameters(juce::degreesToRadians(225.0f), juce::degreesToRadians(495.0f), true);
     feedback_.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    feedback_.setTitle("Feedback");
     feedback_.getProperties().set("mainControl", true);  // DroseraLookAndFeel::kMainControl
     addAndMakeVisible(feedback_);
 }
