@@ -45,5 +45,5 @@ Academy, and uses none of their artwork.
 
 ## License
 
-AGPLv3, see [LICENSE](LICENSE). Third-party code keeps its own terms: see
+Copyright 2026 codeskine. AGPLv3, see [LICENSE](LICENSE). Third-party code keeps its own terms: see
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

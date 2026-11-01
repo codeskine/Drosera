@@ -49,7 +49,6 @@ steps from `INSTALL.txt` and the README.
 
 ## Checks before the first release
 
-- **Copyright holder:** to be chosen and stated in the README.
 - **Name:** web searches on 2026-11-01 for "Drosera" with VST, synth, Eurorack and audio plugin found no music product
   of that name. Two software companies outside music use it: Drosera Network (blockchain security) and a London company
   in network management. This is not legal advice, and the registers themselves were not searched: check

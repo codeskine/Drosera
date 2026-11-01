@@ -19,7 +19,7 @@ Requires macOS 11 or newer.
 
 LICENSE
 
-Drosera is free software under the GNU Affero General Public License, version 3: see LICENSE. The source for this
+Copyright 2026 codeskine. Drosera is free software under the GNU Affero General Public License, version 3: see LICENSE. The source for this
 version is attached to its release at https://github.com/codeskine/Drosera/releases
 
 Third-party code keeps its own terms: see THIRD_PARTY_LICENSES.md and the licenses folder.

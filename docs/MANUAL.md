@@ -56,8 +56,9 @@ Both are in the feedback path, so they shape which partials sustain, not only th
 | Echo Feedback | 100 % is unity, and up to 150 % it runs away, bounded by a soft clip |
 | Echo Warp (WARP) | The firmware's delay switch. Echo Time's readout shows the shortened time |
 
-**WARP** halves the Echo Time knob's position before its square-law curve. The echo gets 2.8 to 3.9 times
-shorter, not twice as short, so it acts as a doppler warp and not as a tempo halving.
+**WARP** halves the Echo Time knob's position before its square-law curve. Above about a quarter of the knob's
+travel the echo gets 2.8 to 3.9 times shorter, not twice as short, so it acts as a doppler warp and not as a tempo
+halving. Lower down the difference shrinks, because Echo Time cannot go below 50 ms.
 
 ## Output tab
 
@@ -95,7 +96,8 @@ note-off.
 ## Known limits
 
 - With MIDI Pitch on, notes 16 to 18 and note 80 may stay silent in some settings, because the loop does not have
-  the gain to oscillate there.
+  the gain to oscillate there. Note 16 can also sound on the wrong partial, about 11 semitones sharp.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared
   to the host only when the input bus is connected.
-- The drone is chaotic. Two runs of the same preset never match sample by sample.
+- The drone is chaotic. A small change to a knob, or to when it moves, can lead the loop somewhere else, so automation
+  may not repeat a performance exactly.
