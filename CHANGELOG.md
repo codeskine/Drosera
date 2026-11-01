@@ -5,12 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-01
+
 ### Fixed
 
 - Echo Time's readout with WARP on follows the knob when the host is not processing audio.
 - A long MIDI message, such as a sysex, no longer allocates on the audio thread.
 - VoiceOver can name the Feedback knob.
 - A preset chosen in the window updates the host's own preset display.
+
+### Known limits
+
+- macOS only. The release is not notarized, so a downloaded plugin needs the unblocking command in `INSTALL.txt`.
+- The universal binary's Intel part is built, but has not been run.
+- Not yet compared with a hardware unit.
 
 ## [0.1.0] - 2026-11-01
 
