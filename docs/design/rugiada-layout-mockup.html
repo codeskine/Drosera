@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drosera: disposizione</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 16px 60px; background: #e9e7e2; color: #26231f; font: 15px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .intro { margin: 0 0 30px; color: #5c574f; }
+  section { margin-bottom: 40px; }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  h2 b { display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: #26231f; color: #fff; font-size: 14px; margin-right: 8px; }
+  .why { margin: 0 0 12px; color: #5c574f; }
+  .window { position: relative; width: 100%; aspect-ratio: 760 / 500; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.28); }
+  .window svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .note { margin: 10px 0 0; font-size: 13px; color: #5c574f; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rugiada: dove mettere 14 manopole e 4 pulsanti?</h1>
+  <p class="intro">Tre modi di ordinare gli stessi controlli attorno alla pianta. Qui conta la disposizione, non i dettagli grafici. Dimmi in chat quale preferisci.</p>
+
+  <section>
+    <h2><b>1</b>Tutto ai lati</h2>
+    <p class="why">Come nella bozza: la pianta al centro e i gruppi in due colonne. Tutto è sempre visibile.</p>
+    <div class="window" id="one"></div>
+    <p class="note">Immediata e senza clic in più. Ma le manopole hanno tutte lo stesso peso, e l'ordine del segnale non si legge.</p>
+  </section>
+
+  <section>
+    <h2><b>2</b>Tre in primo piano, il resto a schede</h2>
+    <p class="why">Feedback, Frequency e Body fanno il suono e stanno sulla pianta. Sotto, una sola scheda alla volta tra Filters, Reverb, Echo e Output.</p>
+    <div class="window" id="two"></div>
+    <p class="note">La gerarchia più netta e la più riposante. Costo: un clic per arrivare ai controlli nascosti, e non li vedi tutti insieme.</p>
+  </section>
+
+  <section>
+    <h2><b>3</b>Il segnale gira attorno alla pianta</h2>
+    <p class="why">I gruppi seguono il percorso del suono in senso orario, collegati da un arco su cui scorre il segnale. Unisce la pianta all'idea del circuito.</p>
+    <div class="window" id="three"></div>
+    <p class="note">Tutto visibile e si capisce come funziona lo strumento. È la più affollata e la più lavorosa da realizzare e rifinire.</p>
+  </section>
+</main>
+<script>
+const NS = 'http://www.w3.org/2000/svg', F = '-apple-system, Helvetica, Arial, sans-serif';
+const C = { bg: '#120a10', stalk: '#a33244', dew: '#ffc27a', track: '#3a1a24', knob: '#c98a6a', text: '#a98f88', bright: '#e9d6c8', head: '#6f5a58', panel: '#1c0d15', edge: '#6d2030' };
+const draws = [];
+const el = (p, n, a = {}, t) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (t !== undefined) e.textContent = t; p.appendChild(e); return e; };
+const txt = (s, x, y, t, o = {}) => el(s, 'text', { x, y, 'text-anchor': o.a || 'middle', fill: o.c || C.text, 'font-size': o.s || 10, 'letter-spacing': o.l || 0, 'font-family': o.f || F }, t);
+const head = (s, x, y, t, a = 'start') => txt(s, x, y, t, { a, c: C.head, s: 9, l: 2 });
+function dial(s, x, y, r, v, label, value, color = C.knob, w = 2.5) {
+  const a0 = 135, a = a0 + 270 * v, pt = (d, rr) => [x + rr * Math.cos(d * Math.PI / 180), y + rr * Math.sin(d * Math.PI / 180)];
+  const arc = (d1, d2) => { const [x1, y1] = pt(d1, r), [x2, y2] = pt(d2, r); return `M${x1} ${y1}A${r} ${r} 0 ${d2 - d1 > 180 ? 1 : 0} 1 ${x2} ${y2}`; };
+  el(s, 'path', { d: arc(a0, a0 + 270), fill: 'none', stroke: C.track, 'stroke-width': w, 'stroke-linecap': 'round' });
+  el(s, 'path', { d: arc(a0, a), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linecap': 'round' });
+  const [px, py] = pt(a, r * .6), [qx, qy] = pt(a, r * .95);
+  el(s, 'line', { x1: px, y1: py, x2: qx, y2: qy, stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round' });
+  if (label) txt(s, x, y + r + 14, label);
+  if (value) txt(s, x, y + r + 26, value, { c: C.bright, s: 9 });
+}
+const band = (i, t, n) => { const h = (i % 6 === 0 ? 1 : i % 3 === 0 ? .55 : .22) * (1 - i / n * .6); return Math.max(.08, h * (.72 + .28 * Math.sin(t * 1.3 + i * .9))); };
+function plant(s, cx, cy, inner, reach, n = 54) {
+  const g = el(el(s, 'defs'), 'radialGradient', { id: 'g' + s.parentNode.id, cx: '50%', cy: '50%', r: '50%' });
+  el(g, 'stop', { offset: '0%', 'stop-color': '#4a1320', 'stop-opacity': .75 }); el(g, 'stop', { offset: '100%', 'stop-color': C.bg, 'stop-opacity': 0 });
+  el(s, 'circle', { cx, cy, r: inner + reach + 22, fill: `url(#g${s.parentNode.id})` });
+  const t = [];
+  for (let i = 0; i < n; i++) t.push({ a: i / n * Math.PI * 2 - Math.PI / 2, l: el(s, 'line', { stroke: C.stalk, 'stroke-width': 1.4, 'stroke-linecap': 'round' }), d: el(s, 'circle', { fill: C.dew }) });
+  el(s, 'circle', { cx, cy, r: inner, fill: C.panel, stroke: C.edge, 'stroke-width': 1.5 });
+  dial(s, cx, cy, inner - 12, .75, null, null, C.dew, 3.5);
+  txt(s, cx, cy - 3, 'FEEDBACK', { c: C.bright, s: 9, l: 2 });
+  txt(s, cx, cy + 16, '−6 dB', { c: C.dew, s: 17 });
+  draws.push(tt => t.forEach((p, i) => {
+    const v = band(Math.min(i, n - i) * 2, tt, n), len = inner + 8 + reach * v, c = Math.cos(p.a), z = Math.sin(p.a);
+    p.l.setAttribute('x1', cx + (inner + 3) * c); p.l.setAttribute('y1', cy + (inner + 3) * z); p.l.setAttribute('x2', cx + len * c); p.l.setAttribute('y2', cy + len * z);
+    p.d.setAttribute('cx', cx + len * c); p.d.setAttribute('cy', cy + len * z); p.d.setAttribute('r', 1.8 + 3.4 * v); p.d.setAttribute('opacity', .35 + .65 * v);
+  }));
+}
+const frame_ = (id) => { const s = el(document.getElementById(id), 'svg', { viewBox: '0 0 760 500' }); el(s, 'rect', { width: 760, height: 500, fill: C.bg });
+  txt(s, 26, 38, 'DROSERA', { a: 'start', c: C.bright, s: 20, l: 7, f: 'Georgia, serif' }); txt(s, 734, 36, '‹  Cathedral Bloom  ›', { a: 'end', s: 12 }); return s; };
+const toggles = (s, x, y, list, gap = 66) => list.forEach((t, i) => {
+  el(s, 'rect', { x: x + i * gap, y, width: gap - 8, height: 22, rx: 11, fill: i === -1 ? C.dew : 'none', stroke: C.edge });
+  txt(s, x + i * gap + (gap - 8) / 2, y + 15, t, { s: 9, l: 1 });
+});
+
+/* 1: everything at the sides */
+(() => { const s = frame_('one');
+  plant(s, 380, 250, 58, 118);
+  head(s, 36, 88, 'STRING'); dial(s, 60, 124, 20, .43, 'Frequency', '82 Hz'); dial(s, 130, 124, 20, .3, 'Body', '9,9 ms');
+  head(s, 36, 206, 'FILTERS'); dial(s, 60, 242, 20, .9, 'Lowpass', '10,7 kHz'); dial(s, 130, 242, 20, .2, 'Highpass', '33 Hz');
+  head(s, 36, 324, 'OUTPUT'); dial(s, 60, 360, 20, .7, 'Volume', '−7,5 dB'); dial(s, 130, 360, 20, .5, 'Input', '0 dB');
+  head(s, 724, 88, 'REVERB', 'end'); dial(s, 630, 124, 20, .3, 'Mix', '30 %'); dial(s, 700, 124, 20, .5, 'Decay', '85 %');
+  head(s, 724, 206, 'ECHO', 'end'); dial(s, 630, 242, 20, .45, 'Send', '20 %'); dial(s, 700, 242, 20, .5, 'Time', '1,29 s');
+  dial(s, 630, 330, 20, .4, 'Feedback', '60 %'); dial(s, 700, 330, 20, .35, 'Wow', '35 %'); dial(s, 630, 415, 20, .2, 'Age', '20 %');
+  toggles(s, 250, 462, ['PITCH', 'GATE', 'WARP', 'TAPE']);
+})();
+
+/* 2: three in front, the rest in tabs */
+(() => { const s = frame_('two');
+  plant(s, 380, 192, 54, 88);
+  dial(s, 135, 185, 40, .43, 'Frequency', '82 Hz', C.dew, 3.5); dial(s, 625, 185, 40, .3, 'Body', '9,9 ms', C.dew, 3.5);
+  el(s, 'line', { x1: 26, y1: 338, x2: 734, y2: 338, stroke: '#2c1620' });
+  const tabs = ['FILTERS', 'REVERB', 'ECHO', 'OUTPUT', 'MIDI'];
+  tabs.forEach((t, i) => { const x = 26 + i * 142, active = i === 2;
+    if (active) el(s, 'rect', { x, y: 336, width: 132, height: 3, fill: C.dew });
+    txt(s, x + 66, 326, t, { c: active ? C.dew : C.head, s: 10, l: 2 }); });
+  [['Send', '20 %', .45], ['Time', '1,29 s', .5], ['Feedback', '60 %', .4], ['Wow', '35 %', .35], ['Age', '20 %', .2]].forEach(([l, v, k], i) => dial(s, 110 + i * 112, 396, 24, k, l, v));
+  toggles(s, 640, 372, ['WARP'], 86); toggles(s, 640, 408, ['TAPE'], 86);
+})();
+
+/* 3: the signal goes round the plant */
+(() => { const s = frame_('three');
+  const cx = 380, cy = 262, R = 196;
+  const pulse = el(s, 'ellipse', { cx, cy, rx: 300, ry: R, fill: 'none', stroke: '#3a1a24', 'stroke-width': 2 });
+  const run = el(s, 'ellipse', { cx, cy, rx: 300, ry: R, fill: 'none', stroke: C.dew, 'stroke-width': 2.5, 'stroke-dasharray': '30 1550', 'stroke-linecap': 'round' });
+  plant(s, cx, cy, 50, 70, 46);
+  const grp = (x, y, t, ks) => { const w = ks.length * 62 + 12; el(s, 'rect', { x: x - w / 2, y: y - 30, width: w, height: 88, rx: 8, fill: C.bg, stroke: '#2c1620' }); head(s, x, y - 16, t, 'middle'); ks.forEach(([l, v, k], i) => dial(s, x - (ks.length - 1) * 31 + i * 62, y + 12, 16, k, l, v)); };
+  grp(380, 84, 'STRING', [['Frequency', '82 Hz', .43], ['Body', '9,9 ms', .3]]);
+  grp(640, 190, 'FILTERS', [['Lowpass', '10,7k', .9], ['Highpass', '33 Hz', .2]]);
+  grp(640, 340, 'REVERB', [['Mix', '30 %', .3], ['Decay', '85 %', .5]]);
+  grp(305, 440, 'ECHO', [['Send', '20 %', .45], ['Time', '1,29 s', .5], ['Feedback', '60 %', .4], ['Wow', '35 %', .35], ['Age', '20 %', .2]]);
+  grp(110, 300, 'OUTPUT', [['Volume', '−7,5 dB', .7], ['Input', '0 dB', .5]]);
+  txt(s, 110, 190, 'PITCH · GATE', { s: 9, l: 1 }); txt(s, 110, 208, 'WARP · TAPE', { s: 9, l: 1 });
+  draws.push(t => run.setAttribute('stroke-dashoffset', -(t * 220) % 1580));
+})();
+
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const frame = ms => { draws.forEach(d => d(ms / 1000)); if (!still) requestAnimationFrame(frame); };
+frame(2000);
+</script>
+</body>
+</html>

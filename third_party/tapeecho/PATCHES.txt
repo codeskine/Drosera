@@ -1,9 +1,0 @@
-From repeat98/octamad, commit b8deefc88b2c3e5f3c6158e364eb741df1924e1d, modules/tapeecho (MIT, see LICENSE).
-Files: cpu.c, cpu.h, cpu_tables.h, generate_tables.py, README.md. Only the native C path is compiled (TE_HOST).
-
-Changes for Drosera:
-- generate_tables.py: RATE = 48000 instead of 44100; cpu_tables.h regenerated with it.
-- cpu.c: rate-dependent constants rescaled to 48 kHz (tape speed, wow and flutter rates, wow and
-  flutter depth in samples, BEAT target). The stock-frame hook stays out of the build.
-- cpu.c/cpu.h: TE_RING 245760 frames (5.12 s); TapeParams.target_q8 for continuous delay time;
-  rng seeded per lane so that the left and right channels hiss independently.

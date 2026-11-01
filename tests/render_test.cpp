@@ -1,18 +1,32 @@
 // Offline sanity test for the host-independent core: renders scenarios at several
 // block sizes, checks for NaN/inf, bounds and non-silence, writes WAVs for listening.
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <limits>
+#include <new>
 #include <string>
 #include <vector>
 #include "DroseraCore.h"
 #include "pitch_estimator.h"
 #include "Presets.h"
-#include "TapeEcho.h"
 #include "SincResampler.h"
 
 using infrasonic::DroseraCore;
+
+// Counts allocations while gCountAllocations is on, to prove the audio path makes none.
+static std::atomic<bool> gCountAllocations { false };
+static std::atomic<int> gAllocations { 0 };
+void* operator new(std::size_t size) {
+    if (gCountAllocations.load()) ++gAllocations;
+    if (void* p = std::malloc(size)) return p;
+    throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 
 static void writeWav(const std::string& path, const std::vector<float>& L, const std::vector<float>& R) {
     FILE* f = fopen(path.c_str(), "wb");
@@ -169,60 +183,12 @@ static bool resamplerTests() {
     return ok;
 }
 
-// Tape echo module through its float wrapper: delay accuracy, decay, bounded self-oscillation, bad input.
-static bool tapeTests() {
-    bool ok = true;
-    using infrasonic::TapeEcho;
-    for (float seconds : {0.05f, 0.25f, 1.0f, 5.0f}) {
-        auto t = std::make_unique<TapeEcho>(0u);
-        t->SetDelayTime(seconds, 48000.0f); t->SetFeedback(0.0f); t->SetWow(0.0f); t->SetAge(0.0f);
-        const size_t total = (size_t)(seconds * 48000.0f) + 48000;
-        double peak = 0; long at = -1;
-        for (size_t i = 0; i < total; ++i) {
-            const float y = t->Process(i >= 1600 && i < 1608 ? 0.5f : 0.0f);
-            if (i > 1700 && std::fabs(y) > peak) { peak = std::fabs(y); at = (long)i; }
-        }
-        const double ms = (at - 1604) / 48.0;
-        const bool pass = std::fabs(ms - seconds * 1000.0 - 16.0 / 48.0) < 2.0 && peak > 0.02;
-        printf("tape delay %.2f s: echo at %.1f ms, peak %.3f %s\n", seconds, ms, peak, pass ? "OK" : "FAIL");
-        ok &= pass;
-    }
-    for (float fb : {0.0f, 0.4f, 0.62f, 0.8f, 1.0f}) {
-        auto t = std::make_unique<TapeEcho>(0u);
-        t->SetDelayTime(0.25f, 48000.0f); t->SetFeedback(fb); t->SetWow(0.35f); t->SetAge(0.3f);
-        const size_t total = 48000 * 30;
-        double mx = 0, early = 0, late = 0; bool finite = true;
-        for (size_t i = 0; i < total; ++i) {
-            const float in = i < 12000 ? 0.25f * (float)std::sin(2.0 * M_PI * 440.0 * (double)i / 48000.0) : 0.0f;
-            const float y = t->Process(in);
-            finite &= std::isfinite(y);
-            mx = std::max(mx, (double)std::fabs(y));
-            if (i > 48000 * 2 && i < 48000 * 4) early += (double)y * y;
-            if (i > 48000 * 27) late += (double)y * y;
-        }
-        early = std::sqrt(early / (48000.0 * 2)); late = std::sqrt(late / (48000.0 * 3));
-        const bool pass = finite && mx <= 1.0;
-        printf("tape feedback %.2f: rms 2-4 s %.4f, rms 27-30 s %.5f, peak %.3f %s\n", fb, early, late, mx, pass ? "OK" : "FAIL");
-        ok &= pass;
-    }
-    {
-        auto t = std::make_unique<TapeEcho>(0u);
-        t->SetDelayTime(0.1f, 48000.0f); t->SetFeedback(0.6f);
-        bool finite = true;
-        for (int i = 0; i < 96000; ++i) finite &= std::isfinite(t->Process(i == 100 ? NAN : i == 200 ? INFINITY : i == 300 ? 1e30f : 0.1f));
-        printf("tape bad input %s\n", finite ? "OK" : "FAIL"); ok &= finite;
-    }
-    return ok;
-}
-
-// Every factory preset must be finite and bounded, and audible unless it needs an input.
 static bool presetTests(const char* outDir) {
     bool ok = true;
     for (const auto& pr : infrasonic::kFactoryPresets) {
         DroseraCore core; core.Init();
         for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, pr.knob[i]);
         core.SetEchoWarp(pr.echoHalve);
-        core.SetEchoTape(pr.echoTape, pr.tapeWow, pr.tapeAge);
         if (pr.midiGate) { core.SetMidiPitch(true, 48.0f); core.SetGate(true, true); }  // as if a note were held
         const size_t total = 48000 * 10;
         std::vector<float> L(total), R(total);
@@ -242,6 +208,111 @@ static bool presetTests(const char* outDir) {
     return ok;
 }
 
+static void applyPreset(DroseraCore& core, const infrasonic::Preset& pr) {
+    for (int k = 0; k < DroseraCore::NumParams; ++k) core.SetParam((DroseraCore::Param)k, pr.knob[k]);
+}
+
+static bool noAllocationOnRender() {
+    static DroseraCore core;
+    core.Init();
+    applyPreset(core, infrasonic::kFactoryPresets[0]);
+    static float L[64], R[64], in[64];
+    gAllocations = 0;
+    gCountAllocations = true;
+    for (int block = 0; block < 1500; ++block) {  // 2 s
+        const bool on = (block / 75) % 2 == 1;    // toggles every 100 ms
+        core.SetMidiPitch(on, 48.0f);
+        core.SetGate(on, true);
+        core.SetEchoWarp(on);
+        in[0] = block == 750 ? std::numeric_limits<float>::quiet_NaN() : 0.0f;
+        if (block == 800) core.Recover();
+        core.Render(in, L, R, 64);
+    }
+    gCountAllocations = false;
+    const int count = gAllocations.load();
+    printf("allocations while rendering, NaN recovery included: %d %s\n", count, count == 0 ? "OK" : "FAIL");
+    return count == 0;
+}
+
+static bool recoversFromNan() {
+    DroseraCore core;
+    core.Init();
+    applyPreset(core, infrasonic::kFactoryPresets[0]);
+    const size_t after = 48000 * 3;
+    std::vector<float> L(after), R(after);
+    float l[64], r[64], in[64] = {};
+    for (int block = 0; block < 750; ++block) core.Render(nullptr, l, r, 64);
+    in[0] = std::numeric_limits<float>::quiet_NaN();
+    core.Render(in, l, r, 64);
+    core.Recover();
+    for (size_t pos = 0; pos + 64 <= after; pos += 64) core.Render(nullptr, &L[pos], &R[pos], 64);
+    bool finite = true;
+    for (size_t i = 0; i + 64 <= after; ++i) finite &= std::isfinite(L[i]) && std::isfinite(R[i]);
+    const double r2 = rmsOf(L, after - 48000, after - 64);
+    const bool pass = finite && r2 > 0.01;
+    printf("recovery from NaN: finite=%d rms of last second=%.4f %s\n", (int)finite, r2, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool filtersClearOnInit() {
+    infrasonic::LPF12 lpf;
+    lpf.Init(48000.0f);
+    lpf.SetQ(0.9f);
+    lpf.SetCutoff(1000.0f);
+    float a = std::numeric_limits<float>::quiet_NaN(), b = a;
+    lpf.ProcessStereo(a, b);
+    lpf.Init(48000.0f);
+    lpf.SetQ(0.9f);
+    lpf.SetCutoff(1000.0f);
+    a = b = 0.5f;
+    lpf.ProcessStereo(a, b);
+    const bool pass = std::isfinite(a) && std::isfinite(b);
+    printf("filter state cleared by Init: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// What the interface reads: the values that really sound, not the knobs.
+static bool publishedValues() {
+    float l[64], r[64];
+    auto settle = [&](DroseraCore& core, double seconds) {
+        for (int b = 0; b < (int)(seconds * 48000.0 / 64.0); ++b) core.Render(nullptr, l, r, 64);
+    };
+    bool ok = true;
+    {
+        DroseraCore core; core.Init();
+        applyPreset(core, infrasonic::kFactoryPresets[0]);
+        core.SetParam(DroseraCore::FeedbackBody, 0.30f);
+        settle(core, 2.0);
+        const float knob = daisysp::fmap(0.30f, 0.001f, 0.1f, daisysp::Mapping::EXP);
+        const bool pass = std::fabs(core.PublishedBodySeconds() - knob) < knob * 0.01f;
+        printf("published Body, knob: %.5f s (knob %.5f) %s\n", core.PublishedBodySeconds(), knob, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    {
+        DroseraCore core; core.Init();
+        applyPreset(core, infrasonic::kFactoryPresets[0]);
+        core.SetParam(DroseraCore::FeedbackBody, 0.30f);
+        core.SetMidiPitch(true, 60.0f);
+        settle(core, 2.0);
+        const float T = 1.0f / 261.63f;  // the loop's filters can move the delay by up to half a period
+        const bool pass = std::fabs(core.PublishedNote() - 60.0f) < 0.01f && std::fabs(core.PublishedBodySeconds() - 3.0f * T) < 0.5f * T;
+        printf("published note %.3f, Body %.5f s (3 periods %.5f) %s\n", core.PublishedNote(), core.PublishedBodySeconds(), 3.0f * T, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    {
+        DroseraCore core; core.Init();
+        applyPreset(core, infrasonic::kFactoryPresets[0]);
+        core.SetParam(DroseraCore::EchoTime, 0.5f);
+        core.SetEchoWarp(true);
+        settle(core, 1.0);
+        const float expected = daisysp::fmap(0.25f, 0.05f, 5.0f, daisysp::Mapping::EXP);
+        const bool pass = std::fabs(core.PublishedEchoSeconds() - expected) < expected * 0.01f;
+        printf("published Echo Time with WARP: %.3f s (expected %.3f) %s\n", core.PublishedEchoSeconds(), expected, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
     //                  freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
@@ -257,8 +328,11 @@ int main(int argc, char** argv) {
         for (size_t b : {4, 64, 512, 480}) ok &= run(s, b, outDir);
     ok &= featureTests();
     ok &= resamplerTests();
-    ok &= tapeTests();
     ok &= presetTests(outDir);
+    ok &= noAllocationOnRender();
+    ok &= recoversFromNan();
+    ok &= filtersClearOnInit();
+    ok &= publishedValues();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }

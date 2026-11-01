@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 project(Drosera VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,24 +16,17 @@ target_compile_options(DaisySP PRIVATE -w)
 # NOTE: vendored headers were patched to include <cstddef>/<cstdint> (the 2023 DaisySP
 # commit relied on transitive includes that modern libc++ no longer provides).
 
-# --- Tape echo (MIT), from repeat98/octamad, see third_party/tapeecho/PATCHES.txt ---
-add_library(TapeEchoModule STATIC third_party/tapeecho/cpu.c)
-target_include_directories(TapeEchoModule PUBLIC third_party/tapeecho)
-target_compile_definitions(TapeEchoModule PUBLIC TE_HOST)
-set_target_properties(TapeEchoModule PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
-target_compile_options(TapeEchoModule PRIVATE -w)
-
 # --- Drosera DSP (host independent) ---
 add_library(DroseraDSP STATIC
-    Source/DSP/BiquadFilters.cpp
-    Source/DSP/FeedbackSynthEngine.cpp
-    Source/DSP/KarplusString.cpp)
-target_include_directories(DroseraDSP PUBLIC Source/DSP)
-target_link_libraries(DroseraDSP PUBLIC DaisySP TapeEchoModule)
+    src/dsp/BiquadFilters.cpp
+    src/dsp/FeedbackSynthEngine.cpp
+    src/dsp/KarplusString.cpp)
+target_include_directories(DroseraDSP PUBLIC src/dsp)
+target_link_libraries(DroseraDSP PUBLIC DaisySP)
 
 # --- Offline render test ---
 add_executable(render_test tests/render_test.cpp)
-target_include_directories(render_test PRIVATE tests Source)
+target_include_directories(render_test PRIVATE tests src/plugin)
 target_link_libraries(render_test PRIVATE DroseraDSP)
 
 # Measures the pitch produced for MIDI notes (see tests/pitch_probe.cpp)
@@ -40,7 +34,7 @@ add_executable(pitch_probe tests/pitch_probe.cpp)
 target_include_directories(pitch_probe PRIVATE tests)
 target_link_libraries(pitch_probe PRIVATE DroseraDSP)
 
-# Renders reference WAVs for the hardware comparison (hardware-comparison/)
+# Renders reference WAVs for the hardware comparison (tools/hardware-comparison/)
 add_executable(render_cli tests/render_cli.cpp)
 target_link_libraries(render_cli PRIVATE DroseraDSP)
 
@@ -52,6 +46,13 @@ if(DROSERA_BUILD_PLUGIN)
         GIT_SHALLOW ON)
     FetchContent_MakeAvailable(JUCE)
 
+    set(DROSERA_PLUGIN_SOURCES
+        src/plugin/PluginProcessor.cpp
+        src/plugin/PluginEditor.cpp
+        src/plugin/ui/DroseraLookAndFeel.cpp
+        src/plugin/ui/PlantView.cpp
+        src/plugin/ui/TabPanel.cpp)
+
     juce_add_plugin(Drosera
         COMPANY_NAME "codeskine"
         PLUGIN_MANUFACTURER_CODE Cdsk
@@ -62,12 +63,14 @@ if(DROSERA_BUILD_PLUGIN)
         NEEDS_MIDI_INPUT TRUE
         COPY_PLUGIN_AFTER_BUILD FALSE)
 
-    target_sources(Drosera PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+    target_sources(Drosera PRIVATE ${DROSERA_PLUGIN_SOURCES})
+    target_include_directories(Drosera PRIVATE src/plugin)
     target_compile_definitions(Drosera PUBLIC
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
     target_link_libraries(Drosera PRIVATE
         DroseraDSP
         juce::juce_audio_utils
+        juce::juce_dsp
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 
@@ -94,8 +97,17 @@ if(DROSERA_BUILD_PLUGIN)
     # cannot be snapshotted): editor_snapshot <out.png> [paramId=normalizedValue ...]
     juce_add_console_app(editor_snapshot PRODUCT_NAME "editor_snapshot")
     target_sources(editor_snapshot PRIVATE
-        tests/editor_snapshot.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+        tests/editor_snapshot.cpp ${DROSERA_PLUGIN_SOURCES})
     target_compile_definitions(editor_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_include_directories(editor_snapshot PRIVATE src/plugin)
     target_link_libraries(editor_snapshot PRIVATE DroseraDSP
-        juce::juce_audio_utils juce::juce_recommended_config_flags)
+        juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
+
+    # The interface's logic and the editor's behaviour (see tests/ui_test.cpp)
+    juce_add_console_app(ui_test PRODUCT_NAME "ui_test")
+    target_sources(ui_test PRIVATE tests/ui_test.cpp ${DROSERA_PLUGIN_SOURCES})
+    target_include_directories(ui_test PRIVATE tests src/plugin)
+    target_compile_definitions(ui_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(ui_test PRIVATE DroseraDSP
+        juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 endif()

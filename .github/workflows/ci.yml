@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
+    inputs:
+      version:
+        description: Version to package, such as 0.1.0. Left empty, nothing is packaged.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      PLUGINVAL_VERSION: v1.0.4
+      VST3: build/Drosera_artefacts/Release/VST3/Drosera.vst3
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: .deps
+          key: juce-8.0.9-${{ runner.os }}
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DFETCHCONTENT_BASE_DIR:PATH=.deps
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+
+      - name: Build
+        run: cmake --build build --target render_test render_cli ui_test plugin_host_test Drosera_VST3
+
+      - name: Test the release check
+        run: python3 tools/test_release_check.py
+
+      - name: render_test
+        run: build/render_test
+
+      - name: ui_test
+        run: build/ui_test_artefacts/Release/ui_test
+
+      - name: plugin_host_test
+        run: build/plugin_host_test_artefacts/Release/plugin_host_test "$VST3" tests/fixtures/state-baseline.bin
+
+      - name: pluginval
+        run: |
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_macOS.zip"
+          unzip -q pluginval.zip -d pluginval-bin
+          pluginval-bin/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --validate "$VST3"
+
+      - name: Check reference renders
+        run: tools/hardware-comparison/check_reference.sh build/render_cli
+
+      - name: Sign with Developer ID and notarize
+        if: inputs.version != '' && env.APPLE_ID != ''
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(uuidgen)
+          security create-keychain -p "$password" "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          codesign --force --deep --options runtime --timestamp --sign "Developer ID Application" "$VST3"
+          ditto -c -k --keepParent "$VST3" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$VST3"
+
+      - name: Package
+        if: inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          stage="$RUNNER_TEMP/stage"
+          mkdir -p "$stage/licenses"
+          ditto "$VST3" "$stage/Drosera.vst3"
+          cp LICENSE THIRD_PARTY_LICENSES.md docs/INSTALL.txt "$stage/"
+          cp LICENSE-AudreyII "$stage/licenses/"
+          cp third_party/DaisySP/LICENSE "$stage/licenses/DaisySP-LICENSE"
+          ditto -c -k --sequesterRsrc "$stage" "Drosera-$VERSION-macos.zip"
+
+          # What a user unpacks is what must work, not the build folder.
+          unpacked="$RUNNER_TEMP/unpacked"
+          ditto -x -k "Drosera-$VERSION-macos.zip" "$unpacked"
+          ls -la "$unpacked"
+          test -f "$unpacked/Drosera.vst3/Contents/MacOS/Drosera"
+          test -x "$unpacked/Drosera.vst3/Contents/MacOS/Drosera"
+          codesign --verify --deep --strict "$unpacked/Drosera.vst3"
+          build/plugin_host_test_artefacts/Release/plugin_host_test "$unpacked/Drosera.vst3" tests/fixtures/state-baseline.bin
+
+      - name: Upload the package
+        if: inputs.version != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: drosera-macos
+          path: Drosera-${{ inputs.version }}-macos.zip
+          if-no-files-found: error
