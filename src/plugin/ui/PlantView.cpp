@@ -10,6 +10,7 @@ namespace {
 const juce::Point<float> kCentre { 380.0f, 180.0f };
 constexpr float kInner = 54.0f, kReach = 66.0f;
 constexpr float kRepaintChange = 0.002f;  // of a tentacle's travel
+constexpr float kStoppedAfterSeconds = 0.2f;  // longer than an 8192-sample block at 44.1 kHz
 } // namespace
 
 PlantView::PlantView() {
@@ -34,8 +35,12 @@ void PlantView::setFeedbackText(const juce::String& text) {
 void PlantView::update(SpectrumTap& tap, double sampleRate, float dtSeconds) {
     std::array<float, SpectrumTap::kCapacity> incoming;
     const size_t got = tap.pop(incoming.data(), incoming.size());
+    pendingSeconds_ += dtSeconds;
     if (got == 0) {
-        history_.fill(0.0f);  // a host that stops processing reads as silence
+        // Host blocks can be longer than a tick, so a tick with no audio is not silence. Only a long gap is:
+        // a host that stops processing reads as silence.
+        if (pendingSeconds_ < kStoppedAfterSeconds) return;
+        history_.fill(0.0f);
     } else if (got >= history_.size()) {
         std::copy(incoming.begin() + (std::ptrdiff_t) (got - history_.size()), incoming.begin() + (std::ptrdiff_t) got, history_.begin());
     } else {
@@ -52,10 +57,11 @@ void PlantView::update(SpectrumTap& tap, double sampleRate, float dtSeconds) {
     bool changed = false;
     for (size_t i = 0; i < levels_.size(); ++i) {
         // Snap at the end of a release, so a silent plant comes truly to rest.
-        const float next = smoothLevel(levels_[i], targets_[i], dtSeconds);
+        const float next = smoothLevel(levels_[i], targets_[i], pendingSeconds_);
         levels_[i] = next < kFloorDb + 0.01f ? kFloorDb : next;
         changed |= std::abs(bandAmount(levels_[i]) - drawn_[i]) > kRepaintChange;
     }
+    pendingSeconds_ = 0.0f;
     if (changed) repaint();
 }
 

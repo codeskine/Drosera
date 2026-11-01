@@ -36,6 +36,7 @@ private:
     std::array<float, 2 * kFftSize> fftData_ {};
     std::array<float, kNumBands> levels_ {}, targets_ {};
     std::array<float, kNumBands> drawn_ {};
+    float pendingSeconds_ = 0.0f;  // time since the levels last moved
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlantView)
 };

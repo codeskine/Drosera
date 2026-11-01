@@ -1,6 +1,7 @@
 // Tests for the interface: the spectrum path to the display, the readouts and the editor's behaviour.
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -211,6 +212,26 @@ static void plantTests() {
     for (int i = 0; i < 90; ++i) plant.update(tap, 48000.0, dt);
     check(plant.level(30) < kFloorDb + 1.0f, "plantFallsWhenHostStops");
 
+    {   // A steady sound stays still however long the host's blocks are: a tick with no new audio is not silence.
+        PlantView steady;
+        SpectrumTap steadyTap;
+        steadyTap.setActive(true);
+        const int hostBlock = 2048;
+        std::vector<float> block((size_t) hostBlock);
+        double owed = 0.0, swing = 0.0, lowest = 0.0, highest = -100.0;
+        for (int tick = 0; tick < 300; ++tick) {
+            for (owed += blockSize; owed >= hostBlock; owed -= hostBlock) {
+                for (float& v : block) { v = 0.25f * (float) std::sin(phase); phase += 2.0 * M_PI * 1000.0 / 48000.0; }
+                steadyTap.push(block.data(), block.data(), (size_t) hostBlock);
+            }
+            steady.update(steadyTap, 48000.0, dt);
+            if (tick >= 150) { lowest = std::min(lowest, (double) steady.level(30)); highest = std::max(highest, (double) steady.level(30)); }
+        }
+        swing = highest - lowest;
+        std::printf("  level swing with 2048-sample blocks: %.2f dB\n", swing);
+        check(swing < 1.0, "plantStillWithLongBlocks");
+    }
+
     PlantView unprepared;
     for (int i = 0; i < 30; ++i) { pushSine(); unprepared.update(tap, 0.0, dt); }
     check(unprepared.level(30) == kFloorDb, "plantRestsWithNoSampleRate");
@@ -273,6 +294,19 @@ static void editorTests() {
         fourth->setStateInformation(missing.getData(), (int) missing.getSize());
         check(openEditor(*third)->tab() == 0 && std::abs(parameter(*third, "lpf") - 0.33f) < 0.001f, "tabSurvivesBadState");
         check(openEditor(*fourth)->tab() == 0 && std::abs(parameter(*fourth, "lpf") - 0.33f) < 0.001f, "tabSurvivesMissingState");
+    }
+
+    {   // A host may restore state off the message thread while the window reads the open tab.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        juce::MemoryBlock state;
+        p->getStateInformation(state);
+        auto editor = openEditor(*p);
+        std::atomic<bool> done { false };
+        std::thread host([&] { while (!done) p->setStateInformation(state.getData(), (int) state.getSize()); });
+        for (int i = 0; i < 400000; ++i) editor->refreshDisplay(0.0f);
+        done = true;
+        host.join();
+        check(true, "stateRestoredOffThreadWithWindowOpen");
     }
 
     {   // Only the open tab's controls show; the main ones always do.

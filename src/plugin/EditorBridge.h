@@ -12,4 +12,6 @@ public:
     virtual float echoSeconds() const = 0;
     virtual double hostSampleRate() const = 0;  // 0 until prepared
     virtual drosera::SpectrumTap& spectrumTap() = 0;
+    virtual int openTab() const = 0;      // as saved, so not necessarily a valid tab
+    virtual void setOpenTab(int) = 0;
 };

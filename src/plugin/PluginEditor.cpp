@@ -4,7 +4,6 @@
 
 namespace {
 constexpr int kWidth = 760, kHeight = 500, kTabsTop = 306, kPlantHeight = 314;
-constexpr auto kTabProperty = "uiTab";
 } // namespace
 
 DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueTreeState& apvts, EditorBridge& bridge)
@@ -20,7 +19,7 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
     addAndMakeVisible(tabs_);
 
     tabs_.onTabClicked = [this](int index) { setTab(index); };
-    tabs_.setTab(apvts_.state.getProperty(kTabProperty, 0));
+    tabs_.setTab(bridge_.openTab());
 
     for (int i = 0; i < p.getNumPrograms(); ++i) presetBox_.addItem(p.getProgramName(i), i + 1);
     presetBox_.setSelectedId(p.getCurrentProgram() + 1, juce::dontSendNotification);
@@ -48,7 +47,7 @@ DroseraEditor::~DroseraEditor() {
 
 void DroseraEditor::setTab(int index) {
     tabs_.setTab(index);
-    apvts_.state.setProperty(kTabProperty, tabs_.tab(), nullptr);
+    bridge_.setOpenTab(tabs_.tab());
 }
 
 void DroseraEditor::selectProgram(int index) {
@@ -82,7 +81,7 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
     // Follow what the host changes.
     const int program = processor.getCurrentProgram() + 1;
     if (presetBox_.getSelectedId() != program) presetBox_.setSelectedId(program, juce::dontSendNotification);
-    const int storedTab = apvts_.state.getProperty(kTabProperty, 0);
+    const int storedTab = bridge_.openTab();
     if (storedTab != tabs_.tab() && juce::isPositiveAndBelow(storedTab, drosera::TabPanel::kNumTabs)) tabs_.setTab(storedTab);
 }
 
