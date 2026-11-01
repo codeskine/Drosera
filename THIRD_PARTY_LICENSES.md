@@ -7,7 +7,6 @@ Read this before distributing a binary. Nothing here is legal advice.
 | Audrey II firmware (Synthux Academy) | `src/dsp/` (engine, string, echo, filters) | MIT, see `LICENSE-AudreyII` | The code only: Drosera uses neither the Audrey II name as a product name nor its panel or images. |
 | DaisySP, commit 7f67768 | `third_party/DaisySP/` | MIT, see its `LICENSE` | Headers patched, see `PATCHES.txt`. |
 | `ReverbSc`, `Tone` from that DaisySP | `third_party/DaisySP/Source/Effects/reverbsc.*`, `Filters/tone.*` | **Treat as LGPL-2.1** | See below. |
-| octamad tape echo (Sam Banks), commit b8deefc | `third_party/tapeecho/` | MIT, see its `LICENSE` | Changes in `PATCHES.txt`. Its docs say it was voiced against measurements of a commercial plugin, with no code or samples taken, and name another project's `TapeEchoBlock` as a behavioural reference (licence not checked). Do not market it as a clone. |
 | JUCE 8.0.9 | fetched by CMake | **AGPLv3 or commercial** | A binary built on it must comply with one of the two. |
 | VST3 SDK | inside JUCE | Steinberg proprietary or GPLv3 | See JUCE's `LICENSE.md`. |
 
@@ -30,5 +29,3 @@ open-source option of JUCE's dual license. In practice:
 - `ReverbSc` and `Tone`, if LGPL-2.1, may be used in a work under these terms; since the full source ships,
   a recipient can replace and rebuild them. The VST3 SDK comes in through its GPLv3 option, which GPLv3
   section 13 lets you combine with AGPLv3 code.
-
-Still needed before publishing: a check of the tape echo's `TapeEchoBlock` reference noted above.

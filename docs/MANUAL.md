@@ -41,15 +41,9 @@ Both are in the feedback path, so they shape which partials sustain, not only th
 | Echo Time | 50 ms to 5 s |
 | Echo Feedback | 100 % is unity, and up to 150 % it runs away, bounded by a soft clip |
 | Echo Warp (WARP) | The firmware's delay switch |
-| Echo Tape (TAPE) | Replaces the echo with a tape echo |
-| Tape Wow | Tape only: pitch wander |
-| Tape Age | Tape only: wear of the tape |
 
 **WARP** halves the Echo Time knob's position before its square-law curve. The echo gets 2.8 to 3.9 times
 shorter, not twice as short, so it acts as a doppler warp and not as a tempo halving.
-
-**TAPE** uses the octamad tape echo. Echo Feedback follows the tape's steeper law, so its percent readout is only
-a guide: repeats die off quickly below about 60 % of the knob's travel, and self-oscillate above about 70 %.
 
 ## Output
 
@@ -81,7 +75,7 @@ note-off.
 
 ## Presets
 
-14 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
+12 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
 "Init" is silent by design.
 
 ## Known limits

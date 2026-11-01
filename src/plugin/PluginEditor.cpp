@@ -139,11 +139,7 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
     // Row 2: echo, output and the controls that only exist in the plugin
     const int echoSend = addKnob(apvts, "echosend", "Send"), echoTime = addKnob(apvts, "echotime", "Time"),
               echoFb = addKnob(apvts, "echofb", "Feedback");
-    wowKnob_ = addKnob(apvts, "tapewow", "Wow");
-    ageKnob_ = addKnob(apvts, "tapeage", "Age");
-    echoTape_ = apvts.getRawParameterValue("echotape");
-    sections_.push_back({"ECHO", {echoSend, echoTime, echoFb, wowKnob_, ageKnob_},
-                         {addToggle(apvts, "echohalve", "WARP"), addToggle(apvts, "echotape", "TAPE")}, {}});
+    sections_.push_back({"ECHO", {echoSend, echoTime, echoFb}, {addToggle(apvts, "echohalve", "WARP")}, {}});
     sections_.push_back({"OUTPUT", {addKnob(apvts, "volume", "Volume"), addKnob(apvts, "inputgain", "Input")}, {}, {}});
     sections_.push_back({"MIDI", {}, {addToggle(apvts, "midipitch", "PITCH"), addToggle(apvts, "midigate", "GATE")}, {}});
 
@@ -174,13 +170,6 @@ void DroseraEditor::selectProgram(int index) {
 void DroseraEditor::timerCallback() {
     const int id = processor.getCurrentProgram() + 1;
     if (presetBox_.getSelectedId() != id) presetBox_.setSelectedId(id, juce::dontSendNotification);
-
-    // Wow and Age only act on the tape echo.
-    const float tapeAlpha = echoTape_->load() > 0.5f ? 1.0f : 0.35f;
-    for (int i : {wowKnob_, ageKnob_}) {
-        knobs_[(size_t) i]->slider.setAlpha(tapeAlpha);
-        knobs_[(size_t) i]->label.setAlpha(tapeAlpha);
-    }
 
     // While a MIDI note sets the pitch, the Frequency and Body readouts are not what sounds.
     const bool midi = isMidiPitchActive_ && isMidiPitchActive_();
@@ -235,7 +224,7 @@ void DroseraEditor::resized() {
     const int usableW = getWidth() - 2 * kMargin;
     const int rowH[2] = {kRow1H, kRow2H};
     const int rows[2][3] = {{0, 1, 2}, {3, 4, 5}};
-    const int slots[6] = {3, 2, 2, 5, 2, 1};
+    const int slots[6] = {3, 2, 2, 3, 2, 1};
 
     for (int r = 0; r < 2; ++r) {
         int x = kMargin;

@@ -13,7 +13,6 @@
 #include "DroseraCore.h"
 #include "pitch_estimator.h"
 #include "Presets.h"
-#include "TapeEcho.h"
 #include "SincResampler.h"
 
 using infrasonic::DroseraCore;
@@ -184,60 +183,12 @@ static bool resamplerTests() {
     return ok;
 }
 
-// Tape echo module through its float wrapper: delay accuracy, decay, bounded self-oscillation, bad input.
-static bool tapeTests() {
-    bool ok = true;
-    using infrasonic::TapeEcho;
-    for (float seconds : {0.05f, 0.25f, 1.0f, 5.0f}) {
-        auto t = std::make_unique<TapeEcho>(0u);
-        t->SetDelayTime(seconds, 48000.0f); t->SetFeedback(0.0f); t->SetWow(0.0f); t->SetAge(0.0f);
-        const size_t total = (size_t)(seconds * 48000.0f) + 48000;
-        double peak = 0; long at = -1;
-        for (size_t i = 0; i < total; ++i) {
-            const float y = t->Process(i >= 1600 && i < 1608 ? 0.5f : 0.0f);
-            if (i > 1700 && std::fabs(y) > peak) { peak = std::fabs(y); at = (long)i; }
-        }
-        const double ms = (at - 1604) / 48.0;
-        const bool pass = std::fabs(ms - seconds * 1000.0 - 16.0 / 48.0) < 2.0 && peak > 0.02;
-        printf("tape delay %.2f s: echo at %.1f ms, peak %.3f %s\n", seconds, ms, peak, pass ? "OK" : "FAIL");
-        ok &= pass;
-    }
-    for (float fb : {0.0f, 0.4f, 0.62f, 0.8f, 1.0f}) {
-        auto t = std::make_unique<TapeEcho>(0u);
-        t->SetDelayTime(0.25f, 48000.0f); t->SetFeedback(fb); t->SetWow(0.35f); t->SetAge(0.3f);
-        const size_t total = 48000 * 30;
-        double mx = 0, early = 0, late = 0; bool finite = true;
-        for (size_t i = 0; i < total; ++i) {
-            const float in = i < 12000 ? 0.25f * (float)std::sin(2.0 * M_PI * 440.0 * (double)i / 48000.0) : 0.0f;
-            const float y = t->Process(in);
-            finite &= std::isfinite(y);
-            mx = std::max(mx, (double)std::fabs(y));
-            if (i > 48000 * 2 && i < 48000 * 4) early += (double)y * y;
-            if (i > 48000 * 27) late += (double)y * y;
-        }
-        early = std::sqrt(early / (48000.0 * 2)); late = std::sqrt(late / (48000.0 * 3));
-        const bool pass = finite && mx <= 1.0;
-        printf("tape feedback %.2f: rms 2-4 s %.4f, rms 27-30 s %.5f, peak %.3f %s\n", fb, early, late, mx, pass ? "OK" : "FAIL");
-        ok &= pass;
-    }
-    {
-        auto t = std::make_unique<TapeEcho>(0u);
-        t->SetDelayTime(0.1f, 48000.0f); t->SetFeedback(0.6f);
-        bool finite = true;
-        for (int i = 0; i < 96000; ++i) finite &= std::isfinite(t->Process(i == 100 ? NAN : i == 200 ? INFINITY : i == 300 ? 1e30f : 0.1f));
-        printf("tape bad input %s\n", finite ? "OK" : "FAIL"); ok &= finite;
-    }
-    return ok;
-}
-
-// Every factory preset must be finite and bounded, and audible unless it needs an input.
 static bool presetTests(const char* outDir) {
     bool ok = true;
     for (const auto& pr : infrasonic::kFactoryPresets) {
         DroseraCore core; core.Init();
         for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, pr.knob[i]);
         core.SetEchoWarp(pr.echoHalve);
-        core.SetEchoTape(pr.echoTape, pr.tapeWow, pr.tapeAge);
         if (pr.midiGate) { core.SetMidiPitch(true, 48.0f); core.SetGate(true, true); }  // as if a note were held
         const size_t total = 48000 * 10;
         std::vector<float> L(total), R(total);
@@ -271,7 +222,6 @@ static bool noAllocationOnRender() {
     for (int block = 0; block < 1500; ++block) {  // 2 s
         const bool on = (block / 75) % 2 == 1;    // toggles every 100 ms
         core.SetMidiPitch(on, 48.0f);
-        core.SetEchoTape(on, 0.35f, 0.2f);
         core.SetGate(on, true);
         core.SetEchoWarp(on);
         in[0] = block == 750 ? std::numeric_limits<float>::quiet_NaN() : 0.0f;
@@ -336,7 +286,6 @@ int main(int argc, char** argv) {
         for (size_t b : {4, 64, 512, 480}) ok &= run(s, b, outDir);
     ok &= featureTests();
     ok &= resamplerTests();
-    ok &= tapeTests();
     ok &= presetTests(outDir);
     ok &= noAllocationOnRender();
     ok &= recoversFromNan();

@@ -11,5 +11,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 - The Audrey II firmware's engine, at a fixed 48 kHz, with bridging for other host sample rates.
 - Optional audio input that excites the strings.
 - MIDI Pitch and MIDI Gate.
-- A tape echo as an alternative to the firmware's echo, with Wow and Age.
-- 14 factory presets.
+- 12 factory presets.

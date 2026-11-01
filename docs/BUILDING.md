@@ -32,7 +32,7 @@ build/render_test
 ```
 
 Renders the engine offline. It covers finiteness and bounds at several block sizes, MIDI pitch by dominant partial,
-the resampler, the tape echo, every preset, and that rendering never allocates.
+the resampler, every preset, and that rendering never allocates.
 
 ```bash
 build/plugin_host_test_artefacts/Release/plugin_host_test build/Drosera_artefacts/Release/VST3/Drosera.vst3 tests/fixtures/state-baseline.bin

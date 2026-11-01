@@ -15,10 +15,7 @@ void Engine::Init(const float sample_rate) {
     echo_delay_[0] = std::make_unique<ED>();
     echo_delay_[1] = std::make_unique<ED>();
     verb_ = std::make_unique<ReverbSc>();
-    tape_echo_[0] = std::make_unique<TapeEcho>(0u);
-    tape_echo_[1] = std::make_unique<TapeEcho>(1u);
   }
-  echo_tape_ = false;
 
   sample_rate_ = sample_rate;
   fb_delay_smooth_coef_ = onepole_coef(0.2f, sample_rate);
@@ -98,38 +95,15 @@ void Engine::SetFeedbackHPFCutoff(const float cutoff_hz) {
 void Engine::SetEchoDelayTime(const float echo_time) {
   echo_delay_[0]->SetDelayTime(echo_time);
   echo_delay_[1]->SetDelayTime(echo_time);
-  tape_echo_[0]->SetDelayTime(echo_time, sample_rate_);
-  tape_echo_[1]->SetDelayTime(echo_time, sample_rate_);
 }
 
 void Engine::SetEchoDelayFeedback(const float echo_fb) {
   echo_delay_[0]->SetFeedback(echo_fb);
   echo_delay_[1]->SetFeedback(echo_fb);
-  // Same knob: echo_fb spans 0..1.5, and 1.0 lands next to the tape's unity point.
-  tape_echo_[0]->SetFeedback(echo_fb / 1.5f);
-  tape_echo_[1]->SetFeedback(echo_fb / 1.5f);
 }
 
 void Engine::SetEchoDelaySendAmount(const float echo_send) {
   echo_send_ = echo_send;
-}
-
-void Engine::SetEchoTapeMode(const bool enabled) {
-  if (enabled && !echo_tape_) {
-    tape_echo_[0]->Reset();
-    tape_echo_[1]->Reset();
-  }
-  echo_tape_ = enabled;
-}
-
-void Engine::SetTapeWow(const float norm) {
-  tape_echo_[0]->SetWow(norm);
-  tape_echo_[1]->SetWow(norm);
-}
-
-void Engine::SetTapeAge(const float norm) {
-  tape_echo_[0]->SetAge(norm);
-  tape_echo_[1]->SetAge(norm);
 }
 
 void Engine::SetReverbMix(const float mix) {
@@ -193,13 +167,8 @@ void Engine::Process(float in, float &outL, float &outR) {
 
   // ---> Echo Delay
 
-  if (echo_tape_) {
-    echoL = tape_echo_[0]->Process(sampL * echo_send_);
-    echoR = tape_echo_[1]->Process(sampR * echo_send_);
-  } else {
-    echoL = echo_delay_[0]->Process(sampL * echo_send_);
-    echoR = echo_delay_[1]->Process(sampR * echo_send_);
-  }
+  echoL = echo_delay_[0]->Process(sampL * echo_send_);
+  echoR = echo_delay_[1]->Process(sampR * echo_send_);
 
   sampL = 0.5f * (sampL + echoL);
   sampR = 0.5f * (sampR + echoR);

@@ -18,14 +18,14 @@ static const ParamIdentity kParamIdentity[] = {
     {"freq", "Frequency"}, {"fbgain", "Feedback"}, {"body", "Body"}, {"lpf", "Lowpass"}, {"hpf", "Highpass"},
     {"revmix", "Reverb Mix"}, {"revdecay", "Reverb Decay"}, {"echosend", "Echo Send"}, {"echotime", "Echo Time"},
     {"echofb", "Echo Feedback"}, {"volume", "Volume"}, {"echohalve", "Echo Warp"}, {"inputgain", "Input Level"},
-    {"midipitch", "MIDI Pitch"}, {"midigate", "MIDI Gate"}, {"echotape", "Echo Tape"}, {"tapewow", "Tape Wow"},
-    {"tapeage", "Tape Age"},
+    {"midipitch", "MIDI Pitch"}, {"midigate", "MIDI Gate"},
 };
 
-// The values stored in tests/fixtures/state-baseline.bin (written by --write-state).
+// Values stored in tests/fixtures/state-baseline.bin. It also holds the tape echo's parameters, on,
+// from before that feature was removed: such a project must still load.
 struct SavedValue { const char* name; float value; };
 static const SavedValue kSavedValues[] = {
-    {"Frequency", 0.61f}, {"Feedback", 0.83f}, {"Lowpass", 0.37f}, {"Echo Tape", 1.0f}, {"Tape Wow", 0.52f},
+    {"Frequency", 0.61f}, {"Feedback", 0.83f}, {"Lowpass", 0.37f},
 };
 
 static bool checkParameterIdentity(juce::AudioProcessor& inst) {
@@ -41,6 +41,10 @@ static bool checkParameterIdentity(juce::AudioProcessor& inst) {
             pass = false;
         }
         ++i;
+    }
+    if (i >= params.size() || params[i]->getName(64) != "Bypass") {  // nothing after the known list but the host's own
+        std::printf("parameter %d: expected Bypass, got %s\n", i, i < params.size() ? params[i]->getName(64).toRawUTF8() : "nothing");
+        pass = false;
     }
     std::printf("parameter identity: %s\n", pass ? "OK" : "FAIL");
     return pass;
@@ -251,25 +255,6 @@ int main(int argc, char** argv) {
         const long measured = peakAt - at; const int declared = inst->getLatencySamples();
         const bool pass = peak > 1e-3 && std::labs(measured - declared) <= 12;
         std::printf("sr=%-7.0f latency: declared %d, measured %ld %s\n", sr, declared, measured, pass ? "OK" : "FAIL");
-        ok &= pass;
-    }
-
-    // Tape echo through the bundle: toggling it must change the sound, stay bounded and audible.
-    for (double sr : {44100.0, 48000.0}) {
-        juce::String err;
-        auto inst = vst3.createInstanceFromDescription(*descs[0], sr, 512, err);
-        setParam(*inst, "Echo Send", 0.8f); setParam(*inst, "Echo Time", 0.2f); setParam(*inst, "Echo Tape", 1.0f);
-        inst->prepareToPlay(sr, 512);
-        juce::AudioBuffer<float> buf(2, 512); juce::MidiBuffer m;
-        double sum = 0, pk = 0; long n = 0; bool fin = true;
-        for (int b = 0; b < (int) (sr * 6 / 512); ++b) {
-            buf.clear(); inst->processBlock(buf, m);
-            if (b * 512 < sr * 2) continue;
-            for (int i = 0; i < 512; ++i) { float v = buf.getSample(0, i); fin &= std::isfinite(v); sum += (double) v * v; pk = std::max(pk, (double) std::abs(v)); ++n; }
-        }
-        const double rms = std::sqrt(sum / (double) n);
-        const bool pass = fin && pk <= 1.0 && rms > 1e-3;
-        std::printf("sr=%-7.0f tape echo on: rms %.4f peak %.3f %s\n", sr, rms, pk, pass ? "OK" : "FAIL");
         ok &= pass;
     }
 

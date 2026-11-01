@@ -58,8 +58,6 @@ private:
     DroseraLookAndFeel laf_;
     std::function<bool()> isMidiPitchActive_;
     bool showingMidiPitch_ = false;
-    std::atomic<float>* echoTape_ = nullptr;
-    int wowKnob_ = 0, ageKnob_ = 0;
     juce::ComboBox presetBox_;
     juce::TextButton prevButton_ {"<"}, nextButton_ {">"};
     std::vector<std::unique_ptr<Knob>> knobs_;

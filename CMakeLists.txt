@@ -21,20 +21,13 @@ target_compile_options(DaisySP PRIVATE -w)
 # NOTE: vendored headers were patched to include <cstddef>/<cstdint> (the 2023 DaisySP
 # commit relied on transitive includes that modern libc++ no longer provides).
 
-# --- Tape echo (MIT), from repeat98/octamad, see third_party/tapeecho/PATCHES.txt ---
-add_library(TapeEchoModule STATIC third_party/tapeecho/cpu.c)
-target_include_directories(TapeEchoModule PUBLIC third_party/tapeecho)
-target_compile_definitions(TapeEchoModule PUBLIC TE_HOST)
-set_target_properties(TapeEchoModule PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
-target_compile_options(TapeEchoModule PRIVATE -w)
-
 # --- Drosera DSP (host independent) ---
 add_library(DroseraDSP STATIC
     src/dsp/BiquadFilters.cpp
     src/dsp/FeedbackSynthEngine.cpp
     src/dsp/KarplusString.cpp)
 target_include_directories(DroseraDSP PUBLIC src/dsp)
-target_link_libraries(DroseraDSP PUBLIC DaisySP TapeEchoModule)
+target_link_libraries(DroseraDSP PUBLIC DaisySP)
 
 # --- Offline render test ---
 add_executable(render_test tests/render_test.cpp)

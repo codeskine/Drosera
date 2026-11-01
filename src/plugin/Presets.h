@@ -16,12 +16,9 @@ struct Preset {
     bool  midiPitch;
     bool  midiGate;
     bool  needsInput;   // silent without an audio input (feedback gain is nearly closed)
-    bool  echoTape = false;
-    float tapeWow = 0.35f;
-    float tapeAge = 0.2f;
 };
 
-inline constexpr std::array<Preset, 14> kFactoryPresets {{
+inline constexpr std::array<Preset, 12> kFactoryPresets {{
     {"Default",
      {0.43f, 0.75f, 0.30f, 0.90f, 0.20f, 0.30f, 0.50f, 0.20f, 0.50f, 0.40f, 0.70f}, false, 0.5f, false, false, false},
     {"Sub Cellar",
@@ -30,7 +27,7 @@ inline constexpr std::array<Preset, 14> kFactoryPresets {{
      {0.80f, 0.70f, 0.15f, 1.00f, 0.35f, 0.45f, 0.65f, 0.30f, 0.40f, 0.45f, 0.65f}, false, 0.5f, false, false, false},
     {"Cathedral Bloom",
      {0.45f, 0.78f, 0.55f, 0.80f, 0.15f, 0.85f, 0.90f, 0.20f, 0.65f, 0.35f, 0.65f}, false, 0.5f, false, false, false},
-    {"Tape Warp",
+    {"Echo Drift",
      {0.50f, 0.70f, 0.35f, 0.65f, 0.25f, 0.15f, 0.50f, 0.80f, 0.55f, 0.85f, 0.65f}, false, 0.5f, false, false, false},
     {"Doppler Void",
      {0.35f, 0.75f, 0.30f, 0.60f, 0.20f, 0.30f, 0.60f, 0.75f, 0.70f, 0.80f, 0.65f}, true, 0.5f, false, false, false},
@@ -44,10 +41,6 @@ inline constexpr std::array<Preset, 14> kFactoryPresets {{
      {0.40f, 0.75f, 0.30f, 0.80f, 0.20f, 0.35f, 0.60f, 0.20f, 0.50f, 0.30f, 0.70f}, false, 0.5f, true, true, false},
     {"Resonator (needs input)",
      {0.50f, 0.40f, 0.45f, 0.85f, 0.20f, 0.35f, 0.60f, 0.20f, 0.50f, 0.30f, 0.70f}, false, 0.6f, true, false, true},
-    {"Worn Tape",
-     {0.45f, 0.75f, 0.40f, 0.70f, 0.20f, 0.30f, 0.55f, 0.70f, 0.45f, 0.58f, 0.65f}, false, 0.5f, false, false, false, true, 0.55f, 0.65f},
-    {"Tape Runaway",
-     {0.35f, 0.72f, 0.45f, 0.75f, 0.25f, 0.15f, 0.50f, 0.65f, 0.35f, 0.80f, 0.60f}, false, 0.5f, false, false, false, true, 0.35f, 0.35f},
     {"Init (silent)",
      {0.43f, 0.00f, 0.30f, 0.90f, 0.20f, 0.00f, 0.50f, 0.00f, 0.50f, 0.00f, 0.70f}, false, 0.5f, false, false, true},
 }};

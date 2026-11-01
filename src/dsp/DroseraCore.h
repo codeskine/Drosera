@@ -45,9 +45,6 @@ public:
     /// echo gets 2.8 to 3.9 times shorter, not twice: a doppler warp rather than a tempo halving.
     void SetEchoWarp(bool on)          { echo_warp_ = on; }
 
-    /// Echo model: the firmware's (default) or the tape echo, with its two extra controls (0..1).
-    void SetEchoTape(bool on, float wow, float age) { echo_tape_ = on; tape_wow_ = wow; tape_age_ = age; }
-
     /// MIDI pitch override of the Frequency knob (note number, may be fractional).
     /// While active, Body is snapped to whole string periods and the loop is forced onto
     /// the note's fundamental (see applyPitchAndBody).
@@ -89,9 +86,6 @@ private:
     using Registry = ParameterRegistry<Param>;
 
     void pushControls() {
-        engine_->SetEchoTapeMode(echo_tape_);
-        engine_->SetTapeWow(tape_wow_);
-        engine_->SetTapeAge(tape_age_);
         const bool imm = first_;  // jump to initial values instead of gliding from defaults
         // The Frequency parameter spans notes kNoteMin..kNoteMax. The knob keeps the firmware's
         // 16..72 range (the first 56/80 of the span); MIDI may use the whole span.
@@ -204,8 +198,7 @@ private:
     Registry registry_;
     daisysp::Limiter limiter_[2];
     std::array<float, NumParams> norm_ {};
-    bool echo_warp_ = false, echo_tape_ = false;
-    float tape_wow_ = 0.0f, tape_age_ = 0.0f;
+    bool echo_warp_ = false;
     bool midi_pitch_on_ = false, gate_enabled_ = false, gate_open_ = false;
     float midi_pitch_ = 40.0f;
     bool first_ = true;

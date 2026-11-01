@@ -74,9 +74,6 @@ public:
         inGainRaw = apvts.getRawParameterValue("inputgain");
         midiPitchRaw = apvts.getRawParameterValue("midipitch");
         midiGateRaw = apvts.getRawParameterValue("midigate");
-        echoTapeRaw = apvts.getRawParameterValue("echotape");
-        tapeWowRaw = apvts.getRawParameterValue("tapewow");
-        tapeAgeRaw = apvts.getRawParameterValue("tapeage");
     }
 
     const juce::String getName() const override { return "Drosera"; }
@@ -107,9 +104,6 @@ public:
         set("inputgain", pr.inputLevel);
         set("midipitch", pr.midiPitch ? 1.0f : 0.0f);
         set("midigate", pr.midiGate ? 1.0f : 0.0f);
-        set("echotape", pr.echoTape ? 1.0f : 0.0f);
-        set("tapewow", pr.tapeWow);
-        set("tapeage", pr.tapeAge);
     }
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, [this] { return midiPitchActive.load(); }); }
@@ -208,7 +202,6 @@ private:
         for (int i = 0; i < DroseraCore::NumParams; ++i)
             core->SetParam((DroseraCore::Param) i, raw[i]->load());
         core->SetEchoWarp(halveRaw->load() > 0.5f);
-        core->SetEchoTape(echoTapeRaw->load() > 0.5f, tapeWowRaw->load(), tapeAgeRaw->load());
         inGain = inGainRaw->load() * 2.0f;
         applyMidiState();
     }
@@ -312,14 +305,6 @@ private:
             juce::ParameterID{"midipitch", 1}, "MIDI Pitch", false));
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{"midigate", 1}, "MIDI Gate", false));
-        layout.add(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID{"echotape", 1}, "Echo Tape", false));
-        layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{"tapewow", 1}, "Tape Wow", juce::NormalisableRange<float>(0.0f, 1.0f), 0.35f,
-            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + " %"; })));
-        layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{"tapeage", 1}, "Tape Age", juce::NormalisableRange<float>(0.0f, 1.0f), 0.2f,
-            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + " %"; })));
         return layout;
     }
 
@@ -330,9 +315,6 @@ private:
     std::atomic<float>* inGainRaw = nullptr;
     std::atomic<float>* midiPitchRaw = nullptr;
     std::atomic<float>* midiGateRaw = nullptr;
-    std::atomic<float>* echoTapeRaw = nullptr;
-    std::atomic<float>* tapeWowRaw = nullptr;
-    std::atomic<float>* tapeAgeRaw = nullptr;
 
     // MIDI state (audio thread only)
     int held[kMaxHeld] {};

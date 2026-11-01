@@ -7,7 +7,6 @@
 #include "BiquadFilters.h"
 #include "EchoDelay.h"
 #include "KarplusString.h"
-#include "TapeEcho.h"
 
 namespace infrasonic {
 namespace FeedbackSynth {
@@ -37,12 +36,6 @@ class Engine {
         void SetEchoDelayTime(const float echo_time);
         void SetEchoDelayFeedback(const float echo_fb);
         void SetEchoDelaySendAmount(const float echo_send);
-
-        // Plugin extension, not in the firmware (off by default): swaps the echo for the
-        // octamad tape echo, which takes the same time, feedback and send.
-        void SetEchoTapeMode(const bool enabled);
-        void SetTapeWow(const float norm);
-        void SetTapeAge(const float norm);
 
         // Both range 0-1
         void SetReverbMix(const float mix);
@@ -85,9 +78,6 @@ class Engine {
 
         using EchoDelayPtr = std::unique_ptr<EchoDelay<kMaxEchoDelaySamp>>;
         EchoDelayPtr echo_delay_[2];
-
-        std::unique_ptr<TapeEcho> tape_echo_[2];
-        bool echo_tape_ = false;
 
         Engine(const Engine &other) = delete;
         Engine(Engine &&other) = delete;

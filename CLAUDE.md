@@ -29,7 +29,7 @@ tools/hardware-comparison/check_reference.sh build/render_cli
 | `src/plugin/PluginEditor.*` | Interface |
 | `src/plugin/Presets.h` | Factory presets, plain C++ so tests can use them |
 | `tests/` | `render_test`, `plugin_host_test`, measuring tools |
-| `third_party/` | Vendored DaisySP and tape echo |
+| `third_party/` | Vendored DaisySP |
 | `tools/hardware-comparison/` | Comparison against a real unit, and the reference checksums |
 | `docs/superpowers/` | Design specs and implementation plans |
 
