@@ -1,0 +1,46 @@
+# Drosera
+
+Feedback drone synth plugin, built with JUCE. The DSP is the Audrey II firmware's engine plus plugin-only features.
+
+## Commands
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
+```
+
+```bash
+build/render_test
+```
+
+```bash
+build/plugin_host_test_artefacts/Release/plugin_host_test build/Drosera_artefacts/Release/VST3/Drosera.vst3 tests/fixtures/state-baseline.bin
+```
+
+```bash
+tools/hardware-comparison/check_reference.sh build/render_cli
+```
+
+## Code map
+
+| Path | Holds |
+|---|---|
+| `src/dsp/` | Engine, no JUCE. `DroseraCore.h` is its host-independent front end, fixed at 48 kHz |
+| `src/plugin/PluginProcessor.cpp` | Parameters, MIDI, resampling to and from 48 kHz |
+| `src/plugin/PluginEditor.*` | Interface |
+| `src/plugin/Presets.h` | Factory presets, plain C++ so tests can use them |
+| `tests/` | `render_test`, `plugin_host_test`, measuring tools |
+| `third_party/` | Vendored DaisySP and tape echo |
+| `tools/hardware-comparison/` | Comparison against a real unit, and the reference checksums |
+| `docs/superpowers/` | Design specs and implementation plans |
+
+## Rules
+
+1. No allocation, locks or file access on the audio thread. `render_test` counts allocations.
+2. With the plugin-only features off, renders stay byte-identical to `tools/hardware-comparison/reference/SHA256SUMS`.
+   A change that alters them needs a stated reason and new checksums.
+3. MIDI tuning is judged by the dominant partial, never by a fit to the note's harmonic grid: every partial of a
+   note fits that grid, so such a test passes while the wrong harmonic sounds.
+4. `third_party/` changes are recorded in that component's `PATCHES.txt`.
+5. Parameter IDs never change, or saved projects break. Parameter names stay in English everywhere.
+
+Do not regenerate `tests/fixtures/state-baseline.bin` to make a test pass.

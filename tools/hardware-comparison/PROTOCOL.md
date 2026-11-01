@@ -1,19 +1,21 @@
-# Confronto plugin ↔ hardware (Audrey II su Daisy Seed)
+# Comparing the plugin with hardware (Audrey II on Daisy Seed)
 
-Il sistema è un anello di feedback saturante eccitato da rumore: due esecuzioni non sono mai uguali
-campione per campione, nemmeno sullo stesso hardware. Si confrontano quindi **statistiche** (bilanciamento
-spettrale, centroide, larghezza stereo, stabilità del livello), non le forme d'onda.
+The instrument is a saturating feedback loop excited by noise, so two runs never match sample by sample, even on the
+same hardware. The comparison therefore uses **statistics**: spectral balance, centroid, stereo width and level
+stability. It does not compare waveforms.
 
-## Cosa serve
-- Audrey II con il firmware **v3 ufficiale** (`audrey-ii-v3.bin`), uscita L/R in un'interfaccia audio.
-- Registrazione **stereo, 48 kHz, 24 bit** (altri formati vanno bene: lo script ricampiona), **senza**
-  processing, EQ o compressione. Guadagno d'ingresso fisso per tutte le prese e mai in clip.
+## What you need
 
-## Posizioni delle manopole
-`presets.txt` definisce 10 preset con le manopole a quarti di corsa: **0, ¼, ½, ¾, 1**. Per evitare dubbi
-sul verso dei potenziometri (il firmware inverte il valore dell'ADC) l'**0 è il minimo del controllo**: la
-frequenza più bassa, il feedback a −60 dB, il body più corto, lo send a zero… e **1 è il massimo**. Non conta
-il verso in cui ruoti, conta l'effetto: controlla con l'orecchio che 0 sia davvero il minimo.
+- An Audrey II with the **official v3 firmware** (`audrey-ii-v3.bin`), with its L/R output into an audio interface.
+- A **stereo, 48 kHz, 24-bit** recording. Other formats work, because the script resamples. Use **no** processing, EQ
+  or compression. Keep the input gain fixed for all takes, and never let it clip.
+
+## Knob positions
+
+`presets.txt` defines 10 presets with knobs at quarter-turn positions: **0, ¼, ½, ¾, 1**. To avoid doubts about the
+direction of the potentiometers (the firmware inverts the ADC value), **0 is the control's minimum**: lowest frequency,
+feedback at −60 dB, shortest body, send at zero. **1 is its maximum**. The direction you turn does not matter, the
+effect does: check by ear that 0 really is the minimum.
 
 | Preset | freq | fb gain | body | lpf | hpf | rev mix | rev decay | echo send | echo time | echo fb | volume | switch |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -22,51 +24,56 @@ il verso in cui ruoti, conta l'effetto: controlla con l'orecchio che 0 sia davve
 | p03_high_bright | ¾ | ¾ | ¼ | 1 | ¼ | 0 | ½ | 0 | ½ | 0 | ¾ | off |
 | p04_reverb_wash | ½ | ¾ | ½ | ¾ | ¼ | ¾ | ¾ | 0 | ½ | 0 | ¾ | off |
 | p05_echo_swell | ½ | ¾ | ½ | ¾ | ¼ | 0 | ½ | ¾ | ½ | ¾ | ¾ | off |
-| p06_echo_halved | ½ | ¾ | ½ | ¾ | ¼ | 0 | ½ | ¾ | ½ | ¾ | ¾ | **on** (warp: tempo 3,6 volte più corto) |
+| p06_echo_halved | ½ | ¾ | ½ | ¾ | ¼ | 0 | ½ | ¾ | ½ | ¾ | ¾ | **on** (warp: time 3.6 times shorter) |
 | p07_long_body | ½ | ¾ | 1 | ¾ | ¼ | 0 | ½ | 0 | ½ | 0 | ¾ | off |
 | p08_max_feedback | ½ | 1 | ½ | ¾ | ¼ | 0 | ½ | 0 | ½ | 0 | ¾ | off |
 | p09_dark_filtered | ½ | ¾ | ½ | ¼ | ½ | ¼ | ½ | 0 | ½ | 0 | ¾ | off |
 | p10_everything_mid | ½ | ½ | ½ | ½ | ½ | ½ | ½ | ½ | ½ | ½ | ½ | off |
 
-Il reverb decay ha una curva speciale nel firmware (tensione −3): il punto ½ è quello della manopola,
-l'effetto non è lineare, ed è già gestito dal plugin.
+Reverb decay has a special curve in the firmware (tension −3): ½ is the knob's position, the effect is not linear, and
+the plugin already handles this.
 
-## Registrazione
-Per ogni preset: imposta le manopole, **aspetta ~5 s** che il drone si assesti, poi registra **almeno 20 s**
-(meglio 25). Un file per preset, nominato come il preset più un suffisso qualsiasi:
-`p01_mid_drone_hw.wav`, `p02_low_dark_hw.wav`, … Mettili in una cartella, ad esempio `recordings/`.
-Non toccare le manopole durante la registrazione. Attenzione al volume: p04 e p08 sono i più forti.
+## Recording
 
-## Analisi
-Dalla cartella `hardware-comparison/` (il Python con numpy/scipy/matplotlib è nell'ambiente
-isolato `/private/tmp/claude-501/buildenv`, oppure `pip install numpy scipy matplotlib`):
+For each preset: set the knobs, **wait about 5 s** for the drone to settle, then record **at least 20 s**, or better 25.
+Use one file per preset, named as the preset plus any suffix: `p01_mid_drone_hw.wav`, `p02_low_dark_hw.wav`, and so on.
+Put them in one folder, such as `recordings/`. Do not touch the knobs while recording. Mind the volume: p04 and p08 are
+the loudest.
+
+## Analysis
+
+From `tools/hardware-comparison/`, with numpy, scipy and matplotlib installed (`pip install numpy scipy matplotlib`):
 
 ```bash
 python3 compare.py --hw-dir recordings --ref-dir reference -o report
 ```
 
-Stampa per ogni preset livello, picco, centroide, correlazione L/R, oscillazione del livello e la
-**differenza di forma spettrale** (in dB, a livello pareggiato), e salva un grafico PNG per preset in `report/`.
-I file in `reference/` sono i render del plugin (stesso motore, blocchi da 4 campioni come sul firmware,
-20 s); si rigenerano con `render_cli presets.txt reference 20`.
+For each preset it prints level, peak, centroid, L/R correlation, level movement and the **difference in spectral
+shape** (in dB, with levels matched), and saves one PNG per preset in `report/`.
 
-### Come leggere il verdetto
-- **MATCH**: la differenza è entro la variabilità della registrazione stessa (tra la prima e la seconda
-  metà del file, +1,5 dB; sempre tra 3 e 6 dB). Non distinguibile da una seconda esecuzione dell'hardware.
-- **CLOSE**: fino al doppio della tolleranza. Tipico dei preset che evolvono (reverb wash, echo swell).
-- **DIFFERENT**: da indagare. Guarda il grafico: quali bande divergono? un parziale in più o in meno
-  indica una differenza di accordatura o di filtri, un'inclinazione generale indica filtri o riverbero.
-- Il **livello assoluto dipende dal tuo guadagno** d'ingresso: guarda prima lo spettro.
-- Nei render del plugin il livello è quasi lo stesso per quasi tutti i preset (saturazione dell'anello più
-  limiter di uscita): non è un segnale utile per distinguerli, conta lo spettro.
+The files in `reference/` are renders of the plugin: same engine, blocks of 4 samples as on the firmware, 20 s. They are
+not in the repository. Regenerate them with `render_cli presets.txt reference 20`.
 
-## Controllo preliminare del firmware (già fatto)
-Ho scaricato `audrey-ii-v3.bin` (92.192 byte, SHA-256
-`184f3457fb0c752a2c2e78441cfbd84a1c3aa2777a7e1086509bea13d10723b4`) e l'ho ispezionato **senza eseguirlo**
-(non è eseguibile su un Mac: è un'immagine Cortex-M7 per STM32H750, SP iniziale `0x20020000`, reset
-`0x08000959`). Nei letterali float/int del binario compaiono le costanti caratteristiche del codice sorgente:
-0.7 (limiter), 0.85 (feedback del riverbero), 0.98 (brightness della stringa), 12000 Hz (LPF del riverbero),
-18000 Hz, 800 Hz (BPF dell'echo), 8000 Hz (Tone), 0.1447597 (T60), 240000 campioni (echo 5 s), 8192
-(delay della stringa). Non compaiono 1.5, 5.0, −3.0, 12000 intero e il −90 dB, ma è atteso: i compilatori
-ARM codificano molti valori come immediati o li calcolano a runtime. Questo rende molto plausibile che v3
-derivi da questo sorgente, **non lo prova**: solo il confronto audio può dirlo.
+### Reading the verdict
+
+- **MATCH:** the difference is within the recording's own variability (between its first and second half, plus 1.5 dB,
+  always between 3 and 6 dB). It cannot be told apart from a second run of the hardware.
+- **CLOSE:** up to twice the tolerance. Typical of presets that evolve, such as reverb wash and echo swell.
+- **DIFFERENT:** to investigate. Look at the plot to see which bands diverge. A partial more or less suggests a difference
+  in tuning or filters, and an overall tilt suggests filters or reverb.
+- **Absolute level depends on your input gain,** so look at the spectrum first.
+- In the plugin's renders the level is almost the same for almost all presets, because of the loop's saturation and the
+  output limiter. It does not separate them: the spectrum does.
+
+## Preliminary firmware check
+
+`audrey-ii-v3.bin` (92,192 bytes, SHA-256 `184f3457fb0c752a2c2e78441cfbd84a1c3aa2777a7e1086509bea13d10723b4`) was
+inspected **without running it**. It cannot run on a computer: it is a Cortex-M7 image for STM32H750, with initial SP
+`0x20020000` and reset vector `0x08000959`.
+
+The binary's float and integer literals include the source code's characteristic constants: 0.7 (limiter), 0.85 (reverb
+feedback), 0.98 (string brightness), 12000 Hz (reverb LPF), 18000 Hz, 800 Hz (echo BPF), 8000 Hz (Tone), 0.1447597 (T60),
+240000 samples (echo 5 s), 8192 (string delay). 1.5, 5.0, −3.0, an integer 12000 and −90 dB do not appear, which is
+expected: ARM compilers encode many values as immediates or compute them at runtime.
+
+This makes it very plausible that v3 derives from this source, but **does not prove it**. Only an audio comparison can.

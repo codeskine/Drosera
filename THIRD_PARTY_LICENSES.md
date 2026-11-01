@@ -4,7 +4,7 @@ Read this before distributing a binary. Nothing here is legal advice.
 
 | Component | Where | License | Notes |
 |---|---|---|---|
-| Audrey II firmware (Synthux Academy) | `Source/DSP/` (engine, string, echo, filters) | MIT, see `LICENSE-AudreyII` | The code only: Drosera uses neither the Audrey II name as a product name nor its panel or images. |
+| Audrey II firmware (Synthux Academy) | `src/dsp/` (engine, string, echo, filters) | MIT, see `LICENSE-AudreyII` | The code only: Drosera uses neither the Audrey II name as a product name nor its panel or images. |
 | DaisySP, commit 7f67768 | `third_party/DaisySP/` | MIT, see its `LICENSE` | Headers patched, see `PATCHES.txt`. |
 | `ReverbSc`, `Tone` from that DaisySP | `third_party/DaisySP/Source/Effects/reverbsc.*`, `Filters/tone.*` | **Treat as LGPL-2.1** | See below. |
 | octamad tape echo (Sam Banks), commit b8deefc | `third_party/tapeecho/` | MIT, see its `LICENSE` | Changes in `PATCHES.txt`. Its docs say it was voiced against measurements of a commercial plugin, with no code or samples taken, and name another project's `TapeEchoBlock` as a behavioural reference (licence not checked). Do not market it as a clone. |
