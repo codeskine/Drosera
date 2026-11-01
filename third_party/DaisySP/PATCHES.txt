@@ -1,0 +1,1 @@
+Vendored DaisySP commit 7f67768 (MIT). Only change: headers got #include <cstddef>/<cstdint>.

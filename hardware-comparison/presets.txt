@@ -1,0 +1,13 @@
+# name            freq fbgain body lpf  hpf  rvmix rvdec esend etime efb  vol  halve
+# Every value is a quarter-turn position of the knob's travel (0, .25, .5, .75, 1).
+# 0 = the engine's minimum for that control (lowest pitch, -60 dB, shortest, ...), 1 = its maximum.
+p01_mid_drone      0.5  0.75  0.5   0.75 0.25 0     0.5   0     0.5   0    0.75 0
+p02_low_dark       0.25 0.75  0.75  0.5  0.25 0     0.5   0     0.5   0    0.75 0
+p03_high_bright    0.75 0.75  0.25  1    0.25 0     0.5   0     0.5   0    0.75 0
+p04_reverb_wash    0.5  0.75  0.5   0.75 0.25 0.75  0.75  0     0.5   0    0.75 0
+p05_echo_swell     0.5  0.75  0.5   0.75 0.25 0     0.5   0.75  0.5   0.75 0.75 0
+p06_echo_halved    0.5  0.75  0.5   0.75 0.25 0     0.5   0.75  0.5   0.75 0.75 1
+p07_long_body      0.5  0.75  1     0.75 0.25 0     0.5   0     0.5   0    0.75 0
+p08_max_feedback   0.5  1     0.5   0.75 0.25 0     0.5   0     0.5   0    0.75 0
+p09_dark_filtered  0.5  0.75  0.5   0.25 0.5  0.25  0.5   0     0.5   0    0.75 0
+p10_everything_mid 0.5  0.5   0.5   0.5  0.5  0.5   0.5   0.5   0.5   0.5  0.5  0

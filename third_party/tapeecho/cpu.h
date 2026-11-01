@@ -1,0 +1,38 @@
+#ifndef OCTABAM_TAPE_CPU_H
+#define OCTABAM_TAPE_CPU_H
+#include <stdint.h>
+/* The module's FX2 id (manifest.py); 0x15, SPRING REV's, until 30 Sep 2026. */
+#define TE_ID 0x0fu
+#define TE_FRAMES 16u
+#define TE_RING 245760u /* Drosera: 5.12 s at 48 kHz, a multiple of TE_FRAMES */
+#define TE_STRIDE 1411328u
+#define TE_FADE 512u
+typedef struct {
+    uint32_t active, valid, position, tempo, phase, rng;
+    int32_t mix, feedback, age, wow, hiss;
+    int32_t filters[3][5], coefficients[1][5];
+    uint32_t flutter, flutter_rate, flutter_target;
+    int32_t wobble, wobble_step;
+    uint32_t fade_from, fade_left, mode;
+    uint32_t cached_position, cached_age, cached_speed, cached_index, filter_pending;
+    int32_t filter_targets[1][5];
+    uint32_t control_clock;
+} TapeState;
+typedef struct {
+    uint32_t time, feedback, wow, sync, mix, age, tempo;
+    uint32_t lane; /* track index: stagger slow tone work across instances */
+    uint32_t target_q8; /* Drosera: delay in samples, Q24.8; 0 = use time */
+} TapeParams;
+void te_process(TapeState *, const TapeParams *, volatile int32_t *ring,
+                uint32_t write, int32_t *audio, int32_t *record);
+uint32_t te_target(const TapeParams *, uint32_t tempo);
+extern TapeState te_states[8];
+#ifdef TE_HOST
+void te_host_read_linear(int32_t *, volatile int32_t *, int32_t, int32_t, int32_t, int32_t);
+void te_host_filter_block(int32_t *, const int32_t *, int32_t *);
+void te_host_tape_block(TapeState *, const int32_t *, int32_t *, int32_t *,
+                        int32_t, int32_t, int32_t);
+#endif
+/* Returns nonzero only when the stock track loop must skip its DSP-era mix. */
+unsigned te_cpu_frame(uint32_t *stock_stack);
+#endif

@@ -1,0 +1,9 @@
+build/
+.DS_Store
+__pycache__/
+*.pyc
+
+# Regenerate with render_cli; SHA256SUMS in the same folder pins their exact content
+hardware-comparison/reference/*.wav
+hardware-comparison/recordings/
+hardware-comparison/report/
