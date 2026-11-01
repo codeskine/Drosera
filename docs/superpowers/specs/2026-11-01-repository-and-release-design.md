@@ -3,6 +3,9 @@
 Sub-project 1 of 2. The new interface is specified in
 `2026-11-01-rugiada-interface-design.md` and is built on top of this work.
 
+> **Changed after approval, by the owner:** Windows is dropped for now and the release is macOS only. The tape echo
+> is removed. Sections below that mention Windows or TAPE are kept as the original design and do not apply.
+
 ## Goal
 
 An open repository from which anyone can download a working Drosera VST3 for macOS or Windows, or build it

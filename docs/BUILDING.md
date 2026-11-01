@@ -2,9 +2,10 @@
 
 ## Requirements
 
+- macOS with the Xcode command line tools
 - CMake 3.22 or newer, and Ninja
-- macOS: Xcode command line tools
-- Windows: Visual Studio 2022 with the C++ tools. Run the commands from a Developer Command Prompt
+
+Windows is not supported for now. Commit `4898524` built and passed CI on Windows, and is the place to restart from.
 
 CMake downloads JUCE 8.0.9 the first time it configures.
 
@@ -24,8 +25,6 @@ To build a universal macOS binary, add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 the DSP and its tests, with no download, add `-DDROSERA_BUILD_PLUGIN=OFF`.
 
 ## Test
-
-On Windows, add `.exe` to the program names.
 
 ```bash
 build/render_test
@@ -48,7 +47,7 @@ exists to catch changes that break saved projects.
 tools/hardware-comparison/check_reference.sh build/render_cli
 ```
 
-macOS arm64 only. Renders 10 presets and compares them with `tools/hardware-comparison/reference/SHA256SUMS`, which
+On arm64 only. Renders 10 presets and compares them with `tools/hardware-comparison/reference/SHA256SUMS`, which
 proves the engine still renders exactly the same.
 
 ## Other tools

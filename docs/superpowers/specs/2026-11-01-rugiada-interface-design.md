@@ -3,6 +3,9 @@
 Sub-project 2 of 2. It builds on `2026-11-01-repository-and-release-design.md`, which creates `src/plugin/`
 and the CI that covers this work.
 
+> **Changed after approval, by the owner:** the tape echo is removed, so there is no TAPE, Wow or Age, and the
+> table rows about them do not apply. The release is macOS only.
+
 ## Goal
 
 Replace today's grid of equal knobs with an interface that gives Drosera its own identity, makes the

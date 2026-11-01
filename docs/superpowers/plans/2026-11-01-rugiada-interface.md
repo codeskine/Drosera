@@ -12,6 +12,9 @@
 
 **Requires:** `2026-11-01-repository-and-release.md` complete, including its Task 7. If TAPE was removed for 0.1.0, leave out every TAPE, Wow and Age item below.
 
+> **Changed during execution, by the owner:** the tape echo is removed, so leave out every TAPE, Wow and Age item. The
+> release and CI are macOS only.
+
 ## Global Constraints
 
 - Fixed window 760×500, drawn as vectors. Not resizable.

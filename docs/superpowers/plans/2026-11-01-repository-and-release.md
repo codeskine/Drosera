@@ -10,6 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-01-repository-and-release-design.md`
 
+> **Changed during execution, by the owner:** Windows is dropped for now and the tape echo is removed. Windows and TAPE
+> steps below no longer apply, and the checks on `TapeEchoBlock` are moot.
+
 ## Global Constraints
 
 - Platforms macOS and Windows. Published format VST3 only. AU and Standalone stay buildable.

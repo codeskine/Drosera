@@ -2,7 +2,7 @@
 
 Contributions are welcome, and are accepted under the project's license, AGPLv3.
 
-See [docs/BUILDING.md](docs/BUILDING.md) for how to build and test. CI must pass on macOS and Windows.
+See [docs/BUILDING.md](docs/BUILDING.md) for how to build and test. CI must pass.
 
 ## Rules
 

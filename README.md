@@ -1,6 +1,6 @@
 # Drosera
 
-A feedback drone synth, as a VST3 plugin for macOS and Windows.
+A feedback drone synth, as a VST3 plugin for macOS 11 or newer, on Apple silicon and Intel.
 
 Drosera makes sound on its own: a noise floor feeds two string resonators inside a saturating loop, and you steer
 what the loop settles on. Play it with its knobs, excite it with audio, or put it on a note with MIDI. It comes with
@@ -8,17 +8,10 @@ what the loop settles on. Play it with its knobs, excite it with audio, or put i
 
 ## Install
 
-Download the zip for your system from [Releases](https://github.com/codeskine/Drosera/releases), unpack it, and move
-`Drosera.vst3` to your plugin folder:
+Download the zip from [Releases](https://github.com/codeskine/Drosera/releases), unpack it, and move `Drosera.vst3` to
+`~/Library/Audio/Plug-Ins/VST3/`. Then rescan plugins in your host. Drosera loads as an instrument.
 
-| System | Folder |
-|---|---|
-| macOS | `~/Library/Audio/Plug-Ins/VST3/` |
-| Windows | `C:\Program Files\Common Files\VST3\` |
-
-Then rescan plugins in your host. Drosera loads as an instrument.
-
-### macOS: if the plugin is blocked
+### If the plugin is blocked
 
 Releases are not yet notarized by Apple, so macOS blocks files downloaded with a browser. After moving the plugin,
 run this once in Terminal:
@@ -33,7 +26,7 @@ See the [manual](docs/MANUAL.md) for every control, MIDI, and the known limits.
 
 ## Status
 
-Validated by automated tests and `pluginval` on both systems. Not yet compared with a hardware unit.
+Validated by automated tests and `pluginval` on macOS. Not yet compared with a hardware unit.
 
 ## For developers
 

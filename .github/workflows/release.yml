@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag against the version and changelog
+        run: python3 tools/release_check.py "$GITHUB_REF_NAME"
+      - id: tag
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    uses: ./.github/workflows/ci.yml
+    with:
+      version: ${{ needs.check.outputs.version }}
+    secrets: inherit
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: drosera-macos
+      - name: Create a draft release
+        run: |
+          python3 tools/release_check.py "$GITHUB_REF_NAME" > notes.md
+          sha256sum "Drosera-$VERSION-macos.zip" > SHA256SUMS.txt
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-rc*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" --draft $prerelease --title "Drosera $VERSION" --notes-file notes.md \
+            "Drosera-$VERSION-macos.zip" SHA256SUMS.txt
