@@ -55,6 +55,12 @@ void DroseraLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton&
     g.drawText(b.getButtonText(), b.getLocalBounds(), juce::Justification::centred);
 }
 
+void DroseraLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& b, bool highlighted, bool) {
+    g.setColour(b.getToggleState() ? theme::dew() : (highlighted ? theme::text() : theme::textDim()));
+    g.setFont(theme::headFont());
+    g.drawText(b.getButtonText(), b.getLocalBounds(), juce::Justification::centred);
+}
+
 void DroseraLookAndFeel::drawComboBox(juce::Graphics&, int, int, bool, int, int, int, int, juce::ComboBox&) {}
 
 void DroseraLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label) {

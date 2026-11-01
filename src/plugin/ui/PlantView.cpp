@@ -7,8 +7,8 @@ namespace drosera {
 
 namespace {
 // In the component's coordinates, which are the window's.
-const juce::Point<float> kCentre { 380.0f, 192.0f };
-constexpr float kInner = 54.0f, kReach = 88.0f;
+const juce::Point<float> kCentre { 380.0f, 180.0f };
+constexpr float kInner = 54.0f, kReach = 66.0f;
 constexpr float kRepaintChange = 0.002f;  // of a tentacle's travel
 } // namespace
 
@@ -90,11 +90,11 @@ void PlantView::paint(juce::Graphics& g) {
     g.drawEllipse(disc, 1.5f);
 
     g.setColour(theme::text());
-    g.setFont(theme::tagFont());
-    g.drawText("FEEDBACK", juce::Rectangle<float>(80.0f, 14.0f).withCentre(kCentre.translated(0.0f, -8.0f)), juce::Justification::centred);
+    g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+    g.drawText("FEEDBACK", juce::Rectangle<float>(80.0f, 12.0f).withCentre(kCentre.translated(0.0f, -9.0f)), juce::Justification::centred);
     g.setColour(theme::dew());
-    g.setFont(juce::FontOptions(15.0f));
-    g.drawText(feedbackText_, juce::Rectangle<float>(70.0f, 22.0f).withCentre(kCentre.translated(0.0f, 10.0f)), juce::Justification::centred);
+    g.setFont(juce::FontOptions(13.0f));
+    g.drawText(feedbackText_, juce::Rectangle<float>(70.0f, 18.0f).withCentre(kCentre.translated(0.0f, 5.0f)), juce::Justification::centred);
 }
 
 } // namespace drosera

@@ -19,6 +19,6 @@ inline juce::Font labelFont()   { return juce::FontOptions(12.0f); }
 inline juce::Font valueFont()   { return juce::FontOptions(11.0f); }
 inline juce::Font tagFont()     { return juce::FontOptions(9.5f, juce::Font::bold); }
 inline juce::Font headFont()    { return juce::FontOptions(11.0f).withKerningFactor(0.2f); }
-inline juce::Font titleFont()   { return juce::FontOptions(22.0f).withKerningFactor(0.32f); }
+inline juce::Font titleFont()   { return juce::FontOptions("Georgia", 22.0f, juce::Font::plain).withKerningFactor(0.32f); }
 
 } // namespace drosera::theme

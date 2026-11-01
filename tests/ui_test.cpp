@@ -7,11 +7,15 @@
 #include <limits>
 #include <thread>
 #include <vector>
+#include "EditorBridge.h"
+#include "PluginEditor.h"
 #include "pitch_estimator.h"
 #include "SpectrumTap.h"
 #include "ui/PlantView.h"
 #include "ui/Readouts.h"
 #include "ui/SpectrumBands.h"
+
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 
 using namespace drosera;
 
@@ -212,12 +216,149 @@ static void plantTests() {
     check(unprepared.level(30) == kFloorDb, "plantRestsWithNoSampleRate");
 }
 
+static void setParameter(juce::AudioProcessor& p, const char* id, float value) {
+    for (auto* prm : p.getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(prm))
+            if (withId->paramID == id) { withId->setValueNotifyingHost(value); return; }
+    std::printf("missing parameter %s\n", id);
+    ++failures;
+}
+
+static float parameter(juce::AudioProcessor& p, const char* id) {
+    for (auto* prm : p.getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(prm))
+            if (withId->paramID == id) return prm->getValue();
+    return -1.0f;
+}
+
+static std::unique_ptr<DroseraEditor> openEditor(juce::AudioProcessor& p) {
+    return std::unique_ptr<DroseraEditor>(dynamic_cast<DroseraEditor*>(p.createEditor()));
+}
+
+static void render(juce::AudioProcessor& p, double seconds, juce::MidiBuffer* midi = nullptr) {
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer none;
+    for (int b = 0; b < (int) (seconds * 48000.0 / 512.0); ++b) {
+        buffer.clear();
+        p.processBlock(buffer, midi != nullptr && b == 0 ? *midi : none);
+    }
+}
+
+static void editorTests() {
+    constexpr float dt = 1.0f / 30.0f;
+
+    {   // The open tab lives in the plugin's state, and a bad or missing value opens Filters.
+        std::unique_ptr<juce::AudioProcessor> first(createPluginFilter());
+        juce::MemoryBlock state;
+        {
+            auto editor = openEditor(*first);
+            editor->setTab(3);
+            first->getStateInformation(state);
+        }
+        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
+        second->setStateInformation(state.getData(), (int) state.getSize());
+        check(openEditor(*second)->tab() == 3, "tabPersists");
+
+        setParameter(*first, "lpf", 0.33f);
+        first->getStateInformation(state);
+        auto xml = juce::AudioProcessor::getXmlFromBinary(state.getData(), (int) state.getSize());
+        xml->setAttribute("uiTab", 99);
+        juce::MemoryBlock bad;
+        juce::AudioProcessor::copyXmlToBinary(*xml, bad);
+        xml->removeAttribute("uiTab");
+        juce::MemoryBlock missing;
+        juce::AudioProcessor::copyXmlToBinary(*xml, missing);
+        std::unique_ptr<juce::AudioProcessor> third(createPluginFilter()), fourth(createPluginFilter());
+        third->setStateInformation(bad.getData(), (int) bad.getSize());
+        fourth->setStateInformation(missing.getData(), (int) missing.getSize());
+        check(openEditor(*third)->tab() == 0 && std::abs(parameter(*third, "lpf") - 0.33f) < 0.001f, "tabSurvivesBadState");
+        check(openEditor(*fourth)->tab() == 0 && std::abs(parameter(*fourth, "lpf") - 0.33f) < 0.001f, "tabSurvivesMissingState");
+    }
+
+    {   // Only the open tab's controls show; the main ones always do.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        auto editor = openEditor(*p);
+        check(editor->getWidth() == 760 && editor->getHeight() == 500, "windowSize");
+        editor->setVisible(true);
+        editor->setTab(2);
+        auto shown = [&](const char* id) { return editor->slider(id)->getParentComponent()->isVisible(); };
+        check(shown("echosend") && !shown("lpf") && shown("freq") && shown("body") && shown("fbgain"), "tabsShowTheirControls");
+        check(editor->slider("tapewow") == nullptr, "noTapeControls");
+
+        // Changes made while a control is hidden show when it returns.
+        editor->setTab(1);
+        setParameter(*p, "lpf", 0.8f);
+        editor->setTab(0);
+        check(std::abs((float) editor->slider("lpf")->getValue() - 0.8f) < 0.001f, "hiddenValuesFollow");
+        p->setCurrentProgram(2);
+        check(std::abs((float) editor->slider("lpf")->getValue() - parameter(*p, "lpf")) < 0.001f, "presetReachesHiddenControls");
+    }
+
+    {   // MIDI: the readouts say what sounds, and the dimmed knobs stay usable.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        editor->refreshDisplay(dt);
+        check(editor->tag("freq").isEmpty() && editor->tag("body").isEmpty(), "noTagsWithoutMidi");
+        setParameter(*p, "midipitch", 1.0f);
+        juce::MidiBuffer on, off;
+        on.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8) 100), 0);
+        off.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+        render(*p, 2.0, &on);
+        editor->refreshDisplay(dt);
+        check(editor->tag("freq") == "MIDI" && editor->tag("body") == "SNAP" && editor->readout("freq").startsWith("C4"), "midiTagsAndNote");
+        check(editor->slider("freq")->isEnabled() && editor->slider("freq")->getAlpha() < 1.0f, "midiDimsButDoesNotDisable");
+        render(*p, 0.1, &off);
+        setParameter(*p, "freq", 0.2f);
+        render(*p, 0.1);
+        editor->refreshDisplay(dt);
+        check(editor->tag("freq").isEmpty() && editor->slider("freq")->getAlpha() == 1.0f, "knobTakesPitchBack");
+    }
+
+    {   // WARP: Echo Time shows the shortened time.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        setParameter(*p, "echotime", 0.5f);
+        render(*p, 1.0);
+        editor->refreshDisplay(dt);
+        const auto normal = editor->readout("echotime");
+        setParameter(*p, "echohalve", 1.0f);
+        render(*p, 2.0);
+        editor->refreshDisplay(dt);
+        auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+        check(editor->readout("echotime") == juce::String(readouts::echoTime(true, bridge->echoSeconds(), "")) && editor->readout("echotime") != normal,
+              "warpShowsRealTime");
+    }
+
+    {   // The tap runs only while a window is open, and reopening shows no stale burst.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+        bool openWhileEditor, closedAfter;
+        {
+            auto editor = openEditor(*p);
+            openWhileEditor = bridge->spectrumTap().isActive();
+            render(*p, 1.0);
+        }
+        closedAfter = !bridge->spectrumTap().isActive();
+        check(openWhileEditor && closedAfter, "closingStopsTap");
+        render(*p, 1.0);
+        auto editor = openEditor(*p);
+        editor->refreshDisplay(dt);
+        float highest = kFloorDb;
+        for (int i = 0; i < kNumBands; ++i) highest = std::max(highest, editor->plant().level(i));
+        check(highest <= kFloorDb + 1.0f, "reopenDoesNotBurst");
+    }
+}
+
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     tapTests();
     bandTests();
     readoutTests();
     plantTests();
+    editorTests();
     std::printf(failures == 0 ? "ALL OK\n" : "SOME FAILED\n");
     return failures == 0 ? 0 : 1;
 }

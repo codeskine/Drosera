@@ -1,33 +1,27 @@
 #pragma once
-// Custom editor for Drosera: controls grouped by signal path, in the order of the
-// original panel (string -> filters -> reverb -> echo -> output) plus the plugin-only
-// input level and MIDI switches.
+// Drosera's window: assembles the plant, the main knobs and the tabs, and runs the timer that keeps them honest.
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <functional>
-
-class DroseraLookAndFeel final : public juce::LookAndFeel_V4 {
-public:
-    DroseraLookAndFeel();
-
-    void drawRotarySlider(juce::Graphics&, int x, int y, int w, int h, float pos,
-                          float startAngle, float endAngle, juce::Slider&) override;
-    void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool highlighted, bool down) override;
-    juce::Label* createSliderTextBox(juce::Slider&) override;
-
-    static juce::Colour accent() { return juce::Colour(0xff8be05a); }
-    static juce::Colour accentDim() { return juce::Colour(0xff35522a); }
-    static juce::Colour bgTop() { return juce::Colour(0xff0b110d); }
-    static juce::Colour bgBottom() { return juce::Colour(0xff1c2b1e); }
-    static juce::Colour panel() { return juce::Colour(0x1affffff); }
-    static juce::Colour text() { return juce::Colour(0xffd9e6d4); }
-    static juce::Colour textDim() { return juce::Colour(0xff8aa085); }
-};
+#include "EditorBridge.h"
+#include "ui/DroseraLookAndFeel.h"
+#include "ui/PlantView.h"
+#include "ui/TabPanel.h"
 
 class DroseraEditor final : public juce::AudioProcessorEditor, private juce::Timer {
 public:
-    DroseraEditor(juce::AudioProcessor&, juce::AudioProcessorValueTreeState&, std::function<bool()> isMidiPitchActive);
+    DroseraEditor(juce::AudioProcessor&, juce::AudioProcessorValueTreeState&, EditorBridge&);
     ~DroseraEditor() override;
+
+    void setTab(int);
+    int tab() const { return tabs_.tab(); }
+
+    /// The timer's body: moves the plant on by dtSeconds and refreshes every readout.
+    void refreshDisplay(float dtSeconds);
+
+    juce::Slider* slider(const juce::String& paramId);
+    juce::String readout(const juce::String& paramId) const;
+    juce::String tag(const juce::String& paramId) const;
+    const drosera::PlantView& plant() const { return plant_; }
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -35,34 +29,18 @@ public:
 private:
     void timerCallback() override;
     void selectProgram(int index);
+    const drosera::LabeledKnob* findKnob(const juce::String& paramId) const;
 
-    struct Knob {
-        juce::Label label;
-        juce::Slider slider;
-        std::unique_ptr<juce::SliderParameterAttachment> attachment;
-    };
-    struct Toggle {
-        juce::ToggleButton button;
-        std::unique_ptr<juce::ButtonParameterAttachment> attachment;
-    };
-    struct Section {
-        juce::String title;
-        std::vector<int> knobs;    // indices into knobs_
-        std::vector<int> toggles;  // indices into toggles_
-        juce::Rectangle<int> bounds;
-    };
-
-    int addKnob(juce::AudioProcessorValueTreeState&, const char* paramId, const juce::String& caption);
-    int addToggle(juce::AudioProcessorValueTreeState&, const char* paramId, const juce::String& caption);
-
-    DroseraLookAndFeel laf_;
-    std::function<bool()> isMidiPitchActive_;
-    bool showingMidiPitch_ = false;
+    drosera::DroseraLookAndFeel lookAndFeel_;
+    juce::AudioProcessorValueTreeState& apvts_;
+    EditorBridge& bridge_;
+    drosera::PlantView plant_;
+    juce::SliderParameterAttachment feedbackAttachment_;
+    drosera::LabeledKnob frequency_, body_;
+    drosera::TabPanel tabs_;
     juce::ComboBox presetBox_;
-    juce::TextButton prevButton_ {"<"}, nextButton_ {">"};
-    std::vector<std::unique_ptr<Knob>> knobs_;
-    std::vector<std::unique_ptr<Toggle>> toggles_;
-    std::vector<Section> sections_;
+    juce::TextButton previous_ {juce::String(juce::CharPointer_UTF8("\xe2\x80\xb9"))}, next_ {juce::String(juce::CharPointer_UTF8("\xe2\x80\xba"))};
+    double lastTick_ = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DroseraEditor)
 };

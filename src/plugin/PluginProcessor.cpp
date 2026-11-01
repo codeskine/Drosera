@@ -61,7 +61,7 @@ juce::String formatValue(const ParamSpec& s, float norm) {
 
 } // namespace
 
-class DroseraProcessor final : public juce::AudioProcessor, private EditorBridge {
+class DroseraProcessor final : public juce::AudioProcessor, public EditorBridge {
 public:
     DroseraProcessor()
         : AudioProcessor(BusesProperties()
@@ -107,7 +107,7 @@ public:
         set("midigate", pr.midiGate ? 1.0f : 0.0f);
     }
     bool hasEditor() const override { return true; }
-    juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, [this] { return midiPitchActive_.load(); }); }
+    juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, *this); }
 
     bool isBusesLayoutSupported(const BusesLayout& l) const override {
         const auto in = l.getMainInputChannelSet();
