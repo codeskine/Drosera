@@ -46,7 +46,11 @@ if(DROSERA_BUILD_PLUGIN)
         GIT_SHALLOW ON)
     FetchContent_MakeAvailable(JUCE)
 
-    set(DROSERA_PLUGIN_SOURCES src/plugin/PluginProcessor.cpp src/plugin/PluginEditor.cpp)
+    set(DROSERA_PLUGIN_SOURCES
+        src/plugin/PluginProcessor.cpp
+        src/plugin/PluginEditor.cpp
+        src/plugin/ui/DroseraLookAndFeel.cpp
+        src/plugin/ui/PlantView.cpp)
 
     juce_add_plugin(Drosera
         COMPANY_NAME "codeskine"

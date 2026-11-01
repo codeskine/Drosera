@@ -9,6 +9,7 @@
 #include <vector>
 #include "pitch_estimator.h"
 #include "SpectrumTap.h"
+#include "ui/PlantView.h"
 #include "ui/Readouts.h"
 #include "ui/SpectrumBands.h"
 
@@ -176,11 +177,47 @@ static void readoutTests() {
     check(noteName(40.0f) == "E2" && noteName(60.0f) == "C4" && noteName(69.0f) == "A4", "note names");
 }
 
+static void plantTests() {
+    constexpr float dt = 1.0f / 30.0f;
+    constexpr int blockSize = 1600;  // 48 kHz at 30 updates per second
+    PlantView plant;
+    SpectrumTap tap;
+    tap.setActive(true);
+    std::vector<float> sine(blockSize), zeros(blockSize, 0.0f);
+    double phase = 0.0;
+    auto pushSine = [&] {
+        for (float& v : sine) { v = 0.25f * (float) std::sin(phase); phase += 2.0 * M_PI * 1000.0 / 48000.0; }
+        tap.push(sine.data(), sine.data(), blockSize);
+    };
+    auto allAtFloor = [&] {
+        for (int i = 0; i < kNumBands; ++i) if (plant.level(i) != kFloorDb) return false;
+        return true;
+    };
+
+    for (int i = 0; i < 30; ++i) plant.update(tap, 48000.0, dt);
+    check(allAtFloor(), "plantRestsWithNoAudio");
+
+    for (int i = 0; i < 30; ++i) { pushSine(); plant.update(tap, 48000.0, dt); }
+    check(plant.level(30) > -20.0f, "plantRespondsToSound");
+
+    for (int i = 0; i < 90; ++i) { tap.push(zeros.data(), zeros.data(), blockSize); plant.update(tap, 48000.0, dt); }
+    check(plant.level(30) < kFloorDb + 1.0f, "plantFallsWithSilence");
+
+    for (int i = 0; i < 30; ++i) { pushSine(); plant.update(tap, 48000.0, dt); }
+    for (int i = 0; i < 90; ++i) plant.update(tap, 48000.0, dt);
+    check(plant.level(30) < kFloorDb + 1.0f, "plantFallsWhenHostStops");
+
+    PlantView unprepared;
+    for (int i = 0; i < 30; ++i) { pushSine(); unprepared.update(tap, 0.0, dt); }
+    check(unprepared.level(30) == kFloorDb, "plantRestsWithNoSampleRate");
+}
+
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     tapTests();
     bandTests();
     readoutTests();
+    plantTests();
     std::printf(failures == 0 ? "ALL OK\n" : "SOME FAILED\n");
     return failures == 0 ? 0 : 1;
 }
