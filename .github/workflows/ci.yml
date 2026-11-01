@@ -46,13 +46,16 @@ jobs:
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
 
       - name: Build
-        run: cmake --build build --target render_test render_cli plugin_host_test Drosera_VST3
+        run: cmake --build build --target render_test render_cli ui_test plugin_host_test Drosera_VST3
 
       - name: Test the release check
         run: python3 tools/test_release_check.py
 
       - name: render_test
         run: build/render_test
+
+      - name: ui_test
+        run: build/ui_test_artefacts/Release/ui_test
 
       - name: plugin_host_test
         run: build/plugin_host_test_artefacts/Release/plugin_host_test "$VST3" tests/fixtures/state-baseline.bin

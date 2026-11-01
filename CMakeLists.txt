@@ -46,6 +46,8 @@ if(DROSERA_BUILD_PLUGIN)
         GIT_SHALLOW ON)
     FetchContent_MakeAvailable(JUCE)
 
+    set(DROSERA_PLUGIN_SOURCES src/plugin/PluginProcessor.cpp src/plugin/PluginEditor.cpp)
+
     juce_add_plugin(Drosera
         COMPANY_NAME "codeskine"
         PLUGIN_MANUFACTURER_CODE Cdsk
@@ -56,12 +58,14 @@ if(DROSERA_BUILD_PLUGIN)
         NEEDS_MIDI_INPUT TRUE
         COPY_PLUGIN_AFTER_BUILD FALSE)
 
-    target_sources(Drosera PRIVATE src/plugin/PluginProcessor.cpp src/plugin/PluginEditor.cpp)
+    target_sources(Drosera PRIVATE ${DROSERA_PLUGIN_SOURCES})
+    target_include_directories(Drosera PRIVATE src/plugin)
     target_compile_definitions(Drosera PUBLIC
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
     target_link_libraries(Drosera PRIVATE
         DroseraDSP
         juce::juce_audio_utils
+        juce::juce_dsp
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 
@@ -88,8 +92,17 @@ if(DROSERA_BUILD_PLUGIN)
     # cannot be snapshotted): editor_snapshot <out.png> [paramId=normalizedValue ...]
     juce_add_console_app(editor_snapshot PRODUCT_NAME "editor_snapshot")
     target_sources(editor_snapshot PRIVATE
-        tests/editor_snapshot.cpp src/plugin/PluginProcessor.cpp src/plugin/PluginEditor.cpp)
+        tests/editor_snapshot.cpp ${DROSERA_PLUGIN_SOURCES})
     target_compile_definitions(editor_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_include_directories(editor_snapshot PRIVATE src/plugin)
     target_link_libraries(editor_snapshot PRIVATE DroseraDSP
-        juce::juce_audio_utils juce::juce_recommended_config_flags)
+        juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
+
+    # The interface's logic and the editor's behaviour (see tests/ui_test.cpp)
+    juce_add_console_app(ui_test PRODUCT_NAME "ui_test")
+    target_sources(ui_test PRIVATE tests/ui_test.cpp ${DROSERA_PLUGIN_SOURCES})
+    target_include_directories(ui_test PRIVATE tests src/plugin)
+    target_compile_definitions(ui_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(ui_test PRIVATE DroseraDSP
+        juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 endif()
