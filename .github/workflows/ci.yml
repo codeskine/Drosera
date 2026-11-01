@@ -22,11 +22,7 @@ jobs:
     env:
       PLUGINVAL_VERSION: v1.0.4
       VST3: build/Drosera_artefacts/Release/VST3/Drosera.vst3
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      CAN_NOTARIZE: ${{ secrets.APPLE_ID != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,7 +66,13 @@ jobs:
         run: tools/hardware-comparison/check_reference.sh build/render_cli
 
       - name: Sign with Developer ID and notarize
-        if: inputs.version != '' && env.APPLE_ID != ''
+        if: inputs.version != '' && env.CAN_NOTARIZE == 'true'
+        env:  # only this step sees them, not brew, pluginval or the tests
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           keychain="$RUNNER_TEMP/signing.keychain-db"
           password=$(uuidgen)
@@ -96,7 +98,7 @@ jobs:
           cp LICENSE THIRD_PARTY_LICENSES.md docs/INSTALL.txt "$stage/"
           cp LICENSE-AudreyII "$stage/licenses/"
           cp third_party/DaisySP/LICENSE "$stage/licenses/DaisySP-LICENSE"
-          ditto -c -k --sequesterRsrc "$stage" "Drosera-$VERSION-macos.zip"
+          ditto -c -k --norsrc --noextattr "$stage" "Drosera-$VERSION-macos.zip"
 
           # What a user unpacks is what must work, not the build folder.
           unpacked="$RUNNER_TEMP/unpacked"

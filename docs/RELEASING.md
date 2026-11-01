@@ -7,7 +7,7 @@ and publishes it.
 
 1. Set the version in `project()` in `CMakeLists.txt`.
 2. In `CHANGELOG.md`, move the `Unreleased` entries into `## [X.Y.Z] - YYYY-MM-DD`, and leave an empty `Unreleased`.
-3. Check the two agree:
+3. Check the two agree. The workflow also refuses a final tag on a commit that is not on `main`:
 
    ```bash
    python3 tools/release_check.py vX.Y.Z

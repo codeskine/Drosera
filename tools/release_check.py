@@ -45,7 +45,7 @@ def main():
         changelog = f.read()
     title = "Unreleased" if is_candidate else version
     notes = changelog_section(changelog, title)
-    if not notes:
+    if not any(line.strip() and not line.startswith("#") for line in (notes or "").splitlines()):
         fail(f"CHANGELOG.md has no text in a section for [{title}]")
     print(notes)
 

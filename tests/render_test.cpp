@@ -300,14 +300,10 @@ static bool publishedValues() {
         ok &= pass;
     }
     {
-        DroseraCore core; core.Init();
-        applyPreset(core, infrasonic::kFactoryPresets[0]);
-        core.SetParam(DroseraCore::EchoTime, 0.5f);
-        core.SetEchoWarp(true);
-        settle(core, 1.0);
+        const float seconds = DroseraCore::EchoTimeSeconds(0.5f, true);
         const float expected = daisysp::fmap(0.25f, 0.05f, 5.0f, daisysp::Mapping::EXP);
-        const bool pass = std::fabs(core.PublishedEchoSeconds() - expected) < expected * 0.01f;
-        printf("published Echo Time with WARP: %.3f s (expected %.3f) %s\n", core.PublishedEchoSeconds(), expected, pass ? "OK" : "FAIL");
+        const bool pass = seconds == expected && DroseraCore::EchoTimeSeconds(0.5f, false) > seconds;
+        printf("Echo Time with WARP: %.3f s (expected %.3f) %s\n", seconds, expected, pass ? "OK" : "FAIL");
         ok &= pass;
     }
     return ok;

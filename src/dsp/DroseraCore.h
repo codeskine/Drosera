@@ -56,10 +56,11 @@ public:
     void SetGate(bool enabled, bool open) { gate_enabled_ = enabled; gate_open_ = open; }
 
     /// What really sounds, for the interface: any thread may read these. MIDI mode gives the note, and the Body
-    /// delay after snapping and phase compensation. The echo's time includes WARP.
+    /// delay after snapping and phase compensation.
     float PublishedNote() const        { return published_note_.load(std::memory_order_relaxed); }
     float PublishedBodySeconds() const { return published_body_s_.load(std::memory_order_relaxed); }
-    float PublishedEchoSeconds() const { return published_echo_s_.load(std::memory_order_relaxed); }
+    /// Echo Time for a knob position, WARP included. Worked out rather than published, so it holds with no audio running.
+    static float EchoTimeSeconds(float norm, bool warp) { return daisysp::fmap(norm * (warp ? 0.5f : 1.0f), kEchoMin, kEchoMax, daisysp::Mapping::EXP); }
 
     /// Renders n samples at kRate. `in` (mono excitation/audio input) may be nullptr.
     void Render(const float* in, float* outL, float* outR, size_t n) {
@@ -136,9 +137,8 @@ private:
             std::bind(&Engine::SetReverbFeedback, &e, _1));
         registry_.Register(EchoSend, 0.0f, 0.0f, 1.0f,
             std::bind(&Engine::SetEchoDelaySendAmount, &e, _1), 0.05f, daisysp::Mapping::EXP);
-        registry_.Register(EchoTime, 0.5f, 0.05f, 5.0f,
-            [this, &e](float s) { published_echo_s_.store(s, std::memory_order_relaxed); e.SetEchoDelayTime(s); },
-            0.1f, daisysp::Mapping::EXP);
+        registry_.Register(EchoTime, 0.5f, kEchoMin, kEchoMax,
+            std::bind(&Engine::SetEchoDelayTime, &e, _1), 0.1f, daisysp::Mapping::EXP);
         registry_.Register(EchoFeedback, 0.0f, 0.0f, 1.5f,
             std::bind(&Engine::SetEchoDelayFeedback, &e, _1));
         registry_.Register(OutputVolume, 0.5f, 0.0f, 1.0f,
@@ -200,6 +200,7 @@ private:
     }
 
     static constexpr float kNoteMin = 16.0f, kKnobNoteMax = 72.0f, kNoteMax = 84.0f;  // above this the loop filters make the string run flat (-120 cents at 90)
+    static constexpr float kEchoMin = 0.05f, kEchoMax = 5.0f;
     static constexpr float kKnobDelayLag = 0.2f;  // same as FeedbackSynth::Engine::Init
     static constexpr float kMidiDelayLag = 0.03f;
     static constexpr float kMaxMakeup = 8.0f;
@@ -215,7 +216,7 @@ private:
     float midi_pitch_ = 40.0f;
     bool first_ = true;
     size_t phase_ = 0;
-    std::atomic<float> published_note_ { 40.0f }, published_body_s_ { 0.001f }, published_echo_s_ { 0.5f };
+    std::atomic<float> published_note_ { 40.0f }, published_body_s_ { 0.001f };
 };
 
 } // namespace infrasonic

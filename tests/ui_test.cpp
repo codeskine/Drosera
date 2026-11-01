@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <cstdio>
 #include <limits>
 #include <thread>
@@ -19,6 +20,16 @@
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 
 using namespace drosera;
+
+// Counts every allocation on this thread while on, malloc included: JUCE's MidiMessage uses malloc, which replacing
+// operator new would miss. malloc_logger is the system's hook behind malloc stack logging.
+extern "C" void (*malloc_logger)(uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uint32_t);
+static thread_local bool tCountAllocations = false;
+static std::atomic<int> gAllocations { 0 };
+static void countAllocation(uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uint32_t) {
+    constexpr uint32_t kAllocate = 2;
+    if (tCountAllocations && (type & kAllocate) != 0) ++gAllocations;
+}
 
 static int failures = 0;
 static void check(bool pass, const char* name) {
@@ -363,6 +374,58 @@ static void editorTests() {
         auto* bridge = dynamic_cast<EditorBridge*>(p.get());
         check(editor->readout("echotime") == juce::String(readouts::echoTime(true, bridge->echoSeconds(), "")) && editor->readout("echotime") != normal,
               "warpShowsRealTime");
+    }
+
+    {   // With no audio running, Echo Time's readout still follows the knob and WARP.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        auto editor = openEditor(*p);
+        setParameter(*p, "echohalve", 1.0f);
+        setParameter(*p, "echotime", 0.9f);
+        editor->refreshDisplay(dt);
+        const auto high = editor->readout("echotime");
+        setParameter(*p, "echotime", 0.2f);
+        editor->refreshDisplay(dt);
+        const auto low = editor->readout("echotime");
+        std::printf("  WARP with no audio: 0.9 reads %s, 0.2 reads %s\n", high.toRawUTF8(), low.toRawUTF8());
+        check(high == "1.05 s" && low == "0.10 s", "warpReadoutWithoutAudio");
+    }
+
+    {   // Nothing on the audio path allocates, with a window open and a long sysex arriving.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        juce::AudioBuffer<float> buffer(2, 512);
+        juce::MidiBuffer midi;
+        const std::vector<juce::uint8> sysex(200, 0x11);
+        midi.addEvent(juce::MidiMessage::createSysExMessage(sysex.data(), (int) sysex.size()), 0);
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8) 100), 10);
+        gAllocations = 0;
+        malloc_logger = countAllocation;
+        tCountAllocations = true;
+        for (int b = 0; b < 100; ++b) p->processBlock(buffer, midi);
+        tCountAllocations = false;
+        malloc_logger = nullptr;
+        std::printf("  allocations in 100 blocks: %d\n", gAllocations.load());
+        check(gAllocations.load() == 0, "audioPathDoesNotAllocate");
+    }
+
+    {   // Screen readers can name every knob.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        check(openEditor(*p)->slider("fbgain")->getTitle() == "Feedback", "feedbackHasATitle");
+    }
+
+    {   // A preset chosen in the window reaches the host's own display.
+        struct Listener final : juce::AudioProcessorListener {
+            bool programChanged = false;
+            void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override {}
+            void audioProcessorChanged(juce::AudioProcessor*, const ChangeDetails& details) override { programChanged |= details.programChanged; }
+        } listener;
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        auto editor = openEditor(*p);
+        p->addListener(&listener);
+        editor->selectProgram(2);
+        p->removeListener(&listener);
+        check(listener.programChanged && p->getCurrentProgram() == 2, "presetNotifiesHost");
     }
 
     {   // The tap runs only while a window is open, and reopening shows no stale burst.
