@@ -274,7 +274,12 @@ void te_host_tape_block(TapeState *s, const int32_t *wet, int32_t *audio, int32_
  * every block/sample. This bounds the cost of simultaneous AGE/TIME
  * edits, not only the steady-state benchmark. Kept out of line so the
  * per-block path does not carry its registers. */
-static __attribute__((noinline)) void tone_update(TapeState *s) {
+#ifdef _MSC_VER
+#define TE_NOINLINE __declspec(noinline)
+#else
+#define TE_NOINLINE __attribute__((noinline))
+#endif
+static TE_NOINLINE void tone_update(TapeState *s) {
     /* Tonal speed follows the running motor, clamped to the pedal's range. */
     uint32_t speed=s->cached_speed;
     unsigned update_corner=!s->active, update_worn=!s->active;

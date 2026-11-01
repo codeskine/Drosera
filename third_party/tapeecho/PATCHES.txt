@@ -7,3 +7,4 @@ Changes for Drosera:
   flutter depth in samples, BEAT target). The stock-frame hook stays out of the build.
 - cpu.c/cpu.h: TE_RING 245760 frames (5.12 s); TapeParams.target_q8 for continuous delay time;
   rng seeded per lane so that the left and right channels hiss independently.
+- cpu.c: TE_NOINLINE wraps the noinline attribute, because MSVC does not know __attribute__.
