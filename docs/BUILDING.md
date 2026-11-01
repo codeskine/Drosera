@@ -34,6 +34,13 @@ Renders the engine offline. It covers finiteness and bounds at several block siz
 the resampler, every preset, and that rendering never allocates.
 
 ```bash
+build/ui_test_artefacts/Release/ui_test
+```
+
+Covers the interface: the spectrum path to the plant, the readouts, tabs, and what the editor shows while MIDI and WARP
+change what sounds. It opens no window on screen.
+
+```bash
 build/plugin_host_test_artefacts/Release/plugin_host_test build/Drosera_artefacts/Release/VST3/Drosera.vst3 tests/fixtures/state-baseline.bin
 ```
 
@@ -53,5 +60,6 @@ proves the engine still renders exactly the same.
 ## Other tools
 
 - `build/pitch_probe [body] [first] [last] [step]` prints the pitch measured for a range of MIDI notes.
-- `editor_snapshot <out.png> [paramId=value | program=N | note=N ...]` draws the editor to an image.
+- `editor_snapshot <out.png> [paramId=value | program=N | note=N | tab=N | sound=1 ...]` draws the window to an image.
+  `sound=1` renders a second of audio first, so the plant shows real sound.
 - `tools/hardware-comparison/` compares the plugin against a recording of a real unit. See its `PROTOCOL.md`.

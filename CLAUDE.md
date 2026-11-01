@@ -13,6 +13,10 @@ build/render_test
 ```
 
 ```bash
+build/ui_test_artefacts/Release/ui_test
+```
+
+```bash
 build/plugin_host_test_artefacts/Release/plugin_host_test build/Drosera_artefacts/Release/VST3/Drosera.vst3 tests/fixtures/state-baseline.bin
 ```
 
@@ -26,9 +30,12 @@ tools/hardware-comparison/check_reference.sh build/render_cli
 |---|---|
 | `src/dsp/` | Engine, no JUCE. `DroseraCore.h` is its host-independent front end, fixed at 48 kHz |
 | `src/plugin/PluginProcessor.cpp` | Parameters, MIDI, resampling to and from 48 kHz |
-| `src/plugin/PluginEditor.*` | Interface |
+| `src/plugin/PluginEditor.*` | The window: assembles the interface and runs its timer |
+| `src/plugin/EditorBridge.h` | What the editor reads from the processor, beyond parameters |
+| `src/plugin/SpectrumTap.h` | Lock-free FIFO from the audio thread to the display |
+| `src/plugin/ui/` | Theme, knob drawing, plant, tabs. `SpectrumBands.h` and `Readouts.h` have no JUCE, so tests use them alone |
 | `src/plugin/Presets.h` | Factory presets, plain C++ so tests can use them |
-| `tests/` | `render_test`, `plugin_host_test`, measuring tools |
+| `tests/` | `render_test`, `ui_test`, `plugin_host_test`, `editor_snapshot` (draws the window to a PNG), measuring tools |
 | `third_party/` | Vendored DaisySP |
 | `tools/hardware-comparison/` | Comparison against a real unit, and the reference checksums |
 | `docs/superpowers/` | Design specs and implementation plans |

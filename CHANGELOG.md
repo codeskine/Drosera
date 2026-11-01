@@ -12,3 +12,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 - Optional audio input that excites the strings.
 - MIDI Pitch and MIDI Gate.
 - 12 factory presets.
+- An interface built around a sundew that shows the real spectrum, with readouts of what really sounds.

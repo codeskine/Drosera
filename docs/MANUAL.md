@@ -6,7 +6,21 @@ DSP is the Audrey II firmware's own code at a fixed 48 kHz.
 
 Readouts show what the engine really uses, not the knob's position. These curves are far from linear.
 
+## The plant
+
+The sundew in the middle of the window shows the output's real spectrum. Each of its 54 tentacles is a frequency band,
+from 30 Hz at the top, clockwise to 16 kHz, and its length and drop of dew follow that band's level from −72 dBFS to 0
+dBFS. Nothing moves unless the sound does: a silent plugin shows a still plant.
+
+Low bands are coarser than high ones. Below about 150 Hz several tentacles share what one FFT bin measured.
+
+Readouts can carry a tag. **MIDI** on Frequency means a note sets the pitch, and **SNAP** on Body means Body shows the time
+snapped to that note. Those knobs look dimmed, because they are not what sounds, but they keep working.
+
 ## Main controls
+
+Feedback sits at the plant's heart, with Frequency and Body on either side. Everything else is in the tabs below, and the
+open tab is saved with your project.
 
 | Control | Range | What it does |
 |---|---|---|
@@ -17,7 +31,7 @@ Readouts show what the engine really uses, not the knob's position. These curves
 The drone settles where the resonances of the string and of the Body delay coincide, which is rarely the exact
 pitch Frequency shows. Moving Body can jump the drone to another partial.
 
-## Filters
+## Filters tab
 
 | Control | Range | What it does |
 |---|---|---|
@@ -26,26 +40,26 @@ pitch Frequency shows. Moving Body can jump the drone to another partial.
 
 Both are in the feedback path, so they shape which partials sustain, not only the tone.
 
-## Reverb
+## Reverb tab
 
 | Control | What it does |
 |---|---|
 | Reverb Mix | Dry to wet, inside the loop |
 | Reverb Decay | Reverb feedback, 20 % to 100 %, on a curved law |
 
-## Echo
+## Echo tab
 
 | Control | What it does |
 |---|---|
 | Echo Send | Level into the echo |
 | Echo Time | 50 ms to 5 s |
 | Echo Feedback | 100 % is unity, and up to 150 % it runs away, bounded by a soft clip |
-| Echo Warp (WARP) | The firmware's delay switch |
+| Echo Warp (WARP) | The firmware's delay switch. Echo Time's readout shows the shortened time |
 
 **WARP** halves the Echo Time knob's position before its square-law curve. The echo gets 2.8 to 3.9 times
 shorter, not twice as short, so it acts as a doppler warp and not as a tempo halving.
 
-## Output
+## Output tab
 
 | Control | What it does |
 |---|---|
@@ -57,7 +71,7 @@ The output has a limiter and a final hard clip at full scale, because the loop c
 The audio input is optional, and excites the strings. It stays off until the host connects the plugin's input
 bus. Some presets need it to make sound.
 
-## MIDI
+## MIDI tab
 
 Both switches are off by default, and Drosera then ignores notes.
 
