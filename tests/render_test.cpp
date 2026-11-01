@@ -271,6 +271,48 @@ static bool filtersClearOnInit() {
     return pass;
 }
 
+// What the interface reads: the values that really sound, not the knobs.
+static bool publishedValues() {
+    float l[64], r[64];
+    auto settle = [&](DroseraCore& core, double seconds) {
+        for (int b = 0; b < (int)(seconds * 48000.0 / 64.0); ++b) core.Render(nullptr, l, r, 64);
+    };
+    bool ok = true;
+    {
+        DroseraCore core; core.Init();
+        applyPreset(core, infrasonic::kFactoryPresets[0]);
+        core.SetParam(DroseraCore::FeedbackBody, 0.30f);
+        settle(core, 2.0);
+        const float knob = daisysp::fmap(0.30f, 0.001f, 0.1f, daisysp::Mapping::EXP);
+        const bool pass = std::fabs(core.PublishedBodySeconds() - knob) < knob * 0.01f;
+        printf("published Body, knob: %.5f s (knob %.5f) %s\n", core.PublishedBodySeconds(), knob, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    {
+        DroseraCore core; core.Init();
+        applyPreset(core, infrasonic::kFactoryPresets[0]);
+        core.SetParam(DroseraCore::FeedbackBody, 0.30f);
+        core.SetMidiPitch(true, 60.0f);
+        settle(core, 2.0);
+        const float T = 1.0f / 261.63f;  // the loop's filters can move the delay by up to half a period
+        const bool pass = std::fabs(core.PublishedNote() - 60.0f) < 0.01f && std::fabs(core.PublishedBodySeconds() - 3.0f * T) < 0.5f * T;
+        printf("published note %.3f, Body %.5f s (3 periods %.5f) %s\n", core.PublishedNote(), core.PublishedBodySeconds(), 3.0f * T, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    {
+        DroseraCore core; core.Init();
+        applyPreset(core, infrasonic::kFactoryPresets[0]);
+        core.SetParam(DroseraCore::EchoTime, 0.5f);
+        core.SetEchoWarp(true);
+        settle(core, 1.0);
+        const float expected = daisysp::fmap(0.25f, 0.05f, 5.0f, daisysp::Mapping::EXP);
+        const bool pass = std::fabs(core.PublishedEchoSeconds() - expected) < expected * 0.01f;
+        printf("published Echo Time with WARP: %.3f s (expected %.3f) %s\n", core.PublishedEchoSeconds(), expected, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
     //                  freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
@@ -290,6 +332,7 @@ int main(int argc, char** argv) {
     ok &= noAllocationOnRender();
     ok &= recoversFromNan();
     ok &= filtersClearOnInit();
+    ok &= publishedValues();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }

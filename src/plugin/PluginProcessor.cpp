@@ -8,6 +8,7 @@
 #include <cstring>
 #include "DroseraCore.h"
 #include "SincResampler.h"
+#include "EditorBridge.h"
 #include "PluginEditor.h"
 #include "Presets.h"
 
@@ -60,7 +61,7 @@ juce::String formatValue(const ParamSpec& s, float norm) {
 
 } // namespace
 
-class DroseraProcessor final : public juce::AudioProcessor {
+class DroseraProcessor final : public juce::AudioProcessor, private EditorBridge {
 public:
     DroseraProcessor()
         : AudioProcessor(BusesProperties()
@@ -106,7 +107,7 @@ public:
         set("midigate", pr.midiGate ? 1.0f : 0.0f);
     }
     bool hasEditor() const override { return true; }
-    juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, [this] { return midiPitchActive.load(); }); }
+    juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, [this] { return midiPitchActive_.load(); }); }
 
     bool isBusesLayoutSupported(const BusesLayout& l) const override {
         const auto in = l.getMainInputChannelSet();
@@ -128,6 +129,9 @@ public:
         inMono.assign(kMaxChunk, 0.0f);
         outCount = inCount = 0;
         resampleL.Init(ratio); resampleR.Init(ratio); resampleIn.Init(inRatio);
+
+        hostRate.store(sampleRate);
+        tap.requestFlush();
 
         heldCount = 0; haveNote = false; bendSemis = 0.0f;
         lastFreqKnob = raw[DroseraCore::Frequency]->load();
@@ -172,6 +176,7 @@ public:
             float* d = buffer.getWritePointer(c);
             for (int i = 0; i < total; ++i) d[i] = juce::jlimit(-1.0f, 1.0f, d[i]);
         }
+        tap.push(buffer.getReadPointer(0), buffer.getReadPointer(1), (size_t) total);
     }
 
     void getStateInformation(juce::MemoryBlock& dest) override {
@@ -187,6 +192,13 @@ public:
     }
 
 private:
+    bool midiPitchActive() const override { return midiPitchActive_.load(); }
+    float soundingNote() const override { return core->PublishedNote(); }
+    float bodySeconds() const override { return core->PublishedBodySeconds(); }
+    float echoSeconds() const override { return core->PublishedEchoSeconds(); }
+    double hostSampleRate() const override { return hostRate.load(); }
+    drosera::SpectrumTap& spectrumTap() override { return tap; }
+
     static constexpr int kMaxChunk = 1024;
     static constexpr size_t kPrime = 256;
     static constexpr int kMaxHeld = 16;
@@ -209,7 +221,7 @@ private:
     void applyMidiState() {
         const bool pitchOn = midiPitchRaw->load() > 0.5f && haveNote;
         core->SetMidiPitch(pitchOn, (float) lastNote + bendSemis);
-        midiPitchActive.store(pitchOn);
+        midiPitchActive_.store(pitchOn);
         core->SetGate(midiGateRaw->load() > 0.5f, heldCount > 0);
     }
 
@@ -322,7 +334,10 @@ private:
     int currentProgram = 0;
     bool haveNote = false;
     float bendSemis = 0.0f, inGain = 1.0f, lastFreqKnob = 0.0f;
-    std::atomic<bool> midiPitchActive { false };  // read by the editor
+    std::atomic<bool> midiPitchActive_ { false };  // read by the editor
+
+    drosera::SpectrumTap tap;
+    std::atomic<double> hostRate { 0.0 };
 
     // Sample-rate bridging state
     double ratio = 1.0, inRatio = 1.0;

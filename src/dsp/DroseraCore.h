@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <complex>
 #include <memory>
@@ -53,6 +54,12 @@ public:
     /// When enabled, the feedback gain is closed (-60 dB) unless `open`: the drone
     /// swells on note-on and dies away on note-off.
     void SetGate(bool enabled, bool open) { gate_enabled_ = enabled; gate_open_ = open; }
+
+    /// What really sounds, for the interface: any thread may read these. MIDI mode gives the note, and the Body
+    /// delay after snapping and phase compensation. The echo's time includes WARP.
+    float PublishedNote() const        { return published_note_.load(std::memory_order_relaxed); }
+    float PublishedBodySeconds() const { return published_body_s_.load(std::memory_order_relaxed); }
+    float PublishedEchoSeconds() const { return published_echo_s_.load(std::memory_order_relaxed); }
 
     /// Renders n samples at kRate. `in` (mono excitation/audio input) may be nullptr.
     void Render(const float* in, float* outL, float* outR, size_t n) {
@@ -130,7 +137,8 @@ private:
         registry_.Register(EchoSend, 0.0f, 0.0f, 1.0f,
             std::bind(&Engine::SetEchoDelaySendAmount, &e, _1), 0.05f, daisysp::Mapping::EXP);
         registry_.Register(EchoTime, 0.5f, 0.05f, 5.0f,
-            std::bind(&Engine::SetEchoDelayTime, &e, _1), 0.1f, daisysp::Mapping::EXP);
+            [this, &e](float s) { published_echo_s_.store(s, std::memory_order_relaxed); e.SetEchoDelayTime(s); },
+            0.1f, daisysp::Mapping::EXP);
         registry_.Register(EchoFeedback, 0.0f, 0.0f, 1.5f,
             std::bind(&Engine::SetEchoDelayFeedback, &e, _1));
         registry_.Register(OutputVolume, 0.5f, 0.0f, 1.0f,
@@ -144,7 +152,9 @@ private:
     // note in the feedback path selects the fundamental, and the Body delay glides faster.
     void applyPitchAndBody() {
         FeedbackSynth::Engine& e = *engine_;
+        published_note_.store(nn_, std::memory_order_relaxed);
         if (!midi_pitch_on_) {
+            published_body_s_.store(body_s_, std::memory_order_relaxed);
             if (tracking_) { e.SetFeedbackTracking(false, 0.0f); e.SetFeedbackDelayLag(kKnobDelayLag); tracking_ = false; }
             e.SetStringPitch(nn_);
             e.SetFeedbackDelay(body_s_);
@@ -164,7 +174,9 @@ private:
         const float outerPhase = std::arg(outerFilters);
         const float stringPeriod = std::max(T + stringPhase * toSeconds, 1.0f / 12000.0f);
         e.SetStringPitch(69.0f + 12.0f * std::log2(1.0f / stringPeriod / 440.0f));
-        e.SetFeedbackDelay(std::max(n * T + outerPhase * toSeconds, 1.0f / kRate));
+        const float delay = std::max(n * T + outerPhase * toSeconds, 1.0f / kRate);
+        published_body_s_.store(delay, std::memory_order_relaxed);
+        e.SetFeedbackDelay(delay);
         // Give back what the filters take at the note, or low notes (below the string's
         // 76 Hz DC blocker) lose the loop gain to oscillate on the fundamental.
         e.SetFeedbackTracking(true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup));
@@ -203,6 +215,7 @@ private:
     float midi_pitch_ = 40.0f;
     bool first_ = true;
     size_t phase_ = 0;
+    std::atomic<float> published_note_ { 40.0f }, published_body_s_ { 0.001f }, published_echo_s_ { 0.5f };
 };
 
 } // namespace infrasonic

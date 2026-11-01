@@ -9,6 +9,7 @@
 #include <vector>
 #include "pitch_estimator.h"
 #include "SpectrumTap.h"
+#include "ui/Readouts.h"
 #include "ui/SpectrumBands.h"
 
 using namespace drosera;
@@ -161,10 +162,25 @@ static void bandTests() {
           "bandAmountRange");
 }
 
+static void readoutTests() {
+    using namespace readouts;
+    auto is = [](const Text& t, const char* value, const char* tag) { return t.value == value && t.tag == tag; };
+    check(is(frequency(true, 69.0f, "x"), "A4 440.0 Hz", "MIDI"), "frequency with a MIDI note");
+    check(frequency(true, 60.4f, "x").value.rfind("C4 ", 0) == 0 && frequency(true, 60.4f, "x").value != frequency(true, 60.0f, "x").value,
+          "frequency between notes");
+    check(is(frequency(false, 69.0f, "82.4 Hz"), "82.4 Hz", ""), "frequency from the knob");
+    check(is(body(true, 0.0971f, "x"), "97.1 ms", "SNAP"), "body snapped");
+    check(is(body(false, 0.0971f, "30.0 ms"), "30.0 ms", ""), "body from the knob");
+    check(echoTime(true, 0.359f, "x") == "0.36 s", "echo time with WARP");
+    check(echoTime(false, 0.359f, "1.29 s") == "1.29 s", "echo time from the knob");
+    check(noteName(40.0f) == "E2" && noteName(60.0f) == "C4" && noteName(69.0f) == "A4", "note names");
+}
+
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     tapTests();
     bandTests();
+    readoutTests();
     std::printf(failures == 0 ? "ALL OK\n" : "SOME FAILED\n");
     return failures == 0 ? 0 : 1;
 }
