@@ -49,7 +49,7 @@ steps from `INSTALL.txt` and the README.
 
 ## Checks before the first release
 
-- **Name:** web searches on 2026-11-01 for "Drosera" with VST, synth, Eurorack and audio plugin found no music product
-  of that name. Two software companies outside music use it: Drosera Network (blockchain security) and a London company
-  in network management. This is not legal advice, and the registers themselves were not searched: check
-  [TMview](https://www.tmdn.org/tmview/) and [USPTO](https://tmsearch.uspto.gov/) for class 9 before 0.1.0.
+- **Name:** searched on 2026-11-01. The web shows no music product called Drosera. Two software companies outside music
+  use the name: Drosera Network (blockchain security) and a London company in network management. Word mark registers:
+  [USPTO](https://tmsearch.uspto.gov/) has no mark containing "drosera", and [TMview](https://www.tmdn.org/tmview/) in
+  class 9 has only "hidrosera", filed in Turkey on 2026-09-20. This is a search, not legal advice.
