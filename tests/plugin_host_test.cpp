@@ -19,7 +19,7 @@ static const ParamIdentity kParamIdentity[] = {
     {"revmix", "Reverb Mix"}, {"revdecay", "Reverb Decay"}, {"echosend", "Echo Send"}, {"echotime", "Echo Time"},
     {"echofb", "Echo Feedback"}, {"volume", "Volume"}, {"echohalve", "Echo Warp"}, {"inputgain", "Input Level"},
     {"midipitch", "MIDI Pitch"}, {"midigate", "MIDI Gate"},
-    {"poly", "Polyphony"}, {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"},
+    {"poly", "Polyphony"}, {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"}, {"polylock", "String Lock"},
 };
 
 // Values stored in tests/fixtures/state-baseline.bin. It also holds the tape echo's parameters, on,

@@ -25,7 +25,7 @@ const std::map<juce::String, juce::String>& captions() {
         {"lpf", "Lowpass"}, {"hpf", "Highpass"}, {"revmix", "Mix"}, {"revdecay", "Decay"}, {"echosend", "Send"},
         {"echotime", "Time"}, {"echofb", "Feedback"}, {"volume", "Volume"}, {"inputgain", "Input"},
         {"echohalve", "WARP"}, {"midipitch", "PITCH"}, {"midigate", "GATE"},
-        {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"}, {"poly", "POLY"},
+        {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"}, {"poly", "POLY"}, {"polylock", "LOCK"},
     };
     return names;
 }
@@ -66,7 +66,7 @@ TabPanel::TabPanel(juce::AudioProcessorValueTreeState& apvts)
               {"ECHO", {"echosend", "echotime", "echofb"}, {"echohalve"}},
               {"OUTPUT", {"volume", "inputgain"}, {}},
               {"MIDI", {}, {"midipitch", "midigate"}},
-              {"STRINGS", {"coupling", "interval2", "interval3"}, {"poly"}}} {
+              {"STRINGS", {"coupling", "interval2", "interval3"}, {"poly", "polylock"}}} {
     for (int i = 0; i < kNumTabs; ++i) {
         auto& page = pages_[(size_t) i];
         auto& button = tabButtons_[i];

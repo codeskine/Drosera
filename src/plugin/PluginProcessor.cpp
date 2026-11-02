@@ -81,6 +81,7 @@ public:
         couplingRaw = apvts.getRawParameterValue("coupling");
         interval2Raw = apvts.getRawParameterValue("interval2");
         interval3Raw = apvts.getRawParameterValue("interval3");
+        stringLockRaw = apvts.getRawParameterValue("polylock");
     }
 
     const juce::String getName() const override { return "Drosera"; }
@@ -115,6 +116,7 @@ public:
         set("coupling", pr.coupling);
         set("interval2", apvts.getParameter("interval2")->convertTo0to1((float) pr.interval2));
         set("interval3", apvts.getParameter("interval3")->convertTo0to1((float) pr.interval3));
+        set("polylock", pr.stringLock ? 1.0f : 0.0f);
     }
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, *this); }
@@ -219,6 +221,7 @@ public:
 
 private:
     bool midiPitchActive() const override { return midiPitchActive_.load(); }
+    bool bodySnapped() const override { return midiPitchActive_.load() || polyLocked_.load(); }
     float soundingNote() const override { return core->PublishedNote(); }
     bool polyMidiActive() const override { return polyMidiActive_.load(); }
     float voiceNote(int voice) const override { return voiceNotes_[voice].load(); }
@@ -254,6 +257,9 @@ private:
         core->SetPolyphony(poly);
         core->SetCoupling(couplingRaw->load());
         core->SetIntervals((int) interval2Raw->load(), (int) interval3Raw->load());
+        const bool lock = stringLockRaw->load() > 0.5f;
+        core->SetStringLock(lock);
+        polyLocked_.store(poly && lock);
         inGain = inGainRaw->load() * 2.0f;
         applyMidiState();
     }
@@ -390,6 +396,8 @@ private:
         });
         layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval2", 1}, "Interval 2", -24, 24, 7, semitones));
         layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval3", 1}, "Interval 3", -24, 24, 12, semitones));
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{"polylock", 1}, "String Lock", true));
         return layout;
     }
 
@@ -404,6 +412,7 @@ private:
     std::atomic<float>* couplingRaw = nullptr;
     std::atomic<float>* interval2Raw = nullptr;
     std::atomic<float>* interval3Raw = nullptr;
+    std::atomic<float>* stringLockRaw = nullptr;
 
     // MIDI state (audio thread only)
     int held[kMaxHeld] {};
@@ -414,6 +423,7 @@ private:
     float bendSemis = 0.0f, inGain = 1.0f, lastFreqKnob = 0.0f;
     std::atomic<bool> midiPitchActive_ { false };  // read by the editor
     std::atomic<bool> polyMidiActive_ { false };
+    std::atomic<bool> polyLocked_ { false };
     std::atomic<float> voiceNotes_[VoiceAllocator::kVoices] { -1.0f, -1.0f, -1.0f };
 
     drosera::SpectrumTap tap;

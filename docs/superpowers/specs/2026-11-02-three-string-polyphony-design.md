@@ -85,9 +85,10 @@ not change.
 | `coupling` | Coupling | 0 to 100% | 0% |
 | `interval2` | Interval 2 | -24 to +24 semitones, whole steps | +7 |
 | `interval3` | Interval 3 | -24 to +24 semitones, whole steps | +12 |
+| `polylock` | String Lock | on/off | on |
 
 Coupling maps through `daisysp::Mapping::EXP` (norm squared) to a gain from 0 to `kMaxCoupling`, which is 0.1. From the
-knobs that is the whole gain, and the output's magnitude spectrum differs by 0.88 at 100% against 0. Under MIDI the
+knobs that is the whole gain, and the output's magnitude spectrum differs by 0.55 at default knobs at 100% against 0, with String Lock off, and by about 1.0 on average across nine settings. With String Lock on it is 0.19. Under MIDI the
 band-pass and its make-up apply as well. Of the make-ups tried (1, 2, 2.5, 3, 4), 1 fails the measure on one test chord
 (0.035) and 2 clears it thinly (0.115). 2.5 gives 0.17 and 0.45 on the two test chords. Across 296
 chords with roots 24 to 60, default dry knobs, the dominant partial stays within 5 cents of the note at 100%. At a
@@ -114,8 +115,17 @@ it is enabled and closed.
 Frequency's 0.2 s glide. The Body knob stays single. The published note and Body delay become one value per voice.
 
 **Without MIDI**, the pitches are Frequency, Frequency + Interval 2 and Frequency + Interval 3, clamped to notes 16 to
-84. As today, Body is not snapped here and the loop oscillates where string and Body resonances coincide, so the
-intervals are exact only under MIDI.
+84. A recording from a real host showed why a choice is needed: with a shared Body, all voices can settle on one
+resonance (175 Hz for 90 s of it). At default knobs, across 42 settings of Frequency and Body, two or more voices shared a
+pitch in 16, and the intervals were right in 1. String Lock chooses:
+
+- **On:** tuned as under MIDI, with the snapped Body, band-passes and phase compensation. No voices share a pitch, the
+  intervals are right in 35 of 42, and with no reverb within 1 cent. Dark and full: 92% of the power is below 300 Hz.
+- **Off:** each voice's Body is scaled by its interval, so a voice's resonances move with its string. Voices share a pitch
+  in 6 of 42. Bright and moving, like the free drone.
+
+Both are kept because they are different instruments. String Lock has no effect with polyphony off, so renders there do
+not change, or under MIDI Pitch, which is already tuned.
 
 **With MIDI Pitch on and polyphony on:**
 
@@ -141,13 +151,13 @@ With polyphony off, the existing mono logic is what runs.
 
 ## Presets
 
-`Preset` gains `poly`, `coupling`, `interval2` and `interval3`. The 12 existing presets set polyphony off, so choosing
+`Preset` gains `poly`, `coupling`, `interval2`, `interval3` and `stringLock`. The 12 existing presets set polyphony off, so choosing
 one turns it off. Three presets are added at the end, so saved program indexes stay valid:
 
 | Name | Use |
 |---|---|
-| Open Fifths | Knobs only, Coupling 0 |
-| Sympathetic | Knobs only, Coupling around 40% |
+| Open Fifths | Knobs only, String Lock on, Coupling 0 |
+| Sympathetic | Knobs only, String Lock off, Coupling around 40% |
 | Chord Keys | MIDI Pitch and MIDI Gate on, Coupling 80% |
 
 Their exact knob values are set during implementation. `render_test` already renders every factory preset and checks
@@ -156,7 +166,7 @@ covered with polyphony on.
 
 ## Interface
 
-A sixth tab, `STRINGS`, goes after `MIDI`, so saved tab indexes stay valid. It holds the `POLY` switch and the Coupling,
+A sixth tab, `STRINGS`, goes after `MIDI`, so saved tab indexes stay valid. It holds the `POLY` and `LOCK` switches and the Coupling,
 Interval 2 and Interval 3 knobs.
 
 The window stays 760×500, so the tab strip narrows from a step of 142 to 118 px, checked with `editor_snapshot`.

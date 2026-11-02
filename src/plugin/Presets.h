@@ -20,6 +20,7 @@ struct Preset {
     float coupling = 0.0f;
     int   interval2 = 7;    // semitones above voice 0, when MIDI is not in control
     int   interval3 = 12;
+    bool  stringLock = true;  // the knobs' voices sound the notes they show
 };
 
 inline constexpr std::array<Preset, 15> kFactoryPresets {{
@@ -50,7 +51,7 @@ inline constexpr std::array<Preset, 15> kFactoryPresets {{
     {"Open Fifths",
      {0.40f, 0.75f, 0.30f, 0.85f, 0.15f, 0.35f, 0.60f, 0.20f, 0.50f, 0.35f, 0.70f}, false, 0.5f, false, false, false, true, 0.0f, 7, 12},
     {"Sympathetic",
-     {0.20f, 0.78f, 0.40f, 0.70f, 0.12f, 0.45f, 0.70f, 0.15f, 0.60f, 0.30f, 0.70f}, false, 0.5f, false, false, false, true, 0.4f, 7, 16},
+     {0.20f, 0.78f, 0.40f, 0.70f, 0.12f, 0.45f, 0.70f, 0.15f, 0.60f, 0.30f, 0.70f}, false, 0.5f, false, false, false, true, 0.4f, 7, 16, false},
     {"Chord Keys",
      {0.40f, 0.75f, 0.30f, 0.80f, 0.20f, 0.10f, 0.60f, 0.20f, 0.50f, 0.30f, 0.70f}, false, 0.5f, true, true, false, true, 0.8f},
 }};

@@ -363,6 +363,35 @@ static void editorTests() {
         check(editor->tag("freq").isEmpty() && editor->slider("freq")->getAlpha() == 1.0f, "knobTakesPitchBack");
     }
 
+    {   // LOCK: from the knobs Body is snapped, and the readout says so. It means nothing with POLY off.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        check(parameter(*p, "polylock") == 1.0f, "lockOnByDefault");
+        render(*p, 0.1);
+        editor->refreshDisplay(dt);
+        check(editor->tag("body").isEmpty(), "lockMeansNothingWithPolyOff");
+        setParameter(*p, "poly", 1.0f);
+        render(*p, 0.1);
+        editor->refreshDisplay(dt);
+        check(editor->tag("body") == "SNAP" && editor->tag("freq").isEmpty() && editor->slider("body")->getAlpha() < 1.0f, "lockSnapsBody");
+        setParameter(*p, "polylock", 0.0f);
+        render(*p, 0.1);
+        editor->refreshDisplay(dt);
+        check(editor->tag("body").isEmpty(), "freeBodyHasNoTag");
+
+        juce::MemoryBlock state;
+        p->getStateInformation(state);
+        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
+        second->setStateInformation(state.getData(), (int) state.getSize());
+        check(parameter(*second, "polylock") == 0.0f, "lockStateRoundTrip");
+
+        p->setCurrentProgram(12);
+        const float openFifths = parameter(*p, "polylock");
+        p->setCurrentProgram(13);
+        check(openFifths == 1.0f && parameter(*p, "polylock") == 0.0f, "presetsSetLock");
+    }
+
     {   // WARP: Echo Time shows the shortened time.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         p->prepareToPlay(48000.0, 512);

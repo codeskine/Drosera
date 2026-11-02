@@ -197,6 +197,7 @@ static bool presetTests(const char* outDir) {
         core.SetPolyphony(pr.poly);
         core.SetCoupling(pr.coupling);
         core.SetIntervals(pr.interval2, pr.interval3);
+    core.SetStringLock(pr.stringLock);
         if (pr.midiGate) {  // as if a note were held, or a chord on a polyphonic preset
             core.SetMidiPitch(true, 48.0f);
             core.SetGate(true, true);
@@ -243,6 +244,7 @@ static void applyPreset(DroseraCore& core, const infrasonic::Preset& pr) {
     core.SetPolyphony(pr.poly);
     core.SetCoupling(pr.coupling);
     core.SetIntervals(pr.interval2, pr.interval3);
+    core.SetStringLock(pr.stringLock);
 }
 
 static bool noAllocationOnRender() {
@@ -257,6 +259,7 @@ static bool noAllocationOnRender() {
         core.SetMidiPitch(on, 48.0f);
         core.SetGate(on, true);
         core.SetEchoWarp(on);
+        core.SetStringLock((block / 40) % 2 == 1);
         core.SetPolyphony(((block + 37) / 75) % 2 == 1);  // out of step, so that polyphony meets both pitch modes
         core.SetCoupling(on ? 1.0f : 0.0f);
         core.SetVoiceNote(1, 48.0f + (float)(block / 50 % 12));
@@ -928,6 +931,7 @@ static bool couplingChangesTheSpectrum() {
     compare("chord 48 55 64", [](DroseraCore& core) { setChord(core, 48, 55, 64); });
     compare("chord 60 64 67", [](DroseraCore& core) { setChord(core, 60, 64, 67); });
     compare("knobs +7 +12", [](DroseraCore& core) { core.SetPolyphony(true); core.SetIntervals(7, 12); });
+    compare("LOCK, knobs +7 +12", [](DroseraCore& core) { core.SetPolyphony(true); core.SetStringLock(true); core.SetIntervals(7, 12); });
     return ok;
 }
 
@@ -983,6 +987,81 @@ static bool couplingStillActsAtMidBody() {
     const bool pass = ratio > 0.1;
     printf("poly Coupling 100%% changes the spectrum at Body 0.5: %.3f %s\n", ratio, pass ? "OK" : "FAIL");
     return pass;
+}
+
+// LOCK from the knobs: Frequency and the intervals are the notes that sound (rule 3: by the dominant partial).
+static bool lockedKnobsPlayTheirNotes() {
+    bool ok = true;
+    for (const float frequency : { 0.3f, 0.43f, 0.55f, 0.7f }) {
+        for (const float body : { 0.3f, 0.6f, 0.9f }) {
+            float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
+            p[DroseraCore::Frequency] = frequency;
+            p[DroseraCore::FeedbackBody] = body;
+            DroseraCore core; makeCore(core, p);
+            core.SetPolyphony(true);
+            core.SetStringLock(true);
+            core.SetIntervals(7, 12);
+            const auto r = renderTaps(core, 48000 * 5);
+            const float root = 16.0f + frequency * 56.0f;
+            const float notes[3] = { root, root + 7.0f, root + 12.0f };
+            double worst = 0.0;
+            for (size_t v = 0; v < 3; ++v) worst = std::max(worst, std::fabs(centsOff(r.tap[v], notes[v])));
+            const bool pass = worst < 25.0;
+            printf("poly LOCK from the knobs, Frequency %.2f Body %.1f: worst voice %.1f c %s\n", frequency, body, worst, pass ? "OK" : "FAIL");
+            ok &= pass;
+        }
+    }
+    return ok;
+}
+
+// LOCK off: each voice's Body follows its interval, so the voices do not pile onto one of the shared Body's resonances.
+static bool freeVoicesSpreadOut() {
+    const float wet[] = {0.43f, 0.75f, 0.30f, 0.90f, 0.20f, 0.30f, 0.50f, 0.20f, 0.50f, 0.40f, 0.70f};
+    int together = 0, cells = 0;
+    for (const float frequency : { 0.1f, 0.2f, 0.3f, 0.43f, 0.55f, 0.7f, 0.85f }) {
+        for (const float body : { 0.15f, 0.3f, 0.45f, 0.6f, 0.75f, 0.9f }) {
+            float p[DroseraCore::NumParams]; std::copy(wet, wet + DroseraCore::NumParams, p);
+            p[DroseraCore::Frequency] = frequency;
+            p[DroseraCore::FeedbackBody] = body;
+            DroseraCore core; makeCore(core, p);
+            core.SetPolyphony(true);
+            core.SetIntervals(7, 12);
+            const auto r = renderTaps(core, 48000 * 5);
+            const double a = dominantHz(r.tap[0], 48000 * 2), b = dominantHz(r.tap[1], 48000 * 2), c = dominantHz(r.tap[2], 48000 * 2);
+            const auto near = [](double x, double y) { return std::fabs(1200.0 * std::log2(x / y)) < 50.0; };
+            if (near(a, b) || near(a, c) || near(b, c)) ++together;
+            ++cells;
+        }
+    }
+    const bool pass = together <= 8;
+    printf("poly free voices on one pitch: %d of %d settings %s\n", together, cells, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool lockSwitchIsClickFree() {
+    bool ok = true;
+    for (const float coupling : { 0.0f, 1.0f }) {
+        float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
+        p[DroseraCore::FeedbackLPF] = 0.4f;  // about 800 Hz
+        DroseraCore core; makeCore(core, p);
+        core.SetPolyphony(true);
+        core.SetIntervals(7, 12);
+        core.SetCoupling(coupling);
+        const size_t on = 48000 * 3, off = 48000 * 5, n = 48000 * 6;
+        std::vector<float> L(n), R(n);
+        for (size_t i = 0; i < n; ++i) {
+            if (i == on) core.SetStringLock(true);
+            if (i == off) core.SetStringLock(false);
+            core.Render(nullptr, &L[i], &R[i], 1);
+        }
+        for (const size_t at : { on, off }) {
+            const float before = largestJump(L, at - 48000, at), during = largestJump(L, at, at + 4800);
+            const bool pass = during <= 1.5f * before;
+            printf("poly LOCK %s at Coupling %.0f%%: largest jump %.5f, before %.5f %s\n", at == on ? "on" : "off", coupling * 100.0f, during, before, pass ? "OK" : "FAIL");
+            ok &= pass;
+        }
+    }
+    return ok;
 }
 
 static bool coupledRampClickFree() {
@@ -1054,6 +1133,9 @@ static bool polyphonyTests() {
     ok &= stabilityAtMaximum();
     ok &= closedVoiceStaysFaint();
     ok &= closedVoiceStaysFaintFromRestart();
+    ok &= lockedKnobsPlayTheirNotes();
+    ok &= freeVoicesSpreadOut();
+    ok &= lockSwitchIsClickFree();
     ok &= couplingChangesTheSpectrum();
     ok &= coupledChordsHoldAtLongBody();
     ok &= couplingStillActsAtMidBody();

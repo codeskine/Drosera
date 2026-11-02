@@ -67,6 +67,9 @@ public:
 
     /// Plugin extension: sound voices 1 and 2 as well. Off by default.
     void SetPolyphony(bool on) { poly_ = on; }
+    /// With polyphony on and MIDI not in control: tune the knobs' voices as MIDI does, so they sound the notes they
+    /// show. Off, each voice's Body follows its interval and the loops find their own resonances.
+    void SetStringLock(bool on) { string_lock_ = on; }
     /// 0..1, square-law to 0..kMaxCoupling.
     void SetCoupling(float norm) { coupling_norm_ = norm; }
     /// Semitones from the knob's note, for voices 1 and 2 while MIDI pitch is not active.
@@ -220,11 +223,11 @@ private:
     void applyPitchAndBody(size_t voice) {
         FeedbackSynth::Engine& e = *engine_;
         published_note_[voice].store(nn_[voice], std::memory_order_relaxed);
-        if (!midi_pitch_on_) {
+        if (!midi_pitch_on_ && !(string_lock_ && poly_)) {
             published_body_s_[voice].store(body_s_, std::memory_order_relaxed);
             if (tracking_[voice]) { e.SetFeedbackTracking(voice, false, 0.0f); e.SetFeedbackDelayLag(voice, kKnobDelayLag); tracking_[voice] = false; }
             e.SetStringPitch(voice, nn_[voice]);
-            e.SetFeedbackDelay(voice, body_s_);
+            e.SetFeedbackDelay(voice, voice == 0 ? body_s_ : body_s_ * std::pow(2.0f, (nn_[0] - nn_[voice]) / 12.0f));
             return;
         }
         if (!tracking_[voice]) { e.SetFeedbackDelayLag(voice, kMidiDelayLag); tracking_[voice] = true; }
@@ -293,7 +296,7 @@ private:
     bool midi_pitch_on_ = false;
     std::array<bool, kNumVoices> gate_enabled_ {}, gate_open_ {};
     std::array<float, kNumVoices> midi_pitch_ { 40.0f, 40.0f, 40.0f };
-    bool poly_ = false, voices_running_ = false;
+    bool poly_ = false, voices_running_ = false, string_lock_ = false;
     float coupling_norm_ = 0.0f;
     std::array<int, kNumVoices> interval_ { 0, 7, 12 };
     int recovery_count_ = 0;

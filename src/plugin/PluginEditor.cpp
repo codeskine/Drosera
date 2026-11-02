@@ -69,7 +69,7 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
 
     const bool midi = bridge_.midiPitchActive();
     const auto frequency = drosera::readouts::frequency(midi, bridge_.soundingNote(), frequency_.parameter().getCurrentValueAsText().toStdString());
-    const auto body = drosera::readouts::body(midi, bridge_.bodySeconds(), body_.parameter().getCurrentValueAsText().toStdString());
+    const auto body = drosera::readouts::body(bridge_.bodySnapped(), bridge_.bodySeconds(), body_.parameter().getCurrentValueAsText().toStdString());
     frequency_.show(frequency.value, frequency.tag);
     body_.show(body.value, body.tag);
 
