@@ -199,6 +199,9 @@ static bool presetTests(const char* outDir) {
         core.SetCoupling(pr.coupling);
         core.SetIntervals(pr.interval2, pr.interval3);
         core.SetStringLock(pr.stringLock);
+        core.SetEchoPong(pr.echoPong);
+        core.SetEchoDrive(pr.echoDrive);
+        core.SetEchoTone(pr.echoTone);
         if (pr.midiGate) {  // as if a note were held, or a chord on a polyphonic preset
             core.SetMidiPitch(true, 48.0f);
             core.SetGate(true, true);
@@ -246,6 +249,9 @@ static void applyPreset(DroseraCore& core, const infrasonic::Preset& pr) {
     core.SetCoupling(pr.coupling);
     core.SetIntervals(pr.interval2, pr.interval3);
     core.SetStringLock(pr.stringLock);
+    core.SetEchoPong(pr.echoPong);
+    core.SetEchoDrive(pr.echoDrive);
+    core.SetEchoTone(pr.echoTone);
 }
 
 static bool noAllocationOnRender() {
@@ -1553,6 +1559,22 @@ static bool pongIndependentOfBlockSize() {
     return pass;
 }
 
+static bool emberPongSelfSustains() {
+    const auto& pr = infrasonic::kFactoryPresets[15];
+    DroseraCore core;
+    core.Init();
+    applyPreset(core, pr);
+    std::vector<float> L(48000 * 20), R(L.size());
+    for (size_t pos = 0; pos + 64 <= L.size(); pos += 64) {
+        if (pos >= 48000 * 5) { core.SetParam(DroseraCore::FeedbackGain, 0.0f); core.SetParam(DroseraCore::EchoSend, 0.0f); }
+        core.Render(nullptr, &L[pos], &R[pos], 64);
+    }
+    const double level = rmsOf(L, 48000 * 15, 48000 * 20 - 64);
+    const bool pass = level > 1e-3;
+    printf("emberPongSelfSustains: %s, RMS %.4f with nothing feeding it %s\n", pr.name, level, pass ? "OK" : "FAIL");
+    return pass;
+}
+
 static bool pongEngineTests() {
     bool ok = true;
     ok &= pongOnFromFirstBlock();
@@ -1564,6 +1586,7 @@ static bool pongEngineTests() {
     ok &= pongSurvivesTimeSweep();
     ok &= everyPresetWithPongOn();
     ok &= pongIndependentOfBlockSize();
+    ok &= emberPongSelfSustains();
     return ok;
 }
 

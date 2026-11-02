@@ -519,9 +519,9 @@ static void editorTests() {
             auto p = fresh();
             const juce::String old[] = { "Default", "Sub Cellar", "Glass Wind", "Cathedral Bloom", "Echo Drift", "Doppler Void", "Dark Tide",
                                          "Razor Feedback", "Quiet Room", "Keys (play notes)", "Resonator (needs input)", "Init (silent)" };
-            bool names = p->getNumPrograms() == 15;
+            bool names = p->getNumPrograms() == 16;
             for (int i = 0; i < 12 && names; ++i) names = p->getProgramName(i) == old[i];
-            names = names && p->getProgramName(12) == "Open Fifths" && p->getProgramName(13) == "Sympathetic" && p->getProgramName(14) == "Chord Keys";
+            names = names && p->getProgramName(12) == "Open Fifths" && p->getProgramName(13) == "Sympathetic" && p->getProgramName(14) == "Chord Keys" && p->getProgramName(15) == "Ember Pong";
             check(names, "presetCountAndOrder");
         }
         {

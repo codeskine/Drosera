@@ -82,6 +82,9 @@ public:
         interval2Raw = apvts.getRawParameterValue("interval2");
         interval3Raw = apvts.getRawParameterValue("interval3");
         stringLockRaw = apvts.getRawParameterValue("polylock");
+        echoPongRaw = apvts.getRawParameterValue("echopong");
+        echoDriveRaw = apvts.getRawParameterValue("echodrive");
+        echoToneRaw = apvts.getRawParameterValue("echotone");
     }
 
     const juce::String getName() const override { return "Drosera"; }
@@ -117,6 +120,9 @@ public:
         set("interval2", apvts.getParameter("interval2")->convertTo0to1((float) pr.interval2));
         set("interval3", apvts.getParameter("interval3")->convertTo0to1((float) pr.interval3));
         set("polylock", pr.stringLock ? 1.0f : 0.0f);
+        set("echopong", pr.echoPong ? 1.0f : 0.0f);
+        set("echodrive", pr.echoDrive);
+        set("echotone", pr.echoTone);
     }
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, *this); }
@@ -243,6 +249,9 @@ private:
         for (int i = 0; i < DroseraCore::NumParams; ++i)
             core->SetParam((DroseraCore::Param) i, raw[i]->load());
         core->SetEchoWarp(halveRaw->load() > 0.5f);
+        core->SetEchoPong(echoPongRaw->load() > 0.5f);
+        core->SetEchoDrive(echoDriveRaw->load());
+        core->SetEchoTone(echoToneRaw->load());
         core->SetPolyphony(poly);
         core->SetCoupling(couplingRaw->load());
         core->SetIntervals((int) interval2Raw->load(), (int) interval3Raw->load());
@@ -389,6 +398,18 @@ private:
         layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval3", 2}, "Interval 3", -24, 24, 12, semitones));
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{"polylock", 2}, "String Lock", true));
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{"echopong", 1}, "Echo Pong", false));
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{"echodrive", 1}, "Echo Drive", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) {
+                return "+" + juce::String(v * 12.0f, 1) + " dB";
+            })));
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{"echotone", 1}, "Echo Tone", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) {
+                return juce::String(juce::roundToInt(daisysp::fmap(v, 800.0f, 18000.0f, daisysp::Mapping::LOG))) + " Hz";
+            })));
         return layout;
     }
 
@@ -404,6 +425,9 @@ private:
     std::atomic<float>* interval2Raw = nullptr;
     std::atomic<float>* interval3Raw = nullptr;
     std::atomic<float>* stringLockRaw = nullptr;
+    std::atomic<float>* echoPongRaw = nullptr;
+    std::atomic<float>* echoDriveRaw = nullptr;
+    std::atomic<float>* echoToneRaw = nullptr;
 
     // MIDI state (audio thread only)
     int held[kMaxHeld] {};
