@@ -4,9 +4,8 @@
 
 #include <memory>
 #include <daisysp.h>
-#include "BiquadFilters.h"
 #include "EchoDelay.h"
-#include "KarplusString.h"
+#include "FeedbackVoice.h"
 
 namespace infrasonic {
 namespace FeedbackSynth {
@@ -19,25 +18,23 @@ class Engine {
 
         void Init(const float sample_rate);
 
-        void SetStringPitch(const float nn);
+        // Per-voice setters
+        void SetStringPitch(const size_t voice, const float nn);
+        void SetFeedbackGain(const size_t voice, const float gain_dbfs);
+        void SetFeedbackDelay(const size_t voice, const float delay_s);
+        void SetFeedbackDelayLag(const size_t voice, const float time_s);
+        // Plugin extension, see FeedbackVoice::SetFeedbackTracking
+        void SetFeedbackTracking(const size_t voice, const bool enabled, const float center_hz, const float makeup_gain = 1.0f);
 
-        void SetFeedbackGain(const float gain_dbfs);
-
-        void SetFeedbackDelay(const float delay_s);
+        // Go to all voices
         void SetFeedbackLPFCutoff(const float cutoff_hz);
         void SetFeedbackHPFCutoff(const float cutoff_hz);
-
-        // Plugin extension, not in the firmware (off by default): a bandpass in the feedback
-        // path only, centred on the played note, so that the loop oscillates on the
-        // fundamental. The output tap is not filtered.
-        void SetFeedbackTracking(const bool enabled, const float center_hz, const float makeup_gain = 1.0f);
-        void SetFeedbackDelayLag(const float time_s);
 
         void SetEchoDelayTime(const float echo_time);
         void SetEchoDelayFeedback(const float echo_fb);
         void SetEchoDelaySendAmount(const float echo_send);
 
-        // Both range 0-1
+        // Both range 0-1, go to all voices
         void SetReverbMix(const float mix);
         void SetReverbFeedback(const float time);
 
@@ -45,36 +42,18 @@ class Engine {
 
         void Process(float in, float &outL, float &outR);
 
+    public:
+        static constexpr size_t kNumVoices = 1;
+
     private:
-        // long enough for 250ms at 48kHz
-        static constexpr size_t kMaxFeedbackDelaySamp = 12000;
         // long enough for 5s at 48kHz
         static constexpr size_t kMaxEchoDelaySamp = 48000 * 5;
 
-        float sample_rate_;
-        float fb_gain_ = 0.0f;
         float echo_send_ = 0.0f;
-        float verb_mix_ = 0.0f;
         float output_level_ = 0.5f;
 
-        float fb_delay_smooth_coef_;
-        float fb_delay_samp_ = 1000.f;
-        float fb_delay_samp_target_ = 64.f;
-
-        infrasonic::KarplusString strings_[2];
+        FeedbackVoice voices_[kNumVoices];
         daisysp::WhiteNoise noise_;
-        daisysp::DelayLine<float, kMaxFeedbackDelaySamp> fb_delayline_[2];
-        daisysp::Overdrive overdrive_[2];
-
-        LPF12 fb_lpf_;
-        HPF12 fb_hpf_;
-
-        BPF24 fb_track_;
-        bool fb_track_enabled_ = false;
-        float fb_track_makeup_ = 1.0f;
-
-        using VerbPtr = std::unique_ptr<daisysp::ReverbSc>;
-        VerbPtr verb_;
 
         using EchoDelayPtr = std::unique_ptr<EchoDelay<kMaxEchoDelaySamp>>;
         EchoDelayPtr echo_delay_[2];

@@ -124,7 +124,7 @@ private:
         registry_.Register(Frequency, 40.0f, kNoteMin, kNoteMax,
             [this](float nn) { nn_ = nn; applyPitchAndBody(); }, 0.2f);
         registry_.Register(FeedbackGain, -60.0f, -60.0f, 12.0f,
-            std::bind(&Engine::SetFeedbackGain, &e, _1));
+            [&e](float db) { e.SetFeedbackGain(0, db); });
         registry_.Register(FeedbackBody, 0.001f, 0.001f, 0.1f,
             [this](float s) { body_s_ = s; applyPitchAndBody(); }, 1.0f, daisysp::Mapping::EXP);
         registry_.Register(FeedbackLPF, 18000.0f, 100.0f, 18000.0f,
@@ -155,12 +155,12 @@ private:
         published_note_.store(nn_, std::memory_order_relaxed);
         if (!midi_pitch_on_) {
             published_body_s_.store(body_s_, std::memory_order_relaxed);
-            if (tracking_) { e.SetFeedbackTracking(false, 0.0f); e.SetFeedbackDelayLag(kKnobDelayLag); tracking_ = false; }
-            e.SetStringPitch(nn_);
-            e.SetFeedbackDelay(body_s_);
+            if (tracking_) { e.SetFeedbackTracking(0, false, 0.0f); e.SetFeedbackDelayLag(0, kKnobDelayLag); tracking_ = false; }
+            e.SetStringPitch(0, nn_);
+            e.SetFeedbackDelay(0, body_s_);
             return;
         }
-        if (!tracking_) { e.SetFeedbackDelayLag(kMidiDelayLag); tracking_ = true; }
+        if (!tracking_) { e.SetFeedbackDelayLag(0, kMidiDelayLag); tracking_ = true; }
         const float f = daisysp::mtof(nn_);
         const float T = 1.0f / f;
         const float n = std::max(2.0f, std::round(body_s_ / T));
@@ -173,13 +173,13 @@ private:
         const float stringPhase = std::arg(stringLoop);
         const float outerPhase = std::arg(outerFilters);
         const float stringPeriod = std::max(T + stringPhase * toSeconds, 1.0f / 12000.0f);
-        e.SetStringPitch(69.0f + 12.0f * std::log2(1.0f / stringPeriod / 440.0f));
+        e.SetStringPitch(0, 69.0f + 12.0f * std::log2(1.0f / stringPeriod / 440.0f));
         const float delay = std::max(n * T + outerPhase * toSeconds, 1.0f / kRate);
         published_body_s_.store(delay, std::memory_order_relaxed);
-        e.SetFeedbackDelay(delay);
+        e.SetFeedbackDelay(0, delay);
         // Give back what the filters take at the note, or low notes (below the string's
         // 76 Hz DC blocker) lose the loop gain to oscillate on the fundamental.
-        e.SetFeedbackTracking(true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup));
+        e.SetFeedbackTracking(0, true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup));
     }
 
     // Frequency responses at z^-1 = z1 of the filters in the engine's loops: DcBlock(gain 0.99)

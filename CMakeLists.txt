@@ -20,6 +20,7 @@ target_compile_options(DaisySP PRIVATE -w)
 add_library(DroseraDSP STATIC
     src/dsp/BiquadFilters.cpp
     src/dsp/FeedbackSynthEngine.cpp
+    src/dsp/FeedbackVoice.cpp
     src/dsp/KarplusString.cpp)
 target_include_directories(DroseraDSP PUBLIC src/dsp)
 target_link_libraries(DroseraDSP PUBLIC DaisySP)
