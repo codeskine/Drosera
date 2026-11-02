@@ -84,8 +84,10 @@ not change.
 | `interval2` | Interval 2 | -24 to +24 semitones, whole steps | +7 |
 | `interval3` | Interval 3 | -24 to +24 semitones, whole steps | +12 |
 
-Coupling maps linearly to a gain from 0 to `kMaxCoupling`. The value starts at 0.5, and the stability test sets the
-final one. Saved projects find the new parameters at their defaults, so they sound as before.
+Coupling maps through `daisysp::Mapping::EXP` (norm squared) to a gain from 0 to `kMaxCoupling`, which is 0.016: a linear
+range up to 0.5 reached an open voice's level at 10% of the knob and defeated MIDI Gate, so at 100% a closed voice stays
+at least 12 dB below an open one while an open voice still changes measurably. Saved projects find the new parameters at
+their defaults, so they sound as before.
 
 **`DroseraCore`.** Voices 1 and 2 use a second `ParameterRegistry`, for their pitch and feedback gain, and it also holds
 Coupling. New entries must not go in the existing registry: it iterates an `unordered_map` in `Process()`, so more
@@ -159,7 +161,8 @@ regenerated.
 - **Independence:** at Coupling 0, a `FeedbackVoice`'s output is identical, sample by sample, whatever the others do.
 - **Coupling:** the spectrum with Coupling up differs measurably from Coupling 0.
 - **Stability:** Coupling and Feedback at maximum, across extreme notes and filters, for 60 s, with no non-finite value
-  and no `Recover`. This test sets `kMaxCoupling`.
+  and no `Recover`. With the two tests that compare a closed voice to an open one and Coupling 100% to 0, it sets
+  `kMaxCoupling`.
 - **Clicks:** the largest sample-to-sample jump stays bounded through the ramp, both ways.
 - **Allocations:** none on the audio thread with polyphony on, during the ramp, and while voices are being taken.
 - **Allocator:** note sequences for a free voice, taking a voice, picking up a waiting note, and All Notes Off.

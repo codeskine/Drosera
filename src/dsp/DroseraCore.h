@@ -28,16 +28,23 @@ public:
         NumParams
     };
 
+    static constexpr size_t kNumVoices = FeedbackSynth::Engine::kNumVoices;
+    // Top of Coupling's range, as linear gain. A closed voice has to stay faint here and an open one has to change:
+    // closedVoiceStaysFaint and couplingChangesOpenVoices in render_test leave little room, from 0.015 to a little under 0.02.
+    static constexpr float kMaxCoupling = 0.016f;
+
     DroseraCore() : engine_(std::make_unique<FeedbackSynth::Engine>()) {}
 
     void Init() {
         engine_->Init(kRate);
         registry_.Init(kRate / kControlBlock);
+        voice_registry_.Init(kRate / kControlBlock);
         registerParams();
         for (auto& l : limiter_) l.Init();
         phase_ = 0;
         first_ = true;
-        tracking_ = false;
+        voices_running_ = false;
+        tracking_.fill(false);
     }
 
     /// Normalized 0..1, same orientation as the firmware's knobs after ADC inversion.
@@ -49,16 +56,26 @@ public:
     /// MIDI pitch override of the Frequency knob (note number, may be fractional).
     /// While active, Body is snapped to whole string periods and the loop is forced onto
     /// the note's fundamental (see applyPitchAndBody).
-    void SetMidiPitch(bool active, float noteNumber) { midi_pitch_on_ = active; midi_pitch_ = noteNumber; }
+    void SetMidiPitch(bool active, float noteNumber) { midi_pitch_on_ = active; midi_pitch_[0] = noteNumber; }
+    /// Voices 1 and 2: the note while SetMidiPitch is active.
+    void SetVoiceNote(size_t voice, float note) { midi_pitch_[voice] = note; }
 
     /// When enabled, the feedback gain is closed (-60 dB) unless `open`: the drone
     /// swells on note-on and dies away on note-off.
-    void SetGate(bool enabled, bool open) { gate_enabled_ = enabled; gate_open_ = open; }
+    void SetGate(bool enabled, bool open) { SetVoiceGate(0, enabled, open); }
+    void SetVoiceGate(size_t voice, bool enabled, bool open) { gate_enabled_[voice] = enabled; gate_open_[voice] = open; }
+
+    /// Plugin extension: sound voices 1 and 2 as well. Off by default.
+    void SetPolyphony(bool on) { poly_ = on; }
+    /// 0..1, square-law to 0..kMaxCoupling.
+    void SetCoupling(float norm) { coupling_norm_ = norm; }
+    /// Semitones from the knob's note, for voices 1 and 2 while MIDI pitch is not active.
+    void SetIntervals(int interval2, int interval3) { interval_[1] = interval2; interval_[2] = interval3; }
 
     /// What really sounds, for the interface: any thread may read these. MIDI mode gives the note, and the Body
     /// delay after snapping and phase compensation.
-    float PublishedNote() const        { return published_note_.load(std::memory_order_relaxed); }
-    float PublishedBodySeconds() const { return published_body_s_.load(std::memory_order_relaxed); }
+    float PublishedNote(size_t voice = 0) const        { return published_note_[voice].load(std::memory_order_relaxed); }
+    float PublishedBodySeconds(size_t voice = 0) const { return published_body_s_[voice].load(std::memory_order_relaxed); }
     /// Echo Time for a knob position, WARP included. Worked out rather than published, so it holds with no audio running.
     static float EchoTimeSeconds(float norm, bool warp) { return daisysp::fmap(norm * (warp ? 0.5f : 1.0f), kEchoMin, kEchoMax, daisysp::Mapping::EXP); }
 
@@ -66,7 +83,10 @@ public:
     void Render(const float* in, float* outL, float* outR, size_t n) {
         pushControls();
         for (size_t i = 0; i < n; ++i) {
-            if (phase_ == 0) registry_.Process();
+            if (phase_ == 0) {
+                registry_.Process();
+                if (engine_->PolyRunning()) voice_registry_.Process();
+            }
             phase_ = (phase_ + 1) % kControlBlock;
             engine_->Process(in ? in[i] : 0.0f, outL[i], outR[i]);
         }
@@ -78,6 +98,7 @@ public:
         for (size_t i = 0; i < n; ++i)
             if (!std::isfinite(outL[i]) || !std::isfinite(outR[i])) { bad = true; break; }
         if (bad) {
+            ++recovery_count_;
             Recover();
             for (size_t i = 0; i < n; ++i) outL[i] = outR[i] = 0.0f;
         }
@@ -86,21 +107,29 @@ public:
     /// Clears the engine's state and keeps the current parameters. Safe on the audio thread.
     void Recover() {
         engine_->Init(kRate);
-        tracking_ = false;
+        tracking_.fill(false);
         for (auto& l : limiter_) l.Init();
     }
 
+    /// Reads as Engine::VoiceTap. For tests.
+    float VoiceTap(size_t voice, size_t channel) const { return engine_->VoiceTap(voice, channel); }
+    /// Times Render's NaN check fired. For tests.
+    int RecoveryCount() const { return recovery_count_; }
+
 private:
     using Registry = ParameterRegistry<Param>;
+
+    // Their own registry: registry_ iterates an unordered_map, so more entries could reorder its handlers.
+    enum VoiceParam : int { Voice1Pitch, Voice2Pitch, Voice1Gain, Voice2Gain, Coupling };
 
     void pushControls() {
         const bool imm = first_;  // jump to initial values instead of gliding from defaults
         // The Frequency parameter spans notes kNoteMin..kNoteMax. The knob keeps the firmware's
         // 16..72 range (the first 56/80 of the span); MIDI may use the whole span.
         const float freqNorm = midi_pitch_on_
-            ? daisysp::fclamp((midi_pitch_ - kNoteMin) / (kNoteMax - kNoteMin), 0.0f, 1.0f)
+            ? daisysp::fclamp((midi_pitch_[0] - kNoteMin) / (kNoteMax - kNoteMin), 0.0f, 1.0f)
             : norm_[Frequency] * (kKnobNoteMax - kNoteMin) / (kNoteMax - kNoteMin);
-        const float gainNorm = (gate_enabled_ && !gate_open_) ? 0.0f : norm_[FeedbackGain];
+        const float gainNorm = gainNormOf(0);
         registry_.UpdateNormalized(Frequency,    freqNorm, imm);
         registry_.UpdateNormalized(FeedbackGain, gainNorm, imm);
         registry_.UpdateNormalized(FeedbackBody, norm_[FeedbackBody], imm);
@@ -113,7 +142,28 @@ private:
         registry_.UpdateNormalized(EchoTime,     norm_[EchoTime] * (echo_warp_ ? 0.5f : 1.0f), imm);
         registry_.UpdateNormalized(EchoFeedback, norm_[EchoFeedback], imm);
         registry_.UpdateNormalized(OutputVolume, norm_[OutputVolume], imm);
+        pushVoiceControls(imm);
         first_ = false;
+    }
+
+    float gainNormOf(size_t voice) const { return (gate_enabled_[voice] && !gate_open_[voice]) ? 0.0f : norm_[FeedbackGain]; }
+
+    void pushVoiceControls(bool imm) {
+        // Engine cleared voices that stopped, which sets their delay lag back to kKnobDelayLag.
+        if (voices_running_ && !engine_->PolyRunning()) {
+            voices_running_ = false;
+            tracking_[1] = tracking_[2] = false;
+        }
+        engine_->SetPolyphony(poly_, imm);
+        if (!engine_->PolyRunning()) return;
+        const bool jump = imm || !voices_running_;  // a pitch must not glide from stale values
+        voices_running_ = true;
+        const float knobNote = kNoteMin + norm_[Frequency] * (kKnobNoteMax - kNoteMin);
+        for (size_t v = 1; v < kNumVoices; ++v) {
+            voice_registry_.Update(VoiceParam(Voice1Pitch + v - 1), midi_pitch_on_ ? midi_pitch_[v] : knobNote + (float)interval_[v], jump);
+            voice_registry_.UpdateNormalized(VoiceParam(Voice1Gain + v - 1), gainNormOf(v), jump);
+        }
+        voice_registry_.UpdateNormalized(Coupling, coupling_norm_, jump);
     }
 
     // Ranges, curves and smoothing times copied from FeedbackSynthControls::registerParams
@@ -122,11 +172,11 @@ private:
         using FeedbackSynth::Engine;
         Engine& e = *engine_;
         registry_.Register(Frequency, 40.0f, kNoteMin, kNoteMax,
-            [this](float nn) { nn_ = nn; applyPitchAndBody(); }, 0.2f);
+            [this](float nn) { nn_[0] = nn; applyPitchAndBody(0); }, 0.2f);
         registry_.Register(FeedbackGain, -60.0f, -60.0f, 12.0f,
             [&e](float db) { e.SetFeedbackGain(0, db); });
         registry_.Register(FeedbackBody, 0.001f, 0.001f, 0.1f,
-            [this](float s) { body_s_ = s; applyPitchAndBody(); }, 1.0f, daisysp::Mapping::EXP);
+            [this](float s) { body_s_ = s; applyPitchAndBody(0); }, 1.0f, daisysp::Mapping::EXP);
         registry_.Register(FeedbackLPF, 18000.0f, 100.0f, 18000.0f,
             [this, &e](float hz) { lpf_hz_ = hz; e.SetFeedbackLPFCutoff(hz); }, 0.05f, daisysp::Mapping::LOG);
         registry_.Register(FeedbackHPF, 250.0f, 10.0f, 4000.0f,
@@ -143,6 +193,16 @@ private:
             std::bind(&Engine::SetEchoDelayFeedback, &e, _1));
         registry_.Register(OutputVolume, 0.5f, 0.0f, 1.0f,
             std::bind(&Engine::SetOutputLevel, &e, _1), 0.05f, daisysp::Mapping::EXP);
+        // Voices 1 and 2 pick up Body and the filters' values in applyPitchAndBody, every control tick.
+        for (size_t v = 1; v < kNumVoices; ++v) {
+            voice_registry_.Register(VoiceParam(Voice1Pitch + v - 1), 40.0f, kNoteMin, kNoteMax,
+                [this, v](float nn) { nn_[v] = nn; applyPitchAndBody(v); }, 0.2f);
+            voice_registry_.Register(VoiceParam(Voice1Gain + v - 1), -60.0f, -60.0f, 12.0f,
+                [&e, v](float db) { e.SetFeedbackGain(v, db); });
+        }
+        // Square-law, as the top of a linear range would ring closed voices as loud as open ones.
+        voice_registry_.Register(Coupling, 0.0f, 0.0f, kMaxCoupling,
+            [&e](float gain) { e.SetCoupling(gain); }, 0.05f, daisysp::Mapping::EXP);
     }
 
     // Knob mode: values go straight to the engine (firmware behaviour).
@@ -150,18 +210,18 @@ private:
     // and the Body delay's (multiples of 1/Body) coincide, which is rarely the note. So Body is
     // snapped to n*T (both comb filters then line up on the note's harmonics), a bandpass on the
     // note in the feedback path selects the fundamental, and the Body delay glides faster.
-    void applyPitchAndBody() {
+    void applyPitchAndBody(size_t voice) {
         FeedbackSynth::Engine& e = *engine_;
-        published_note_.store(nn_, std::memory_order_relaxed);
+        published_note_[voice].store(nn_[voice], std::memory_order_relaxed);
         if (!midi_pitch_on_) {
-            published_body_s_.store(body_s_, std::memory_order_relaxed);
-            if (tracking_) { e.SetFeedbackTracking(0, false, 0.0f); e.SetFeedbackDelayLag(0, kKnobDelayLag); tracking_ = false; }
-            e.SetStringPitch(0, nn_);
-            e.SetFeedbackDelay(0, body_s_);
+            published_body_s_[voice].store(body_s_, std::memory_order_relaxed);
+            if (tracking_[voice]) { e.SetFeedbackTracking(voice, false, 0.0f); e.SetFeedbackDelayLag(voice, kKnobDelayLag); tracking_[voice] = false; }
+            e.SetStringPitch(voice, nn_[voice]);
+            e.SetFeedbackDelay(voice, body_s_);
             return;
         }
-        if (!tracking_) { e.SetFeedbackDelayLag(0, kMidiDelayLag); tracking_ = true; }
-        const float f = daisysp::mtof(nn_);
+        if (!tracking_[voice]) { e.SetFeedbackDelayLag(voice, kMidiDelayLag); tracking_[voice] = true; }
+        const float f = daisysp::mtof(nn_[voice]);
         const float T = 1.0f / f;
         const float n = std::max(2.0f, std::round(body_s_ / T));
         // Filters in a loop shift its phase and so its pitch; lengthen (or shorten) the delays
@@ -173,13 +233,13 @@ private:
         const float stringPhase = std::arg(stringLoop);
         const float outerPhase = std::arg(outerFilters);
         const float stringPeriod = std::max(T + stringPhase * toSeconds, 1.0f / 12000.0f);
-        e.SetStringPitch(0, 69.0f + 12.0f * std::log2(1.0f / stringPeriod / 440.0f));
+        e.SetStringPitch(voice, 69.0f + 12.0f * std::log2(1.0f / stringPeriod / 440.0f));
         const float delay = std::max(n * T + outerPhase * toSeconds, 1.0f / kRate);
-        published_body_s_.store(delay, std::memory_order_relaxed);
-        e.SetFeedbackDelay(0, delay);
+        published_body_s_[voice].store(delay, std::memory_order_relaxed);
+        e.SetFeedbackDelay(voice, delay);
         // Give back what the filters take at the note, or low notes (below the string's
         // 76 Hz DC blocker) lose the loop gain to oscillate on the fundamental.
-        e.SetFeedbackTracking(0, true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup));
+        e.SetFeedbackTracking(voice, true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup));
     }
 
     // Frequency responses at z^-1 = z1 of the filters in the engine's loops: DcBlock(gain 0.99)
@@ -206,17 +266,25 @@ private:
     static constexpr float kMaxMakeup = 8.0f;
 
     std::unique_ptr<FeedbackSynth::Engine> engine_;
-    float nn_ = 40.0f, body_s_ = 0.001f, lpf_hz_ = 18000.0f, hpf_hz_ = 250.0f;
-    bool tracking_ = false;
+    std::array<float, kNumVoices> nn_ { 40.0f, 40.0f, 40.0f };
+    float body_s_ = 0.001f, lpf_hz_ = 18000.0f, hpf_hz_ = 250.0f;
+    std::array<bool, kNumVoices> tracking_ {};
     Registry registry_;
+    ParameterRegistry<VoiceParam> voice_registry_;
     daisysp::Limiter limiter_[2];
     std::array<float, NumParams> norm_ {};
     bool echo_warp_ = false;
-    bool midi_pitch_on_ = false, gate_enabled_ = false, gate_open_ = false;
-    float midi_pitch_ = 40.0f;
+    bool midi_pitch_on_ = false;
+    std::array<bool, kNumVoices> gate_enabled_ {}, gate_open_ {};
+    std::array<float, kNumVoices> midi_pitch_ { 40.0f, 40.0f, 40.0f };
+    bool poly_ = false, voices_running_ = false;
+    float coupling_norm_ = 0.0f;
+    std::array<int, kNumVoices> interval_ { 0, 7, 12 };
+    int recovery_count_ = 0;
     bool first_ = true;
     size_t phase_ = 0;
-    std::atomic<float> published_note_ { 40.0f }, published_body_s_ { 0.001f };
+    std::atomic<float> published_note_[kNumVoices] { { 40.0f }, { 40.0f }, { 40.0f } };
+    std::atomic<float> published_body_s_[kNumVoices] { { 0.001f }, { 0.001f }, { 0.001f } };
 };
 
 } // namespace infrasonic
