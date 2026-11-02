@@ -97,8 +97,8 @@ and with it off Drosera sounds exactly as before.
 |---|---|---|
 | POLY | on/off | Runs three loops instead of one |
 | Coupling | 0 to 100 % | How much each loop hears the other two |
-| Interval 2 | −24 to +24 semitones | Pitch of the second string above Frequency |
-| Interval 3 | −24 to +24 semitones | Pitch of the third string above Frequency |
+| Interval 2 | −24 to +24 semitones | Pitch of the second string relative to Frequency. Default +7 |
+| Interval 3 | −24 to +24 semitones | Pitch of the third string relative to Frequency. Default +12 |
 
 **Coupling.** At 0 the three loops do not affect each other. Raising it feeds each loop a share of the other two,
 so they ring on harmonically related intervals, like sympathetic strings. The knob is on a square law. Under MIDI its
@@ -123,7 +123,7 @@ released note keeps sounding until its voice is taken. With MIDI Pitch off, the 
 
 15 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
 "Init" is silent by design. The last three use three strings: "Open Fifths" (knobs only, Coupling 0), "Sympathetic"
-(knobs only, Coupling at 40 %) and "Chord Keys" (MIDI Pitch and MIDI Gate on, light Coupling). Choosing any of the
+(knobs only, Coupling at 40 %) and "Chord Keys" (MIDI Pitch and MIDI Gate on, Coupling at 80 %). Choosing any of the
 other 12 turns POLY off.
 
 ## Known limits

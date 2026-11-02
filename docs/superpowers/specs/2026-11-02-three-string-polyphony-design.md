@@ -137,7 +137,7 @@ one turns it off. Three presets are added at the end, so saved program indexes s
 |---|---|
 | Open Fifths | Knobs only, Coupling 0 |
 | Sympathetic | Knobs only, Coupling around 40% |
-| Chord Keys | MIDI Pitch and MIDI Gate on, light Coupling |
+| Chord Keys | MIDI Pitch and MIDI Gate on, Coupling 80% |
 
 Their exact knob values are set during implementation. `render_test` already renders every factory preset and checks
 that it is finite, within full scale and audible, so its `applyPreset` learns the new fields and the three presets are
