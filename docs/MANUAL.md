@@ -133,6 +133,8 @@ other 12 turns POLY off.
 - With POLY on and Coupling above 0, the notes can move each other's pitch. From the knobs the voices can leave their
   intervals. Under MIDI, with no reverb, the chords tested with roots 24 to 60 stayed within 5 cents of their notes at
   100 %, which is not promised for every chord or setting.
+- Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. With POLY on,
+  chords can go sour: at 35 % of "Chord Keys"' settings a C major chord read +20, -28 and -8 cents.
 - The values of "Open Fifths", "Sympathetic" and "Chord Keys" were chosen by measurement and have not been judged by
   ear.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared

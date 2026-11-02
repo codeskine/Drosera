@@ -614,6 +614,32 @@ static bool coupledChordsHoldAcrossRegisters() {
     return ok;
 }
 
+// The preset's own knobs and Coupling. Reverb Mix detunes MIDI notes, since its phase is not compensated: this holds it down.
+static bool chordKeysInTune() {
+    bool ok = true;
+    const infrasonic::Preset* preset = nullptr;
+    for (const auto& pr : infrasonic::kFactoryPresets)
+        if (std::string(pr.name) == "Chord Keys") preset = &pr;
+    if (preset == nullptr) { printf("preset Chord Keys: missing FAIL\n"); return false; }
+    const int shapes[][2] = { {4, 7}, {3, 7}, {7, 12}, {5, 7}, {2, 7} };
+    for (int root = 36; root <= 60; root += 6) {
+        for (const auto& s : shapes) {
+            const float c[3] = { (float)root, (float)(root + s[0]), (float)(root + s[1]) };
+            DroseraCore core; makeCore(core, kDryBase);
+            applyPreset(core, *preset);
+            setChord(core, c[0], c[1], c[2]);
+            const auto r = renderTaps(core, 48000 * 5);
+            for (size_t v = 0; v < 3; ++v) {
+                const double cents = centsOff(r.tap[v], c[v]);
+                const bool pass = std::fabs(cents) < 25.0;
+                printf("preset Chord Keys, chord %.0f %.0f %.0f, voice %zu: %+.1f c %s\n", c[0], c[1], c[2], v, cents, pass ? "OK" : "FAIL");
+                ok &= pass;
+            }
+        }
+    }
+    return ok;
+}
+
 static bool chordTuningAfterRestart() {
     DroseraCore core; makeCore(core, kDryBase);
     setChord(core, 48, 55, 64);
@@ -962,6 +988,7 @@ static bool polyphonyTests() {
     bool ok = true;
     ok &= chordTuning();
     ok &= coupledChordsHoldAcrossRegisters();
+    ok &= chordKeysInTune();
     ok &= chordTuningAfterRestart();
     ok &= restartBuildsAsFast();
     ok &= restartKeepsFilters();
