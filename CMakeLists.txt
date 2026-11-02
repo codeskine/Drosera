@@ -29,6 +29,10 @@ add_executable(render_test tests/render_test.cpp)
 target_include_directories(render_test PRIVATE tests src/plugin)
 target_link_libraries(render_test PRIVATE DroseraDSP)
 
+# MIDI note allocator for the three-voice mode (header only, no JUCE)
+add_executable(voice_allocator_test tests/voice_allocator_test.cpp)
+target_include_directories(voice_allocator_test PRIVATE src/dsp)
+
 # Measures the pitch produced for MIDI notes (see tests/pitch_probe.cpp)
 add_executable(pitch_probe tests/pitch_probe.cpp)
 target_include_directories(pitch_probe PRIVATE tests)
