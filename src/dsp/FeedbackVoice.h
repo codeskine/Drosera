@@ -18,7 +18,8 @@ class FeedbackVoice {
         FeedbackVoice() = default;
         ~FeedbackVoice() = default;
 
-        // Only the first call allocates: Init also clears the state on the audio thread.
+        // Only the first call allocates: Init also clears the strings, delay lines, filters and reverb on the audio
+        // thread. It leaves fb_delay_samp_, fb_gain_ and verb_mix_.
         void Init(const float sample_rate);
 
         void SetStringPitch(const float nn);
