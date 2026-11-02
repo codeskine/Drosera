@@ -9,6 +9,10 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```
 
 ```bash
+build/voice_allocator_test
+```
+
+```bash
 build/render_test
 ```
 

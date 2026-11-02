@@ -42,10 +42,13 @@ jobs:
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
 
       - name: Build
-        run: cmake --build build --target render_test render_cli ui_test plugin_host_test Drosera_VST3
+        run: cmake --build build --target voice_allocator_test render_test render_cli ui_test plugin_host_test Drosera_VST3
 
       - name: Test the release check
         run: python3 tools/test_release_check.py
+
+      - name: voice_allocator_test
+        run: build/voice_allocator_test
 
       - name: render_test
         run: build/render_test
