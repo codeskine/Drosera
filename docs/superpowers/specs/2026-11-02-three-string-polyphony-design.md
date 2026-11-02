@@ -88,8 +88,8 @@ not change.
 
 Coupling maps through `daisysp::Mapping::EXP` (norm squared) to a gain from 0 to `kMaxCoupling`, which is 0.1. From the
 knobs that is the whole gain, and the output's magnitude spectrum differs by 0.88 at 100% against 0. Under MIDI the
-band-pass and its make-up apply as well. The make-up is the smallest of those tried, in steps of 0.5, that clears 0.1 on
-this measure with some margin: 0.17 and 0.45 on the two test chords, against 0.035 and 0.12 with no make-up. Across 296
+band-pass and its make-up apply as well. Of the make-ups tried (1, 2, 2.5, 3, 4), 1 fails the measure on one test chord
+(0.035) and 2 clears it thinly (0.115). 2.5 gives 0.17 and 0.45 on the two test chords. Across 296
 chords with roots 24 to 60, default dry knobs, the dominant partial stays within 5 cents of the note at 100%. At a
 make-up of 4 the worst is 12 cents; at 6, 16 of 168 voices leave their notes.
 Saved projects find the new parameters at their
