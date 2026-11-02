@@ -15,6 +15,7 @@
 #include <vector>
 #include "DroseraCore.h"
 #include "pitch_estimator.h"
+#include "PongDelay.h"
 #include "Presets.h"
 #include "SincResampler.h"
 
@@ -1180,6 +1181,169 @@ static bool polyphonyTests() {
     return ok;
 }
 
+// PongDelay alone: the only place the wet signal is isolated.
+using Pong = infrasonic::PongDelay<48000 * 5>;
+
+static std::unique_ptr<Pong> makePong(float seconds, float feedback, float drive, float toneHz = 18000.0f) {
+    auto pong = std::make_unique<Pong>();
+    pong->Init(48000.0f);
+    pong->SetDelayTime(seconds, true);
+    pong->SetFeedback(feedback);
+    pong->SetDrive(drive);
+    pong->SetTone(toneHz);
+    return pong;
+}
+
+struct PongRender { std::vector<float> L, R; };
+
+template <typename Input>
+static PongRender renderPong(Pong& pong, size_t n, Input input) {
+    PongRender r { std::vector<float>(n), std::vector<float>(n) };
+    for (size_t i = 0; i < n; ++i) pong.Process(input(i), r.L[i], r.R[i]);
+    return r;
+}
+
+static auto impulse(float amount) { return [amount](size_t i) { return i == 0 ? amount : 0.0f; }; }
+static auto burst(float hz, float amount, size_t length) {
+    return [=](size_t i) { return i < length ? amount * std::sin(2.0f * float(M_PI) * hz * (float)i / 48000.0f) : 0.0f; };
+}
+static size_t peakAt(const std::vector<float>& v, size_t a, size_t b) {
+    size_t at = a;
+    for (size_t i = a; i < b; ++i) if (std::fabs(v[i]) > std::fabs(v[at])) at = i;
+    return at;
+}
+static float peakOf(const std::vector<float>& v, size_t a, size_t b) { return std::fabs(v[peakAt(v, a, b)]); }
+
+static bool pongBounces() {
+    auto pong = makePong(0.25f, 0.7f, 0.0f);
+    const size_t T = 12000;
+    const auto r = renderPong(*pong, 4 * T, impulse(0.1f));
+    bool pass = true;
+    for (size_t k = 1; k <= 3; ++k) {
+        const auto& on = k % 2 == 1 ? r.L : r.R;
+        const auto& off = k % 2 == 1 ? r.R : r.L;
+        const float peak = peakOf(on, k * T - 20, k * T + 20), other = peakOf(off, k * T - 20, k * T + 20);
+        pass &= peak > 0.01f && other < 0.001f * peak;
+    }
+    printf("pongBounces: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongTiming() {
+    bool ok = true;
+    for (const float seconds : { 0.25f, DroseraCore::EchoTimeSeconds(0.5f, true) }) {
+        auto pong = makePong(seconds, 0.7f, 0.0f);
+        const auto T = (long)std::lround(seconds * 48000.0f);
+        const auto r = renderPong(*pong, (size_t)(4 * T), impulse(0.1f));
+        const long first = (long)peakAt(r.L, (size_t)(T / 2), (size_t)(T * 3 / 2));
+        const long second = (long)peakAt(r.R, (size_t)(T * 3 / 2), (size_t)(T * 5 / 2));
+        const long third = (long)peakAt(r.L, (size_t)(T * 5 / 2), (size_t)(T * 7 / 2));
+        const bool pass = std::labs(first - T) <= 2 && std::labs(second - 2 * T) <= 2 && std::labs(third - 3 * T) <= 2;
+        printf("pongTiming, T %ld samples: peaks at %ld, %ld, %ld %s\n", T, first, second, third, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+// The middle of a burst, on left at T against on right at 2T.
+static double lossPerBounce(float hz, float toneHz) {
+    auto pong = makePong(0.5f, 0.7f, 0.0f, toneHz);
+    const auto r = renderPong(*pong, 48000 * 2, burst(hz, 0.05f, 12000));
+    const size_t a = 3000, b = 10200;
+    return dbOf(rmsOf(r.L, 24000 + a, 24000 + b), rmsOf(r.R, 48000 + a, 48000 + b));
+}
+
+static bool pongKeepsLowEnd() {
+    const double loss = lossPerBounce(82.0f, 18000.0f);
+    const bool pass = loss <= 3.6;
+    printf("pongKeepsLowEnd: %.2f dB per bounce at 82 Hz %s\n", loss, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongToneDarkens() {
+    const double dark = lossPerBounce(3200.0f, 800.0f), open = lossPerBounce(3200.0f, 18000.0f);
+    const bool pass = dark >= open + 6.0;
+    printf("pongToneDarkens: %.2f dB per bounce at 800 Hz, %.2f at 18 kHz %s\n", dark, open, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongSelfOscillates() {
+    bool ok = true;
+    for (const float feedback : { 0.6f, 0.4f }) {
+        auto pong = makePong(0.1f, feedback, 1.0f);
+        const auto r = renderPong(*pong, 48000 * 20, burst(440.0f, 0.1f, 2400));
+        const double level = rmsOf(r.L, 48000 * 19, 48000 * 20);
+        const bool pass = feedback > 0.5f ? level > 0.1 : level < 1e-3;
+        printf("pongSelfOscillates, Feedback %.1f, Drive 1: RMS %.5f after 20 s %s\n", feedback, level, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+static bool pongFeedbackZeroIsOneRepeat() {
+    auto pong = makePong(0.1f, 0.0f, 1.0f);
+    const auto r = renderPong(*pong, 48000, impulse(0.1f));
+    const float peak = peakOf(r.L, 4800 - 20, 4800 + 20);
+    const bool pass = peak > 0.01f && peakOf(r.R, 0, r.R.size()) == 0.0f && peakOf(r.L, 7200, r.L.size()) < peak * 3.2e-5f;
+    printf("pongFeedbackZeroIsOneRepeat: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongBlocksDc() {
+    auto pong = makePong(0.05f, 1.5f, 1.0f);
+    const auto r = renderPong(*pong, 48000 * 60, [](size_t i) { return 0.1f + 0.1f * std::sin(2.0f * float(M_PI) * 440.0f * (float)i / 48000.0f); });
+    double meanL = 0.0, meanR = 0.0;
+    for (size_t i = 48000 * 30; i < r.L.size(); ++i) { meanL += r.L[i]; meanR += r.R[i]; }
+    meanL /= (double)(r.L.size() - 48000 * 30);
+    meanR /= (double)(r.L.size() - 48000 * 30);
+    const float peak = std::max(peakOf(r.L, 0, r.L.size()), peakOf(r.R, 0, r.R.size()));
+    const bool pass = std::fabs(meanL) < 0.01 && std::fabs(meanR) < 0.01 && peak <= 1.0001f;  // SoftClip reaches 1 give or take rounding
+    printf("pongBlocksDc: mean %.5f, %.5f, peak %.7f %s\n", meanL, meanR, peak, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Power away from the harmonics against the power on them. 3100 Hz: 3 kHz's aliases would land on its harmonics at 48 kHz.
+static double inharmonicDb(float feedback) {
+    const double hz = 3100.0;
+    auto pong = makePong(0.25f, feedback, 1.0f);
+    const size_t n = 1 << 17, from = 48000 * 4;
+    const auto r = renderPong(*pong, from + n, [hz](size_t i) { return 0.5f * (float)std::sin(2.0 * M_PI * hz * (double)i / 48000.0); });
+    std::vector<std::complex<double>> a(n);
+    for (size_t i = 0; i < n; ++i) a[i] = (0.5 - 0.5 * std::cos(2.0 * M_PI * (double)i / (double)n)) * r.L[from + i];
+    fft(a);
+    const double binHz = 48000.0 / (double)n;
+    double on = 0.0, off = 0.0;
+    for (size_t k = 4; k < n / 2; ++k) {
+        const double f = (double)k * binHz, nearest = std::round(f / hz) * hz;
+        (std::fabs(f - nearest) <= 4.0 * binHz && nearest > 0.0 ? on : off) += std::norm(a[k]);
+    }
+    return 10.0 * std::log10(std::max(off, 1e-30) / std::max(on, 1e-30));
+}
+
+// 3 dB above what was measured. Feedback 0 is the aliasing alone: -54.3 dB, so no oversampling. At Feedback 0.9 the loop
+// runs away on its own modes, which are not harmonics of the input either: this is not a measure of aliasing.
+static constexpr double kAliasLimitDry = -51.3, kAliasLimitLoop = -10.3;
+
+static bool pongAliasing() {
+    const double dry = inharmonicDb(0.0f), loop = inharmonicDb(0.9f);
+    const bool pass = dry <= kAliasLimitDry && loop <= kAliasLimitLoop;
+    printf("pongAliasing at 3100 Hz, Drive 1: %.1f dB at Feedback 0, %.1f dB at Feedback 0.9 %s\n", dry, loop, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongDelayTests() {
+    bool ok = true;
+    ok &= pongBounces();
+    ok &= pongTiming();
+    ok &= pongKeepsLowEnd();
+    ok &= pongToneDarkens();
+    ok &= pongSelfOscillates();
+    ok &= pongFeedbackZeroIsOneRepeat();
+    ok &= pongBlocksDc();
+    ok &= pongAliasing();
+    return ok;
+}
+
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
     //                  freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
@@ -1202,6 +1366,7 @@ int main(int argc, char** argv) {
     ok &= publishedValues();
     ok &= engineVoiceTests();
     ok &= polyphonyTests();
+    ok &= pongDelayTests();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }
