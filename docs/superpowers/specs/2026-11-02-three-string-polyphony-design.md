@@ -59,7 +59,7 @@ the coupled amount does not depend on Feedback or on the make-up gain of up to 8
 `coupling × (sum of the other two voices' taps)` to its loop input, channel by channel, with one sample of delay so
 there is no algebraic loop. The signal then goes through the receiving voice's string, so it rings mainly on
 harmonically related intervals, like a sympathetic string. Under MIDI it first passes through a second band-pass on the
-receiving voice's note, with a make-up gain of 2.5: without it, low chords at high Coupling jumped about four octaves to
+receiving voice's note, with a make-up gain: without the band-pass, low chords at high Coupling jumped about four octaves to
 a partial their strings share, by a path that misses each loop's own band-pass. A voice whose gate is closed receives no coupling, at any
 Coupling, so MIDI Gate still closes it to at least 40 dB below the open voices.
 
@@ -92,6 +92,13 @@ band-pass and its make-up apply as well. Of the make-ups tried (1, 2, 2.5, 3, 4)
 (0.035) and 2 clears it thinly (0.115). 2.5 gives 0.17 and 0.45 on the two test chords. Across 296
 chords with roots 24 to 60, default dry knobs, the dominant partial stays within 5 cents of the note at 100%. At a
 make-up of 4 the worst is 12 cents; at 6, 16 of 168 voices leave their notes.
+
+A long Body packs its resonances close around the note, and a fixed make-up pushed voices onto the next one: at 100%,
+Body 0.9 and 1.0, 29 and 34 of 168 voices were off against 3 and 2 at Coupling 0. Lowering the fixed make-up did not cure
+it (at 1, chords still moved). So the make-up is 2.5 × min(1, 0.025 s / Body)³: full up to the middle of the knob, where the
+spectrum still differs by 0.29 at Body 0.5, then falling fast, to under 0.02 from Body 0.7. Across 56 chords, Body 0.5 to
+1.0 and Coupling 60 to 100%, 17 voices of 3024 are off, against 18 for the same settings at Coupling 0. The cost is
+that under MIDI Coupling does almost nothing at long Bodies. From the knobs nothing changes.
 Saved projects find the new parameters at their
 defaults, so they sound as before.
 
@@ -170,7 +177,8 @@ regenerated.
 - **Independence:** at Coupling 0, a `FeedbackVoice`'s output is identical, sample by sample, whatever the others do.
 - **Coupling:** the output's magnitude spectrum at Coupling 100% differs from Coupling 0 by more than 10%, under MIDI and
   from the knobs. This test sets `kMaxCoupling` and the make-up. 56 chords across roots 24 to 60 hold their notes at
-  Coupling 100%, by the dominant partial, within 25 cents. At 100% a closed voice stays at least 40 dB below the open voices.
+  Coupling 100%, by the dominant partial, within 25 cents. From Body 0.7 up, a voice that holds its note at Coupling 0
+  still holds it at 80 and 100%. At 100% a closed voice stays at least 40 dB below the open voices.
 - **Stability:** Coupling and Feedback at maximum, across extreme notes and filters, for 60 s, with no non-finite value
   and no `Recover`, under MIDI and from the knobs.
 - **Clicks:** the largest sample-to-sample jump stays bounded through the ramp, both ways.

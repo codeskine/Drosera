@@ -6,9 +6,6 @@ using namespace infrasonic::FeedbackSynth;
 using namespace daisysp;
 
 static constexpr float kFeedbackTrackingQ = 1.5f;
-// Gives back what the band-pass takes from the other voices' notes (a fifth away it passes 0.39), or Coupling would
-// barely change a chord: couplingChangesTheSpectrum reads 0.035 at 1. Chords hold up to 4 and leave their notes at 6.
-static constexpr float kCouplingMakeup = 2.5f;
 
 void FeedbackVoice::Init(const float sample_rate) {
   if (!verb_) {
@@ -56,13 +53,14 @@ void FeedbackVoice::ClearCouplingFilter() { coupling_track_.Reset(); }
 void FeedbackVoice::FilterCoupling(float &couplingL, float &couplingR) {
   if (!fb_track_enabled_) return;
   coupling_track_.ProcessStereo(couplingL, couplingR);
-  couplingL *= kCouplingMakeup;
-  couplingR *= kCouplingMakeup;
+  couplingL *= coupling_makeup_;
+  couplingR *= coupling_makeup_;
 }
 
-void FeedbackVoice::SetFeedbackTracking(const bool enabled, const float center_hz, const float makeup_gain) {
+void FeedbackVoice::SetFeedbackTracking(const bool enabled, const float center_hz, const float makeup_gain, const float coupling_makeup) {
   fb_track_enabled_ = enabled;
   fb_track_makeup_ = makeup_gain;
+  coupling_makeup_ = coupling_makeup;
   if (enabled) {
     fb_track_.SetParams(center_hz, kFeedbackTrackingQ);
     coupling_track_.SetParams(center_hz, kFeedbackTrackingQ);

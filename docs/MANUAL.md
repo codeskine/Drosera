@@ -102,8 +102,9 @@ and with it off Drosera sounds exactly as before.
 
 **Coupling.** At 0 the three loops do not affect each other. Raising it feeds each loop a share of the other two,
 so they ring on harmonically related intervals, like sympathetic strings. The knob is on a square law. Under MIDI its
-effect sits mostly at the top of the knob, while from the knobs alone it is strong from about 40 %. A voice whose
-gate is closed hears no Coupling, at any setting.
+effect sits mostly at the top of the knob and fades as Body goes past the middle, to almost nothing from about 0.7,
+which keeps long Bodies in tune. From the knobs alone it is strong from about 40 %, at any Body. A voice whose gate is
+closed hears no Coupling, at any setting.
 
 **Intervals.** Without MIDI the strings sit at Frequency, Frequency + Interval 2 and Frequency + Interval 3, limited
 to notes 16 to 84. Body is not snapped here, so the loop settles where string and Body resonances coincide and the
@@ -133,6 +134,8 @@ other 12 turns POLY off.
 - With POLY on and Coupling above 0, the notes can move each other's pitch. From the knobs the voices can leave their
   intervals. Under MIDI, with no reverb, the chords tested with roots 24 to 60 stayed within 5 cents of their notes at
   100 %, which is not promised for every chord or setting.
+- With MIDI Pitch on and Body at about 0.7 or more, a few chord notes sit up to about 60 cents off, at any Coupling,
+  on a neighbouring Body resonance.
 - Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. With POLY on,
   chords can go sour: with "Chord Keys" otherwise as it is, at Reverb Mix 35 % a C major chord read +20, -28 and -8 cents.
 - The values of "Open Fifths", "Sympathetic" and "Chord Keys" were chosen by measurement and have not been judged by

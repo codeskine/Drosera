@@ -931,6 +931,60 @@ static bool couplingChangesTheSpectrum() {
     return ok;
 }
 
+// A long Body packs its resonances close around the note, so Coupling can push a voice onto the next one. A voice that
+// holds its note at Coupling 0 must still hold it with Coupling up. Some don't hold at 0, with no help from Coupling.
+static bool coupledChordsHoldAtLongBody() {
+    bool ok = true;
+    const int shapes[][2] = { {4, 7}, {3, 7}, {7, 12}, {2, 7} };
+    const auto chordAt = [](float body, const float* c, float coupling) {
+        float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
+        p[DroseraCore::FeedbackBody] = body;
+        DroseraCore core; makeCore(core, p);
+        setChord(core, c[0], c[1], c[2]);
+        core.SetCoupling(coupling);
+        return renderTaps(core, 48000 * 5);
+    };
+    for (const float body : { 0.7f, 0.8f, 0.9f, 1.0f }) {
+        for (const float coupling : { 0.8f, 1.0f }) {
+            int voices = 0, moved = 0;
+            double worst = 0.0;
+            for (int root = 24; root <= 60; root += 6) {
+                for (const auto& s : shapes) {
+                    const float c[3] = { (float)root, (float)(root + s[0]), (float)(root + s[1]) };
+                    const auto alone = chordAt(body, c, 0.0f), coupled = chordAt(body, c, coupling);
+                    for (size_t v = 0; v < 3; ++v) {
+                        if (std::fabs(centsOff(alone.tap[v], c[v])) >= 25.0) continue;
+                        const double cents = std::fabs(centsOff(coupled.tap[v], c[v]));
+                        ++voices;
+                        worst = std::max(worst, cents);
+                        if (cents >= 25.0) ++moved;
+                    }
+                }
+            }
+            const bool pass = moved == 0;
+            printf("poly Body %.1f, Coupling %.0f%%: %d of %d voices moved off their notes, worst %.1f c %s\n", body, coupling * 100.0f, moved, voices, worst, pass ? "OK" : "FAIL");
+            ok &= pass;
+        }
+    }
+    return ok;
+}
+
+// What keeps long Bodies in tune must leave the middle of the knob alone.
+static bool couplingStillActsAtMidBody() {
+    float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
+    p[DroseraCore::FeedbackBody] = 0.5f;
+    const auto output = [&](float coupling) {
+        DroseraCore core; makeCore(core, p);
+        setChord(core, 60, 64, 67);
+        core.SetCoupling(coupling);
+        return magnitudeSpectrum(renderTaps(core, 48000 * 6).L, 48000 * 3);
+    };
+    const double ratio = spectralRatio(output(1.0f), output(0.0f));
+    const bool pass = ratio > 0.1;
+    printf("poly Coupling 100%% changes the spectrum at Body 0.5: %.3f %s\n", ratio, pass ? "OK" : "FAIL");
+    return pass;
+}
+
 static bool coupledRampClickFree() {
     float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
     p[DroseraCore::FeedbackLPF] = 0.4f;  // about 800 Hz
@@ -1001,6 +1055,8 @@ static bool polyphonyTests() {
     ok &= closedVoiceStaysFaint();
     ok &= closedVoiceStaysFaintFromRestart();
     ok &= couplingChangesTheSpectrum();
+    ok &= coupledChordsHoldAtLongBody();
+    ok &= couplingStillActsAtMidBody();
     ok &= coupledRampClickFree();
     ok &= recoverRestoresAllVoices();
     cpuReport();

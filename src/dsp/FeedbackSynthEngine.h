@@ -24,7 +24,7 @@ class Engine {
         void SetFeedbackDelay(const size_t voice, const float delay_s);
         void SetFeedbackDelayLag(const size_t voice, const float time_s);
         // Plugin extension, see FeedbackVoice::SetFeedbackTracking
-        void SetFeedbackTracking(const size_t voice, const bool enabled, const float center_hz, const float makeup_gain = 1.0f);
+        void SetFeedbackTracking(const size_t voice, const bool enabled, const float center_hz, const float makeup_gain = 1.0f, const float coupling_makeup = 1.0f);
 
         // Go to all voices
         void SetFeedbackLPFCutoff(const float cutoff_hz);

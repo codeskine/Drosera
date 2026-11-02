@@ -32,7 +32,7 @@ class FeedbackVoice {
         // Plugin extension, not in the firmware (off by default): a bandpass in the feedback
         // path only, centred on the played note, so that the loop oscillates on the
         // fundamental. The output tap is not filtered.
-        void SetFeedbackTracking(const bool enabled, const float center_hz, const float makeup_gain = 1.0f);
+        void SetFeedbackTracking(const bool enabled, const float center_hz, const float makeup_gain = 1.0f, const float coupling_makeup = 1.0f);
 
         // What the other voices send through Coupling, band-passed on this voice's note while tracking. Unfiltered,
         // low chords lock onto a high partial that two strings share, about four octaves up, through a path that
@@ -70,6 +70,7 @@ class FeedbackVoice {
         BPF24 coupling_track_;
         bool fb_track_enabled_ = false;
         float fb_track_makeup_ = 1.0f;
+        float coupling_makeup_ = 1.0f;
 
         using VerbPtr = std::unique_ptr<daisysp::ReverbSc>;
         VerbPtr verb_;

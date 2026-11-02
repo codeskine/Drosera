@@ -30,7 +30,7 @@ public:
 
     static constexpr size_t kNumVoices = FeedbackSynth::Engine::kNumVoices;
     // Top of Coupling's range, as linear gain. Under MIDI each voice also band-passes what it receives, with make-up,
-    // see FeedbackVoice::FilterCoupling and coupledChordsHoldAcrossRegisters in render_test.
+    // see couplingMakeup and coupledChordsHoldAcrossRegisters in render_test.
     static constexpr float kMaxCoupling = 0.1f;
 
     DroseraCore() : engine_(std::make_unique<FeedbackSynth::Engine>()) {}
@@ -246,7 +246,15 @@ private:
         e.SetFeedbackDelay(voice, delay);
         // Give back what the filters take at the note, or low notes (below the string's
         // 76 Hz DC blocker) lose the loop gain to oscillate on the fundamental.
-        e.SetFeedbackTracking(voice, true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup));
+        e.SetFeedbackTracking(voice, true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup), couplingMakeup());
+    }
+
+    // Gives back what the band-pass on received Coupling takes from the other notes (a fifth away it passes 0.39), or
+    // Coupling would barely change a chord. A Body past kCouplingFullBody packs its resonances close around the note,
+    // where Coupling pushes a voice onto the next one, so the make-up falls away fast. See coupledChordsHoldAtLongBody.
+    float couplingMakeup() const {
+        const float r = std::min(1.0f, kCouplingFullBody / body_s_);
+        return kCouplingMakeup * r * r * r;
     }
 
     // Frequency responses at z^-1 = z1 of the filters in the engine's loops: DcBlock(gain 0.99)
@@ -271,6 +279,7 @@ private:
     static constexpr float kKnobDelayLag = 0.2f;  // same as FeedbackSynth::Engine::Init
     static constexpr float kMidiDelayLag = 0.03f;
     static constexpr float kMaxMakeup = 8.0f;
+    static constexpr float kCouplingMakeup = 2.5f, kCouplingFullBody = 0.025f;
 
     std::unique_ptr<FeedbackSynth::Engine> engine_;
     std::array<float, kNumVoices> nn_ { 40.0f, 40.0f, 40.0f };

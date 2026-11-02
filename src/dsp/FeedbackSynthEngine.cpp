@@ -41,8 +41,8 @@ void Engine::Init(const float sample_rate) {
   }
 }
 
-void Engine::SetFeedbackTracking(const size_t voice, const bool enabled, const float center_hz, const float makeup_gain) {
-  voices_[voice].SetFeedbackTracking(enabled, center_hz, makeup_gain);
+void Engine::SetFeedbackTracking(const size_t voice, const bool enabled, const float center_hz, const float makeup_gain, const float coupling_makeup) {
+  voices_[voice].SetFeedbackTracking(enabled, center_hz, makeup_gain, coupling_makeup);
 }
 
 void Engine::SetFeedbackDelayLag(const size_t voice, const float time_s) {
