@@ -7,7 +7,7 @@ namespace drosera {
 namespace {
 // In the panel's coordinates. The panel starts 306 px down the window.
 constexpr int kStripTop = 8, kStripHeight = 22, kLineY = 32;
-constexpr int kTabStep = 142, kTabWidth = 132, kMargin = 26;
+constexpr int kTabStep = 118, kTabWidth = 108, kMargin = 26;
 constexpr int kCellTop = 48, kCellWidth = 92, kCellHeight = 92, kCellStep = 112;
 constexpr int kToggleWidth = 78, kToggleHeight = 22;
 
@@ -25,6 +25,7 @@ const std::map<juce::String, juce::String>& captions() {
         {"lpf", "Lowpass"}, {"hpf", "Highpass"}, {"revmix", "Mix"}, {"revdecay", "Decay"}, {"echosend", "Send"},
         {"echotime", "Time"}, {"echofb", "Feedback"}, {"volume", "Volume"}, {"inputgain", "Input"},
         {"echohalve", "WARP"}, {"midipitch", "PITCH"}, {"midigate", "GATE"},
+        {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"}, {"poly", "POLY"},
     };
     return names;
 }
@@ -64,7 +65,8 @@ TabPanel::TabPanel(juce::AudioProcessorValueTreeState& apvts)
               {"REVERB", {"revmix", "revdecay"}, {}},
               {"ECHO", {"echosend", "echotime", "echofb"}, {"echohalve"}},
               {"OUTPUT", {"volume", "inputgain"}, {}},
-              {"MIDI", {}, {"midipitch", "midigate"}}} {
+              {"MIDI", {}, {"midipitch", "midigate"}},
+              {"STRINGS", {"coupling", "interval2", "interval3"}, {"poly"}}} {
     for (int i = 0; i < kNumTabs; ++i) {
         auto& page = pages_[(size_t) i];
         auto& button = tabButtons_[i];

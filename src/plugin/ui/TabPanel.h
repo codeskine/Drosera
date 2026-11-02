@@ -30,13 +30,14 @@ private:
 
 class TabPanel final : public juce::Component {
 public:
-    static constexpr int kNumTabs = 5;
+    static constexpr int kNumTabs = 6;
 
     explicit TabPanel(juce::AudioProcessorValueTreeState&);
 
     void setTab(int);
     int tab() const { return tab_; }
     std::function<void(int)> onTabClicked;
+    juce::Rectangle<int> tabBounds(int index) const { return tabButtons_[index].getBounds(); }
 
     /// The knobs in every tab, by parameter ID.
     const std::map<juce::String, std::unique_ptr<LabeledKnob>>& knobs() const { return knobs_; }

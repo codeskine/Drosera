@@ -74,8 +74,14 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
     body_.show(body.value, body.tag);
 
     const bool warp = apvts_.getRawParameterValue("echohalve")->load() > 0.5f;
+    const bool polyMidi = bridge_.polyMidiActive();
     for (const auto& [id, knob] : tabs_.knobs()) {
         const auto text = knob->parameter().getCurrentValueAsText();
+        if (id == "interval2" || id == "interval3") {
+            const auto interval = drosera::readouts::interval(polyMidi, bridge_.voiceNote(id == "interval2" ? 1 : 2), text.toStdString());
+            knob->show(interval.value, interval.tag);
+            continue;
+        }
         knob->show(id == "echotime" ? juce::String(drosera::readouts::echoTime(warp, bridge_.echoSeconds(), text.toStdString())) : text, {});
     }
 

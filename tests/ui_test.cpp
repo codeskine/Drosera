@@ -190,6 +190,9 @@ static void readoutTests() {
     check(is(body(false, 0.0971f, "30.0 ms"), "30.0 ms", ""), "body from the knob");
     check(echoTime(true, 0.359f, "x") == "0.36 s", "echo time with WARP");
     check(echoTime(false, 0.359f, "1.29 s") == "1.29 s", "echo time from the knob");
+    check(is(interval(false, 60.0f, "+7 st"), "+7 st", ""), "interval from the knob");
+    check(is(interval(true, 60.0f, "+7 st"), "C4", "MIDI"), "interval with a MIDI note");
+    check(is(interval(true, -1.0f, "+7 st"), "-", "MIDI"), "interval with no note");
     check(noteName(40.0f) == "E2" && noteName(60.0f) == "C4" && noteName(69.0f) == "A4", "note names");
 }
 
@@ -657,6 +660,40 @@ static void editorTests() {
     {   // Screen readers can name every knob.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         check(openEditor(*p)->slider("fbgain")->getTitle() == "Feedback", "feedbackHasATitle");
+    }
+
+    {   // STRINGS is the sixth tab: it shows its controls, persists, and fits the window.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        juce::MemoryBlock state;
+        {
+            auto editor = openEditor(*p);
+            editor->setVisible(true);
+            editor->setTab(5);
+            auto shown = [&](const char* id) { return editor->slider(id)->getParentComponent()->isVisible(); };
+            check(shown("coupling") && shown("interval2") && shown("interval3") && !shown("lpf"), "stringsTabShowsItsControls");
+            check(editor->tabBounds(5).getRight() <= 760 - 26, "tabsFitTheWindow");
+            p->getStateInformation(state);
+        }
+        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
+        second->setStateInformation(state.getData(), (int) state.getSize());
+        check(openEditor(*second)->tab() == 5, "sixthTabPersists");
+    }
+
+    {   // The interval knobs show the notes the voices play when MIDI Pitch controls them.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        editor->refreshDisplay(dt);
+        check(editor->readout("interval2") == "+7 st" && editor->tag("interval2").isEmpty(), "intervalFromKnobWithoutMidi");
+        setParameter(*p, "midipitch", 1.0f);
+        setParameter(*p, "poly", 1.0f);
+        juce::MidiBuffer chord;
+        for (int n : { 48, 55 }) chord.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8) 100), 0);
+        render(*p, 0.1, &chord);
+        editor->refreshDisplay(dt);
+        check(editor->readout("interval2") == "G3" && editor->tag("interval2") == "MIDI"
+              && editor->slider("interval2")->isEnabled() && editor->slider("interval2")->getAlpha() < 1.0f, "intervalReadoutFollowsMidi");
+        check(editor->readout("interval3") == "-" && editor->tag("interval3") == "MIDI", "intervalWithoutANote");
     }
 
     {   // A preset chosen in the window reaches the host's own display.
