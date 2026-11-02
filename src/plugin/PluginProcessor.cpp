@@ -399,14 +399,14 @@ private:
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{"polylock", 2}, "String Lock", true));
         layout.add(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID{"echopong", 1}, "Echo Pong", false));
+            juce::ParameterID{"echopong", 2}, "Echo Pong", false));
         layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{"echodrive", 1}, "Echo Drive", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+            juce::ParameterID{"echodrive", 2}, "Echo Drive", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
             juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) {
                 return "+" + juce::String(v * 12.0f, 1) + " dB";
             })));
         layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{"echotone", 1}, "Echo Tone", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+            juce::ParameterID{"echotone", 2}, "Echo Tone", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
             juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) {
                 return juce::String(juce::roundToInt(daisysp::fmap(v, 800.0f, 18000.0f, daisysp::Mapping::LOG))) + " Hz";
             })));

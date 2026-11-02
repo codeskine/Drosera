@@ -159,6 +159,8 @@ others turns POLY off. "Ember Pong" uses PONG and sustains itself, and choosing 
   chords can go sour: with "Chord Keys" otherwise as it is, at Reverb Mix 35 % a C major chord read +20, -28 and -8 cents.
 - The values of "Open Fifths", "Sympathetic", "Chord Keys" and "Ember Pong", and the defaults of Echo Drive and Echo Tone,
   were chosen by measurement and have not been judged by ear.
+- Echo Pong's saturation is not oversampled, so loud high partials alias at high Drive. At Drive 100 %, with no feedback, a
+  3.1 kHz tone at half scale measured -54 dB of inharmonic power, and a 9.1 kHz tone at full scale -10.5 dB.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared
   to the host only when the input bus is connected.
 - The drone is chaotic. A small change to a knob, or to when it moves, can lead the loop somewhere else, so automation
