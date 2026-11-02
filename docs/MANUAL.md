@@ -88,15 +88,52 @@ pitch back after release: move it again.
 **MIDI Gate (GATE)** closes the feedback unless a key is down, so the drone swells on note-on and dies away on
 note-off.
 
+## STRINGS tab
+
+Three-string polyphony lets Drosera sound up to three notes at once, as three feedback loops. It is off by default,
+and with it off Drosera sounds exactly as before.
+
+| Control | Range | What it does |
+|---|---|---|
+| POLY | on/off | Runs three loops instead of one |
+| Coupling | 0 to 100 % | How much each loop hears the other two |
+| Interval 2 | −24 to +24 semitones | Pitch of the second string above Frequency |
+| Interval 3 | −24 to +24 semitones | Pitch of the third string above Frequency |
+
+**Coupling.** At 0 the three loops do not affect each other. Raising it feeds each loop a share of the other two,
+so they ring on harmonically related intervals, like sympathetic strings. The knob is on a square law. Under MIDI its
+effect sits mostly at the top of the knob, while from the knobs alone it is strong from about 40 %. A voice whose
+gate is closed hears no Coupling, at any setting.
+
+**Intervals.** Without MIDI the strings sit at Frequency, Frequency + Interval 2 and Frequency + Interval 3, limited
+to notes 16 to 84. Body is not snapped here, so the loop settles where string and Body resonances coincide and the
+intervals are exact only under MIDI. Under MIDI the intervals dim and show each voice's real note, tagged **MIDI**.
+Frequency and Body show the first voice.
+
+**Voice assignment** (MIDI Pitch and POLY on). Each new note takes a voice that has never played, then the voice
+released longest ago, then the voice held longest. A taken voice glides to the new note without being cleared. When a
+voice is released while a held note has no voice, it takes that note, most recent first. Pitch bend moves all voices.
+Turning POLY on with keys down assigns the last three held notes. A voice that has never had a note stays closed,
+so one note sounds one string.
+
+**MIDI Gate per voice.** With MIDI Pitch on, each voice is open only while its own note is held. With MIDI Gate off, a
+released note keeps sounding until its voice is taken. With MIDI Pitch off, the gate opens all three voices together.
+
 ## Presets
 
-12 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
-"Init" is silent by design.
+15 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
+"Init" is silent by design. The last three use three strings: "Open Fifths" (knobs only, Coupling 0), "Sympathetic"
+(knobs only, Coupling at 40 %) and "Chord Keys" (MIDI Pitch and MIDI Gate on, light Coupling). Choosing any of the
+other 12 turns POLY off.
 
 ## Known limits
 
 - With MIDI Pitch on, notes 16 to 18 and note 80 may stay silent in some settings, because the loop does not have
   the gain to oscillate there. Note 16 can also sound on the wrong partial, about 11 semitones sharp.
+- With POLY on and Coupling above 0, the notes can move each other's pitch. From the knobs the voices can leave their
+  intervals. Under MIDI the chords tested stayed within 1 cent of their notes, which is not promised for every chord.
+- The values of "Open Fifths", "Sympathetic" and "Chord Keys" were chosen by measurement and have not been judged by
+  ear.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared
   to the host only when the input bus is connected.
 - The drone is chaotic. A small change to a knob, or to when it moves, can lead the loop somewhere else, so automation
