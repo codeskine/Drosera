@@ -58,7 +58,9 @@ today's noise generator.
 the coupled amount does not depend on Feedback or on the make-up gain of up to 8×. Each voice adds
 `coupling × (sum of the other two voices' taps)` to its loop input, channel by channel, with one sample of delay so
 there is no algebraic loop. The signal then goes through the receiving voice's string, so it rings mainly on
-harmonically related intervals, like a sympathetic string. A voice whose gate is closed receives no coupling, at any
+harmonically related intervals, like a sympathetic string. Under MIDI it first passes through a second band-pass on the
+receiving voice's note, with a make-up gain of 2.5: without it, low chords at high Coupling jumped about four octaves to
+a partial their strings share, by a path that misses each loop's own band-pass. A voice whose gate is closed receives no coupling, at any
 Coupling, so MIDI Gate still closes it to at least 40 dB below the open voices.
 
 **Noise.** DaisySP's `WhiteNoise` always seeds with 1 and has no way to change it, so three strings in unison would be
@@ -84,11 +86,13 @@ not change.
 | `interval2` | Interval 2 | -24 to +24 semitones, whole steps | +7 |
 | `interval3` | Interval 3 | -24 to +24 semitones, whole steps | +12 |
 
-Coupling maps through `daisysp::Mapping::EXP` (norm squared) to a gain from 0 to `kMaxCoupling`, which is 0.1: the smallest
-gain tried that changes the output's magnitude spectrum by more than 10% under MIDI. Above it the loops start to leave
-their notes: at 0.2, chord 36 43 52 jumps to higher partials. Under MIDI the dominant partial moves by at most 0.5 cents at
-100% against 0%, and stays within 1 cent of the note, on the five chords the tuning test uses. Without MIDI Coupling acts far
-sooner: the same measure is 0.88 at 100%, against 0.15 under MIDI. Saved projects find the new parameters at their
+Coupling maps through `daisysp::Mapping::EXP` (norm squared) to a gain from 0 to `kMaxCoupling`, which is 0.1. From the
+knobs that is the whole gain, and the output's magnitude spectrum differs by 0.88 at 100% against 0. Under MIDI the
+band-pass and its make-up apply as well. The make-up is the smallest of those tried, in steps of 0.5, that clears 0.1 on
+this measure with some margin: 0.17 and 0.45 on the two test chords, against 0.035 and 0.12 with no make-up. Across 296
+chords with roots 24 to 60, default dry knobs, the dominant partial stays within 5 cents of the note at 100%. At a
+make-up of 4 the worst is 12 cents; at 6, 16 of 168 voices leave their notes.
+Saved projects find the new parameters at their
 defaults, so they sound as before.
 
 **`DroseraCore`.** Voices 1 and 2 use a second `ParameterRegistry`, for their pitch and feedback gain, and it also holds
@@ -165,7 +169,8 @@ regenerated.
   note, never by a fit to a harmonic grid. It avoids the notes `docs/MANUAL.md` lists as a known limit (16 to 18, 80).
 - **Independence:** at Coupling 0, a `FeedbackVoice`'s output is identical, sample by sample, whatever the others do.
 - **Coupling:** the output's magnitude spectrum at Coupling 100% differs from Coupling 0 by more than 10%, under MIDI and
-  from the knobs. This test sets `kMaxCoupling`. At 100% a closed voice stays at least 40 dB below the open voices.
+  from the knobs. This test sets `kMaxCoupling` and the make-up. 56 chords across roots 24 to 60 hold their notes at
+  Coupling 100%, by the dominant partial, within 25 cents. At 100% a closed voice stays at least 40 dB below the open voices.
 - **Stability:** Coupling and Feedback at maximum, across extreme notes and filters, for 60 s, with no non-finite value
   and no `Recover`, under MIDI and from the knobs.
 - **Clicks:** the largest sample-to-sample jump stays bounded through the ramp, both ways.

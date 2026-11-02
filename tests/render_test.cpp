@@ -592,6 +592,28 @@ static bool chordTuning() {
     return ok;
 }
 
+// Coupling at maximum must not throw a chord up to a higher partial, in any register.
+static bool coupledChordsHoldAcrossRegisters() {
+    bool ok = true;
+    const int shapes[][2] = { {4, 7}, {3, 7}, {7, 12}, {5, 7}, {2, 7}, {1, 2}, {7, 16}, {12, 24} };
+    for (int root = 24; root <= 60; root += 6) {
+        for (const auto& s : shapes) {
+            const float c[3] = { (float)root, (float)(root + s[0]), (float)(root + s[1]) };
+            DroseraCore core; makeCore(core, kDryBase);
+            setChord(core, c[0], c[1], c[2]);
+            core.SetCoupling(1.0f);
+            const auto r = renderTaps(core, 48000 * 5);
+            for (size_t v = 0; v < 3; ++v) {
+                const double cents = centsOff(r.tap[v], c[v]);
+                const bool pass = std::fabs(cents) < 25.0;
+                printf("poly chord %.0f %.0f %.0f holds at Coupling 100%%, voice %zu: %+.1f c %s\n", c[0], c[1], c[2], v, cents, pass ? "OK" : "FAIL");
+                ok &= pass;
+            }
+        }
+    }
+    return ok;
+}
+
 static bool chordTuningAfterRestart() {
     DroseraCore core; makeCore(core, kDryBase);
     setChord(core, 48, 55, 64);
@@ -939,6 +961,7 @@ static void cpuReport() {
 static bool polyphonyTests() {
     bool ok = true;
     ok &= chordTuning();
+    ok &= coupledChordsHoldAcrossRegisters();
     ok &= chordTuningAfterRestart();
     ok &= restartBuildsAsFast();
     ok &= restartKeepsFilters();

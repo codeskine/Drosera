@@ -33,6 +33,12 @@ class FeedbackVoice {
         // fundamental. The output tap is not filtered.
         void SetFeedbackTracking(const bool enabled, const float center_hz, const float makeup_gain = 1.0f);
 
+        // What the other voices send through Coupling, band-passed on this voice's note while tracking. Unfiltered,
+        // low chords lock onto a high partial that two strings share, about four octaves up, through a path that
+        // misses each loop's band-pass. Polyphony only: mono renders never run this filter.
+        void FilterCoupling(float &couplingL, float &couplingR);
+        void ClearCouplingFilter();
+
         // Both range 0-1
         void SetReverbMix(const float mix);
         void SetReverbFeedback(const float time);
@@ -60,6 +66,7 @@ class FeedbackVoice {
         HPF12 fb_hpf_;
 
         BPF24 fb_track_;
+        BPF24 coupling_track_;
         bool fb_track_enabled_ = false;
         float fb_track_makeup_ = 1.0f;
 

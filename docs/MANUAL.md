@@ -131,7 +131,8 @@ other 12 turns POLY off.
 - With MIDI Pitch on, notes 16 to 18 and note 80 may stay silent in some settings, because the loop does not have
   the gain to oscillate there. Note 16 can also sound on the wrong partial, about 11 semitones sharp.
 - With POLY on and Coupling above 0, the notes can move each other's pitch. From the knobs the voices can leave their
-  intervals. Under MIDI the chords tested stayed within 1 cent of their notes, which is not promised for every chord.
+  intervals. Under MIDI, with no reverb, the chords tested with roots 24 to 60 stayed within 5 cents of their notes at
+  100 %, which is not promised for every chord or setting.
 - The values of "Open Fifths", "Sympathetic" and "Chord Keys" were chosen by measurement and have not been judged by
   ear.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared

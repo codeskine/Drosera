@@ -92,6 +92,12 @@ class BiquadCascade {
             for (auto &biquad : biquads_) biquad.Reset();
         }
 
+        /// Clears the state and keeps the coefficients
+        inline void Reset()
+        {
+            for (auto &biquad : biquads_) biquad.Reset();
+        }
+
         inline void SetCutoff(const float cutoff_hz)
         {
             cutoff_hz_ = daisysp::fclamp(cutoff_hz, 1.f, sample_rate_ * 0.5f);

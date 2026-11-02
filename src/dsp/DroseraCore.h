@@ -29,8 +29,8 @@ public:
     };
 
     static constexpr size_t kNumVoices = FeedbackSynth::Engine::kNumVoices;
-    // Top of Coupling's range, as linear gain. The smallest of the gains tried that changes the spectrum under MIDI, see
-    // couplingChangesTheSpectrum in render_test. At 0.2 the loops start to leave their notes.
+    // Top of Coupling's range, as linear gain. Under MIDI each voice also band-passes what it receives, with make-up,
+    // see FeedbackVoice::FilterCoupling and coupledChordsHoldAcrossRegisters in render_test.
     static constexpr float kMaxCoupling = 0.1f;
 
     DroseraCore() : engine_(std::make_unique<FeedbackSynth::Engine>()) {}

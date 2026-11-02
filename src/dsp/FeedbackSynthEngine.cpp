@@ -105,6 +105,7 @@ void Engine::StopPoly() {
   poly_running_ = false;
   voices_[1].Init(sample_rate_);
   voices_[2].Init(sample_rate_);
+  voices_[0].ClearCouplingFilter();
   for (auto &tap : tap_) tap[0] = tap[1] = 0.0f;
 }
 
@@ -127,8 +128,9 @@ void Engine::ProcessPoly(float in, float &outL, float &outR) {
     const size_t a = (v + 1) % kNumVoices;
     const size_t b = (v + 2) % kNumVoices;
     const float receive = coupling_ * coupling_receive_[v];
-    const float couplingL = receive * (weight[a] * tap_[a][0] + weight[b] * tap_[b][0]);
-    const float couplingR = receive * (weight[a] * tap_[a][1] + weight[b] * tap_[b][1]);
+    float couplingL = receive * (weight[a] * tap_[a][0] + weight[b] * tap_[b][0]);
+    float couplingR = receive * (weight[a] * tap_[a][1] + weight[b] * tap_[b][1]);
+    voices_[v].FilterCoupling(couplingL, couplingR);
     voices_[v].Process(noise_[v].Process(), in, couplingL, couplingR, next[v][0], next[v][1]);
   }
 
