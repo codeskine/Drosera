@@ -19,6 +19,7 @@ static const ParamIdentity kParamIdentity[] = {
     {"revmix", "Reverb Mix"}, {"revdecay", "Reverb Decay"}, {"echosend", "Echo Send"}, {"echotime", "Echo Time"},
     {"echofb", "Echo Feedback"}, {"volume", "Volume"}, {"echohalve", "Echo Warp"}, {"inputgain", "Input Level"},
     {"midipitch", "MIDI Pitch"}, {"midigate", "MIDI Gate"},
+    {"poly", "Polyphony"}, {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"},
 };
 
 // Values stored in tests/fixtures/state-baseline.bin. It also holds the tape echo's parameters, on,
@@ -62,6 +63,12 @@ static bool checkSavedState(juce::AudioProcessor& inst, const char* fixture) {
         for (auto* p : inst.getParameters())
             if (p->getName(64) == saved.name && std::abs(p->getValue() - saved.value) > 0.001f) {
                 std::printf("  %s: expected %.3f, got %.3f\n", saved.name, saved.value, p->getValue());
+                pass = false;
+            }
+    for (const char* name : {"Polyphony", "Coupling"})  // projects from before polyphony leave it off
+        for (auto* p : inst.getParameters())
+            if (p->getName(64) == name && p->getValue() != 0.0f) {
+                std::printf("  %s: expected 0, got %.3f\n", name, p->getValue());
                 pass = false;
             }
     std::printf("saved state from the baseline build: %s\n", pass ? "OK" : "FAIL");

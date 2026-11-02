@@ -409,6 +409,187 @@ static void editorTests() {
         check(gAllocations.load() == 0, "audioPathDoesNotAllocate");
     }
 
+    {   // Polyphony: parameters, presets and the voices MIDI reaches.
+        auto text = [](juce::AudioProcessor& p, const char* id) {
+            for (auto* prm : p.getParameters())
+                if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(prm))
+                    if (withId->paramID == id) return prm->getText(prm->getValue(), 32);
+            return juce::String("?");
+        };
+        auto notes = [](std::initializer_list<int> on, std::initializer_list<int> off = {}) {
+            juce::MidiBuffer m;
+            for (int n : on) m.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8) 100), 0);
+            for (int n : off) m.addEvent(juce::MidiMessage::noteOff(1, n), 0);
+            return m;
+        };
+        // Renders and returns the RMS of the last `tail` seconds, whatever the sample rate.
+        auto renderRms = [](juce::AudioProcessor& p, double rate, double seconds, double tail, juce::MidiBuffer* midi = nullptr) {
+            juce::AudioBuffer<float> buffer(2, 512);
+            juce::MidiBuffer none;
+            const int blocks = (int) (seconds * rate / 512.0);
+            double sumSq = 0; long n = 0; bool finite = true;
+            for (int b = 0; b < blocks; ++b) {
+                buffer.clear();
+                p.processBlock(buffer, midi != nullptr && b == 0 ? *midi : none);
+                if (b * 512 < (seconds - tail) * rate) continue;
+                for (int c = 0; c < 2; ++c)
+                    for (int i = 0; i < 512; ++i) {
+                        const float v = buffer.getSample(c, i);
+                        finite &= std::isfinite(v);
+                        sumSq += (double) v * v; ++n;
+                    }
+            }
+            return finite && n > 0 ? std::sqrt(sumSq / (double) n) : -1.0;
+        };
+        auto fresh = [](double rate = 48000.0) {
+            std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+            p->prepareToPlay(rate, 512);
+            return p;
+        };
+        auto setPolyMidi = [](juce::AudioProcessor& p) { setParameter(p, "midipitch", 1.0f); setParameter(p, "poly", 1.0f); };
+
+        {
+            auto p = fresh();
+            check(parameter(*p, "poly") == 0.0f && parameter(*p, "coupling") == 0.0f
+                  && text(*p, "interval2") == "+7 st" && text(*p, "interval3") == "+12 st", "defaultsOff");
+        }
+        {
+            auto first = fresh();
+            setParameter(*first, "poly", 1.0f);
+            setParameter(*first, "coupling", 0.4f);
+            setParameter(*first, "interval2", (-5.0f + 24.0f) / 48.0f);
+            juce::MemoryBlock state;
+            first->getStateInformation(state);
+            auto second = fresh();
+            second->setStateInformation(state.getData(), (int) state.getSize());
+            check(parameter(*second, "poly") == 1.0f && std::abs(parameter(*second, "coupling") - 0.4f) < 0.001f
+                  && text(*second, "interval2") == "-5 st" && text(*second, "interval3") == "+12 st", "polyStateRoundTrip");
+        }
+        {
+            auto p = fresh();
+            p->setCurrentProgram(13);
+            const float on = parameter(*p, "poly");
+            p->setCurrentProgram(2);
+            check(on == 1.0f && parameter(*p, "poly") == 0.0f, "oldPresetsTurnPolyOff");
+        }
+        {
+            auto p = fresh();
+            const juce::String old[] = { "Default", "Sub Cellar", "Glass Wind", "Cathedral Bloom", "Echo Drift", "Doppler Void", "Dark Tide",
+                                         "Razor Feedback", "Quiet Room", "Keys (play notes)", "Resonator (needs input)", "Init (silent)" };
+            bool names = p->getNumPrograms() == 15;
+            for (int i = 0; i < 12 && names; ++i) names = p->getProgramName(i) == old[i];
+            names = names && p->getProgramName(12) == "Open Fifths" && p->getProgramName(13) == "Sympathetic" && p->getProgramName(14) == "Chord Keys";
+            check(names, "presetCountAndOrder");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            render(*p, 0.1, &chord);
+            check(bridge->polyMidiActive() && bridge->voiceNote(0) == 48 && bridge->voiceNote(1) == 55 && bridge->voiceNote(2) == 64, "threeNotesThreeVoices");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto one = notes({ 48 });
+            render(*p, 0.1, &one);
+            check(bridge->voiceNote(0) == 48 && bridge->voiceNote(1) < 0 && bridge->voiceNote(2) < 0, "singleNoteLeavesOthersClosed");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto four = notes({ 48, 55, 64, 71 });
+            render(*p, 0.1, &four);
+            const bool stole = bridge->voiceNote(0) == 71;
+            auto off = notes({}, { 71 });
+            render(*p, 0.1, &off);
+            check(stole && bridge->voiceNote(0) == 48, "fourthNoteSteals");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto on = notes({ 48 }), off = notes({}, { 48 });
+            render(*p, 0.1, &on);
+            render(*p, 0.1, &off);
+            check(bridge->voiceNote(0) == 48 && bridge->polyMidiActive(), "releaseKeepsDroneWithoutGate");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 }), off = notes({}, { 48, 55, 64 });
+            render(*p, 0.1, &chord);
+            render(*p, 0.1, &off);
+            setParameter(*p, "freq", 0.2f);
+            render(*p, 0.1);
+            const bool taken = !bridge->polyMidiActive() && bridge->voiceNote(0) < 0 && bridge->voiceNote(1) < 0;
+            auto again = notes({ 60 });
+            render(*p, 0.1, &again);
+            check(taken && bridge->polyMidiActive() && bridge->voiceNote(0) == 60 && bridge->voiceNote(1) < 0, "knobTakesAllVoicesBack");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setParameter(*p, "midipitch", 1.0f);
+            auto on = notes({ 48 }), off = notes({}, { 48 });
+            render(*p, 0.1, &on);
+            render(*p, 0.1, &off);
+            setParameter(*p, "poly", 1.0f);
+            const double rms = renderRms(*p, 48000.0, 3.0, 1.0);
+            std::printf("  latched note, polyphony on: rms %.4f\n", rms);
+            check(bridge->voiceNote(0) == 48 && rms > 1e-3, "polyOnWithLatchedNote");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setParameter(*p, "midipitch", 1.0f);
+            auto four = notes({ 48, 55, 64, 71 });
+            render(*p, 0.1, &four);
+            setParameter(*p, "poly", 1.0f);
+            render(*p, 0.1);
+            check(bridge->voiceNote(0) == 71 && bridge->voiceNote(1) == 55 && bridge->voiceNote(2) == 64, "polyOnWithHeldKeys");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            render(*p, 0.1, &chord);
+            setParameter(*p, "poly", 0.0f);
+            render(*p, 1.0);
+            check(!bridge->polyMidiActive() && bridge->midiPitchActive() && std::abs(bridge->soundingNote() - 64.0f) < 0.5f, "polyOffAfterChord");
+        }
+        {
+            auto p = fresh(44100.0);
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            const double rms = renderRms(*p, 44100.0, 3.0, 1.0, &chord);
+            std::printf("  chord at 44.1 kHz: rms %.4f\n", rms);
+            check(rms > 1e-3, "chordAt44100");
+        }
+        {   // Nothing allocates with polyphony on and notes arriving past the three voices.
+            auto p = fresh();
+            setPolyMidi(*p);
+            juce::AudioBuffer<float> buffer(2, 512);
+            juce::MidiBuffer midi;
+            for (int i = 0; i < 6; ++i) midi.addEvent(juce::MidiMessage::noteOn(1, 40 + 7 * i, (juce::uint8) 100), 10 + i);
+            midi.addEvent(juce::MidiMessage::noteOff(1, 47), 200);
+            midi.addEvent(juce::MidiMessage::allNotesOff(1), 300);
+            gAllocations = 0;
+            malloc_logger = countAllocation;
+            tCountAllocations = true;
+            for (int b = 0; b < 100; ++b) p->processBlock(buffer, midi);
+            tCountAllocations = false;
+            malloc_logger = nullptr;
+            std::printf("  allocations in 100 polyphonic blocks: %d\n", gAllocations.load());
+            check(gAllocations.load() == 0, "polyAudioPathDoesNotAllocate");
+        }
+    }
+
     {   // Screen readers can name every knob.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         check(openEditor(*p)->slider("fbgain")->getTitle() == "Feedback", "feedbackHasATitle");

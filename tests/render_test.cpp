@@ -194,7 +194,17 @@ static bool presetTests(const char* outDir) {
         DroseraCore core; core.Init();
         for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, pr.knob[i]);
         core.SetEchoWarp(pr.echoHalve);
-        if (pr.midiGate) { core.SetMidiPitch(true, 48.0f); core.SetGate(true, true); }  // as if a note were held
+        core.SetPolyphony(pr.poly);
+        core.SetCoupling(pr.coupling);
+        core.SetIntervals(pr.interval2, pr.interval3);
+        if (pr.midiGate) {  // as if a note were held, or a chord on a polyphonic preset
+            core.SetMidiPitch(true, 48.0f);
+            core.SetGate(true, true);
+            if (pr.poly) {
+                core.SetVoiceNote(1, 52.0f); core.SetVoiceNote(2, 55.0f);
+                core.SetVoiceGate(1, true, true); core.SetVoiceGate(2, true, true);
+            }
+        }
         const size_t total = 48000 * 10;
         std::vector<float> L(total), R(total);
         for (size_t pos = 0; pos < total; pos += 64) core.Render(nullptr, &L[pos], &R[pos], 64);
@@ -215,6 +225,9 @@ static bool presetTests(const char* outDir) {
 
 static void applyPreset(DroseraCore& core, const infrasonic::Preset& pr) {
     for (int k = 0; k < DroseraCore::NumParams; ++k) core.SetParam((DroseraCore::Param)k, pr.knob[k]);
+    core.SetPolyphony(pr.poly);
+    core.SetCoupling(pr.coupling);
+    core.SetIntervals(pr.interval2, pr.interval3);
 }
 
 static bool noAllocationOnRender() {
