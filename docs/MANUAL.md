@@ -117,7 +117,7 @@ Interval 3, limited to notes 16 to 84.
   follows its interval, so the voices rarely land on one pitch. The sound is bright and moves, and the intervals are
   only a starting point.
 
-LOCK does nothing with POLY off or under MIDI Pitch. Under MIDI the intervals dim and show each voice's real note,
+LOCK does nothing with POLY off or while a MIDI note is in control. Under MIDI the intervals dim and show each voice's real note,
 tagged **MIDI**. Frequency and Body show the first voice.
 
 **Voice assignment** (MIDI Pitch and POLY on). Each new note takes a voice that has never played, then the voice
@@ -138,11 +138,14 @@ other 12 turns POLY off.
 
 ## Known limits
 
-- With MIDI Pitch on, notes 16 to 18 and note 80 may stay silent in some settings, because the loop does not have
+- With MIDI Pitch or LOCK on, notes 16 to 18 and note 80 may stay silent in some settings, because the loop does not have
   the gain to oscillate there. Note 16 can also sound on the wrong partial, about 11 semitones sharp.
 - With POLY on and Coupling above 0, the notes can move each other's pitch. From the knobs with LOCK off the voices can
   leave their intervals. Under MIDI, with no reverb, the chords tested with roots 24 to 60 stayed within 5 cents of their notes at
   100 %, which is not promised for every chord or setting.
+- With MIDI Pitch or LOCK on, a note far below Highpass or far above Lowpass cannot sustain, so that string goes quiet or
+  silent. At Frequency 0.43 this starts with Highpass at about 0.6. Lower Highpass, raise Lowpass, or turn LOCK off:
+  the free drone finds another resonance instead.
 - With MIDI Pitch or LOCK on and Body at about 0.7 or more, a few chord notes sit up to about 60 cents off, at any Coupling,
   on a neighbouring Body resonance.
 - Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. With POLY on,

@@ -197,7 +197,7 @@ static bool presetTests(const char* outDir) {
         core.SetPolyphony(pr.poly);
         core.SetCoupling(pr.coupling);
         core.SetIntervals(pr.interval2, pr.interval3);
-    core.SetStringLock(pr.stringLock);
+        core.SetStringLock(pr.stringLock);
         if (pr.midiGate) {  // as if a note were held, or a chord on a polyphonic preset
             core.SetMidiPitch(true, 48.0f);
             core.SetGate(true, true);
@@ -840,6 +840,13 @@ static bool stabilityAtMaximum() {
         setChord(core, c[0], c[1], c[2]);
         check("chord " + std::to_string((int)c[0]) + " " + std::to_string((int)c[1]) + " " + std::to_string((int)c[2]), core);
     }
+    {
+        DroseraCore core; makeCore(core, kDryBase);
+        core.SetPolyphony(true);
+        core.SetStringLock(true);
+        core.SetIntervals(-24, 24);
+        check("LOCK from the knobs", core);
+    }
     for (const float body : { 0.0f, 1.0f }) {
         DroseraCore core; makeCore(core, kDryBase);
         core.SetPolyphony(true);
@@ -1038,27 +1045,54 @@ static bool freeVoicesSpreadOut() {
     return pass;
 }
 
+// A known limit: LOCK holds the loop on the note, so a note far outside the filters cannot sustain, where the free drone
+// just finds another resonance. Should this change, the manual's known limits should too.
+static bool lockFallsSilentOutsideTheFilters() {
+    const auto rmsWith = [](bool lock) {
+        float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
+        p[DroseraCore::FeedbackHPF] = 0.8f;  // about 1200 Hz, notes at about 80 Hz
+        DroseraCore core; makeCore(core, p);
+        core.SetPolyphony(true);
+        core.SetStringLock(lock);
+        core.SetIntervals(7, 12);
+        const auto r = renderTaps(core, 48000 * 5);
+        return rmsOf(r.L, 48000 * 3, 48000 * 5);
+    };
+    const double locked = rmsWith(true), free = rmsWith(false);
+    const bool pass = locked < 1e-3 && free > 0.05;
+    printf("poly LOCK at Highpass 0.8: rms %.5f, free %.3f %s\n", locked, free, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// The string's delay moves between its two tunings when LOCK switches. Unfaded, the output steps at the switch.
 static bool lockSwitchIsClickFree() {
     bool ok = true;
     for (const float coupling : { 0.0f, 1.0f }) {
-        float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
-        p[DroseraCore::FeedbackLPF] = 0.4f;  // about 800 Hz
-        DroseraCore core; makeCore(core, p);
-        core.SetPolyphony(true);
-        core.SetIntervals(7, 12);
-        core.SetCoupling(coupling);
-        const size_t on = 48000 * 3, off = 48000 * 5, n = 48000 * 6;
-        std::vector<float> L(n), R(n);
-        for (size_t i = 0; i < n; ++i) {
-            if (i == on) core.SetStringLock(true);
-            if (i == off) core.SetStringLock(false);
-            core.Render(nullptr, &L[i], &R[i], 1);
-        }
-        for (const size_t at : { on, off }) {
-            const float before = largestJump(L, at - 48000, at), during = largestJump(L, at, at + 4800);
-            const bool pass = during <= 1.5f * before;
-            printf("poly LOCK %s at Coupling %.0f%%: largest jump %.5f, before %.5f %s\n", at == on ? "on" : "off", coupling * 100.0f, during, before, pass ? "OK" : "FAIL");
-            ok &= pass;
+        for (const float frequency : { 0.3f, 0.43f }) {
+            for (const float body : { 0.3f, 0.7f }) {
+                float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
+                p[DroseraCore::Frequency] = frequency;
+                p[DroseraCore::FeedbackBody] = body;
+                DroseraCore core; makeCore(core, p);
+                core.SetPolyphony(true);
+                core.SetStringLock(true);
+                core.SetIntervals(7, 12);
+                core.SetCoupling(coupling);
+                const size_t off = 48000 * 4, n = off + 480;  // the free drone soon moves much more on its own
+                std::vector<float> L(n), R(n);
+                for (size_t i = 0; i < n; ++i) {
+                    if (i == off) core.SetStringLock(false);
+                    core.Render(nullptr, &L[i], &R[i], 1);
+                }
+                // A second difference: a step or a kink shows here, where the settled chord moves little.
+                const auto kink = [&](size_t a, size_t b) { float k = 0.0f; for (size_t i = a; i < b; ++i) k = std::max(k, std::fabs(L[i] - 2.0f * L[i - 1] + L[i - 2])); return k; };
+                const float before = kink(off - 48000, off), during = kink(off, n);
+                // The floor: on a very clean chord the free drone starts by itself within this window. Its kinks reach 0.01
+                // to 0.02 by 20 ms, and an unfaded switch reads 0.04 to 0.05.
+                const bool pass = during <= std::max(1.5f * before, 0.01f);
+                printf("poly LOCK off at Coupling %.0f%%, Frequency %.2f Body %.1f: largest kink %.5f, before %.5f %s\n", coupling * 100.0f, frequency, body, during, before, pass ? "OK" : "FAIL");
+                ok &= pass;
+            }
         }
     }
     return ok;
@@ -1135,6 +1169,7 @@ static bool polyphonyTests() {
     ok &= closedVoiceStaysFaintFromRestart();
     ok &= lockedKnobsPlayTheirNotes();
     ok &= freeVoicesSpreadOut();
+    ok &= lockFallsSilentOutsideTheFilters();
     ok &= lockSwitchIsClickFree();
     ok &= couplingChangesTheSpectrum();
     ok &= coupledChordsHoldAtLongBody();

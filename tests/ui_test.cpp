@@ -375,8 +375,7 @@ static void editorTests() {
         render(*p, 0.1);
         editor->refreshDisplay(dt);
         check(editor->tag("body") == "SNAP" && editor->tag("freq").isEmpty() && editor->slider("body")->getAlpha() < 1.0f, "lockSnapsBody");
-        setParameter(*p, "polylock", 0.0f);
-        render(*p, 0.1);
+        setParameter(*p, "polylock", 0.0f);  // with no audio running, as a host may be stopped
         editor->refreshDisplay(dt);
         check(editor->tag("body").isEmpty(), "freeBodyHasNoTag");
 
@@ -784,6 +783,7 @@ static void stateTests() {
     param("coupling")->setValueNotifyingHost(0.4f);
     param("interval2")->setValueNotifyingHost(param("interval2")->convertTo0to1(3.0f));
     param("interval3")->setValueNotifyingHost(param("interval3")->convertTo0to1(-12.0f));
+    param("polylock")->setValueNotifyingHost(0.0f);
     param("freq")->setValueNotifyingHost(0.1f);
     param("fbgain")->setValueNotifyingHost(0.1f);
     param("lpf")->setValueNotifyingHost(0.1f);
@@ -793,6 +793,7 @@ static void stateTests() {
     check(isDefault("coupling"), "old state: Coupling returns to its default");
     check(isDefault("interval2"), "old state: Interval 2 returns to default");
     check(isDefault("interval3"), "old state: Interval 3 returns to default");
+    check(isDefault("polylock"), "old state: LOCK returns to default");
     // kSavedValues in plugin_host_test
     check(std::abs(param("freq")->getValue() - 0.61f) < 0.001f, "old state: Frequency loads");
     check(std::abs(param("fbgain")->getValue() - 0.83f) < 0.001f, "old state: Feedback loads");

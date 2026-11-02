@@ -210,7 +210,7 @@ public:
 
 private:
     bool midiPitchActive() const override { return midiPitchActive_.load(); }
-    bool bodySnapped() const override { return midiPitchActive_.load() || polyLocked_.load(); }
+    bool bodySnapped() const override { return midiPitchActive_.load() || (polyLocked_.load() && polyRaw->load() > 0.5f && stringLockRaw->load() > 0.5f); }
     float soundingNote() const override { return core->PublishedNote(); }
     bool polyMidiActive() const override { return polyMidiActive_.load(); }
     float voiceNote(int voice) const override { return voiceNotes_[voice].load(); }

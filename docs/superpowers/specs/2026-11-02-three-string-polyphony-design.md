@@ -117,7 +117,7 @@ Frequency's 0.2 s glide. The Body knob stays single. The published note and Body
 **Without MIDI**, the pitches are Frequency, Frequency + Interval 2 and Frequency + Interval 3, clamped to notes 16 to
 84. A recording from a real host showed why a choice is needed: with a shared Body, all voices can settle on one
 resonance (175 Hz for 90 s of it). At default knobs, across 42 settings of Frequency and Body, two or more voices shared a
-pitch in 16, and the intervals were right in 1. String Lock chooses:
+pitch in 13 to 16, depending on the window measured, and the intervals were right in 1. String Lock chooses:
 
 - **On:** tuned as under MIDI, with the snapped Body, band-passes and phase compensation. No voices share a pitch, the
   intervals are right in 35 of 42, and with no reverb within 1 cent. Dark and full: 92% of the power is below 300 Hz.
@@ -125,7 +125,8 @@ pitch in 16, and the intervals were right in 1. String Lock chooses:
   in 6 of 42. Bright and moving, like the free drone.
 
 Both are kept because they are different instruments. String Lock has no effect with polyphony off, so renders there do
-not change, or under MIDI Pitch, which is already tuned.
+not change, or while a MIDI note is in control, which is already tuned. Its cost is the one MIDI has: a note far outside
+the filters cannot sustain, so with String Lock on, a string goes silent where the free drone finds another resonance.
 
 **With MIDI Pitch on and polyphony on:**
 

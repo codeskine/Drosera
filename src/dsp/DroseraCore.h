@@ -87,6 +87,7 @@ public:
         pushControls();
         for (size_t i = 0; i < n; ++i) {
             if (phase_ == 0) {
+                advanceTuningBlend();
                 registry_.Process();
                 if (engine_->PolyRunning()) voice_registry_.Process();
             }
@@ -127,6 +128,7 @@ private:
 
     void pushControls() {
         const bool imm = first_;  // jump to initial values instead of gliding from defaults
+        if (imm) tuning_blend_.fill(tunedToNote() ? 1.0f : 0.0f);
         // The Frequency parameter spans notes kNoteMin..kNoteMax. The knob keeps the firmware's
         // 16..72 range (the first 56/80 of the span); MIDI may use the whole span.
         const float freqNorm = midi_pitch_on_
@@ -162,6 +164,7 @@ private:
         if (!engine_->PolyRunning()) return;
         const bool jump = imm || !voices_running_;  // a pitch must not glide from stale values
         voices_running_ = true;
+        if (jump) tuning_blend_[1] = tuning_blend_[2] = tunedToNote() ? 1.0f : 0.0f;
         const float knobNote = kNoteMin + norm_[Frequency] * (kKnobNoteMax - kNoteMin);
         for (size_t v = 1; v < kNumVoices; ++v) {
             voice_registry_.Update(VoiceParam(Voice1Pitch + v - 1), midi_pitch_on_ ? midi_pitch_[v] : knobNote + (float)interval_[v], jump);
@@ -215,19 +218,20 @@ private:
                 [&e, v](float amount) { e.SetCouplingReceive(v, amount); });
     }
 
-    // Knob mode: values go straight to the engine (firmware behaviour).
-    // MIDI mode: left alone the loop oscillates where the string's resonances (multiples of 1/T)
+    // Knob mode: values go straight to the engine (firmware behaviour), with voices 1 and 2's Body following their interval.
+    // MIDI mode, and the knobs with polyphony and String Lock on: left alone the loop oscillates where the string's resonances (multiples of 1/T)
     // and the Body delay's (multiples of 1/Body) coincide, which is rarely the note. So Body is
     // snapped to n*T (both comb filters then line up on the note's harmonics), a bandpass on the
     // note in the feedback path selects the fundamental, and the Body delay glides faster.
     void applyPitchAndBody(size_t voice) {
         FeedbackSynth::Engine& e = *engine_;
         published_note_[voice].store(nn_[voice], std::memory_order_relaxed);
-        if (!midi_pitch_on_ && !(string_lock_ && poly_)) {
-            published_body_s_[voice].store(body_s_, std::memory_order_relaxed);
+        if (!tunedToNote()) {
+            const float delay = voice == 0 ? body_s_ : body_s_ * std::pow(2.0f, (nn_[0] - nn_[voice]) / 12.0f);
+            published_body_s_[voice].store(delay, std::memory_order_relaxed);
             if (tracking_[voice]) { e.SetFeedbackTracking(voice, false, 0.0f); e.SetFeedbackDelayLag(voice, kKnobDelayLag); tracking_[voice] = false; }
-            e.SetStringPitch(voice, nn_[voice]);
-            e.SetFeedbackDelay(voice, voice == 0 ? body_s_ : body_s_ * std::pow(2.0f, (nn_[0] - nn_[voice]) / 12.0f));
+            e.SetStringPitch(voice, tuning_blend_[voice] > 0.0f ? blendedStringNote(voice) : nn_[voice]);
+            e.SetFeedbackDelay(voice, delay);
             return;
         }
         if (!tracking_[voice]) { e.SetFeedbackDelayLag(voice, kMidiDelayLag); tracking_[voice] = true; }
@@ -240,16 +244,33 @@ private:
         const float toSeconds = 1.0f / (2.0f * float(M_PI) * f);
         const auto stringLoop = stringLoopResponse(z1);
         const auto outerFilters = stringLoop * biquadResponse(z1, LP, lpf_hz_) * biquadResponse(z1, HP, hpf_hz_);
-        const float stringPhase = std::arg(stringLoop);
         const float outerPhase = std::arg(outerFilters);
-        const float stringPeriod = std::max(T + stringPhase * toSeconds, 1.0f / 12000.0f);
-        e.SetStringPitch(voice, 69.0f + 12.0f * std::log2(1.0f / stringPeriod / 440.0f));
+        e.SetStringPitch(voice, blendedStringNote(voice));
         const float delay = std::max(n * T + outerPhase * toSeconds, 1.0f / kRate);
         published_body_s_[voice].store(delay, std::memory_order_relaxed);
         e.SetFeedbackDelay(voice, delay);
         // Give back what the filters take at the note, or low notes (below the string's
         // 76 Hz DC blocker) lose the loop gain to oscillate on the fundamental.
         e.SetFeedbackTracking(voice, true, f, std::min(1.0f / std::max(std::abs(outerFilters), 1e-3f), kMaxMakeup), couplingMakeup());
+    }
+
+    bool tunedToNote() const { return midi_pitch_on_ || (string_lock_ && poly_); }
+
+    // The string's period is lengthened by the phase its own loop filters add at the note. Going in or out of tuning to
+    // the note fades this in or out, or the string's delay would jump by that amount, which clicks.
+    float blendedStringNote(size_t voice) const {
+        const float f = daisysp::mtof(nn_[voice]);
+        const std::complex<float> z1 = std::polar(1.0f, -2.0f * float(M_PI) * f / kRate);
+        const float stringPhase = std::arg(stringLoopResponse(z1));
+        const float stringPeriod = std::max(1.0f / f + stringPhase / (2.0f * float(M_PI) * f), 1.0f / 12000.0f);
+        const float tuned = 69.0f + 12.0f * std::log2(1.0f / stringPeriod / 440.0f);
+        return tuning_blend_[voice] >= 1.0f ? tuned : nn_[voice] + tuning_blend_[voice] * (tuned - nn_[voice]);
+    }
+
+    void advanceTuningBlend() {
+        const float target = tunedToNote() ? 1.0f : 0.0f;
+        if (!poly_) { tuning_blend_.fill(target); return; }  // one voice behaves as it always has
+        for (float& b : tuning_blend_) b += daisysp::fclamp(target - b, -kTuningBlendStep, kTuningBlendStep);
     }
 
     // Gives back what the band-pass on received Coupling takes from the other notes (a fifth away it passes 0.39), or
@@ -282,6 +303,7 @@ private:
     static constexpr float kKnobDelayLag = 0.2f;  // same as FeedbackSynth::Engine::Init
     static constexpr float kMidiDelayLag = 0.03f;
     static constexpr float kMaxMakeup = 8.0f;
+    static constexpr float kTuningBlendStep = 1.0f / (0.05f * kRate / kControlBlock);  // 50 ms
     static constexpr float kCouplingMakeup = 2.5f, kCouplingFullBody = 0.025f;
 
     std::unique_ptr<FeedbackSynth::Engine> engine_;
@@ -297,6 +319,7 @@ private:
     std::array<bool, kNumVoices> gate_enabled_ {}, gate_open_ {};
     std::array<float, kNumVoices> midi_pitch_ { 40.0f, 40.0f, 40.0f };
     bool poly_ = false, voices_running_ = false, string_lock_ = false;
+    std::array<float, kNumVoices> tuning_blend_ {};
     float coupling_norm_ = 0.0f;
     std::array<int, kNumVoices> interval_ { 0, 7, 12 };
     int recovery_count_ = 0;
