@@ -40,10 +40,21 @@ class Engine {
 
         void SetOutputLevel(const float level);
 
+        // Plugin extension, not in the firmware (off by default): voices 1 and 2 fade in and out
+        // over 20 ms, or jump there if immediate. When they have faded out they are cleared, Init
+        // included, so their settings must be sent again. Same thread as Process.
+        void SetPolyphony(bool on, bool immediate = false);
+        // Linear gain from the other voices' taps to each voice's loop input
+        void SetCoupling(const float gain) { coupling_ = gain; }
+        // True from switch-on until the ramp ends on the way off
+        bool PolyRunning() const { return poly_running_; }
+        // Last sample's samp, before the ramp. Zero while polyphony is not running.
+        float VoiceTap(const size_t voice, const size_t channel) const { return tap_[voice][channel]; }
+
         void Process(float in, float &outL, float &outR);
 
     public:
-        static constexpr size_t kNumVoices = 1;
+        static constexpr size_t kNumVoices = 3;
 
     private:
         // long enough for 5s at 48kHz
@@ -51,12 +62,22 @@ class Engine {
 
         float echo_send_ = 0.0f;
         float output_level_ = 0.5f;
+        float sample_rate_ = 0.0f;
+
+        bool poly_on_ = false;
+        bool poly_running_ = false;
+        float ramp_ = 0.0f;
+        float coupling_ = 0.0f;
+        float tap_[kNumVoices][2] = {};
 
         FeedbackVoice voices_[kNumVoices];
-        daisysp::WhiteNoise noise_;
+        daisysp::WhiteNoise noise_[kNumVoices];
 
         using EchoDelayPtr = std::unique_ptr<EchoDelay<kMaxEchoDelaySamp>>;
         EchoDelayPtr echo_delay_[2];
+
+        void ProcessPoly(float in, float &outL, float &outR);
+        void StopPoly();
 
         Engine(const Engine &other) = delete;
         Engine(Engine &&other) = delete;

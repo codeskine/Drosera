@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <memory>
 #include <new>
 #include <string>
 #include <vector>
@@ -309,6 +310,198 @@ static bool publishedValues() {
     return ok;
 }
 
+// The Engine's three voices, driven directly: DroseraCore does not drive voices 1 and 2.
+using infrasonic::FeedbackSynth::Engine;
+
+static std::unique_ptr<Engine> makeEngine(float n0, float n1, float n2) {
+    auto e = std::make_unique<Engine>();
+    e->Init(48000.0f);
+    const float notes[] = { n0, n1, n2 };
+    for (size_t v = 0; v < Engine::kNumVoices; ++v) {
+        e->SetStringPitch(v, notes[v]);
+        e->SetFeedbackGain(v, 0.0f);
+    }
+    e->SetReverbMix(0.0f);
+    e->SetEchoDelaySendAmount(0.0f);
+    return e;
+}
+
+static float largestJump(const std::vector<float>& v, size_t a, size_t b) {
+    float largest = 0.0f;
+    for (size_t i = std::max(a, size_t(1)); i < b; ++i) largest = std::max(largest, std::fabs(v[i] - v[i - 1]));
+    return largest;
+}
+
+static bool engineIndependentAtZeroCoupling() {
+    auto a = makeEngine(48.0f, 55.0f, 64.0f);
+    auto b = makeEngine(48.0f, 40.0f, 70.0f);
+    bool same = true, different = false;
+    for (auto* e : { a.get(), b.get() }) { e->SetPolyphony(true, true); e->SetCoupling(0.0f); }
+    for (int i = 0; i < 48000 * 2; ++i) {
+        float l, r;
+        a->Process(0.0f, l, r);
+        b->Process(0.0f, l, r);
+        same &= a->VoiceTap(0, 0) == b->VoiceTap(0, 0) && a->VoiceTap(0, 1) == b->VoiceTap(0, 1);
+        different |= a->VoiceTap(1, 0) != b->VoiceTap(1, 0);
+    }
+    const bool pass = same && different;
+    printf("engine, voice 0 independent at Coupling 0: same=%d others differ=%d %s\n", (int)same, (int)different, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool engineUnisonNotIdentical() {
+    auto e = makeEngine(48.0f, 48.0f, 48.0f);
+    e->SetPolyphony(true, true);
+    bool differ10 = false, differ21 = false;
+    for (int i = 0; i < 48000 * 2; ++i) {
+        float l, r;
+        e->Process(0.0f, l, r);
+        if (i < 24000) continue;
+        differ10 |= e->VoiceTap(1, 0) != e->VoiceTap(0, 0);
+        differ21 |= e->VoiceTap(2, 0) != e->VoiceTap(1, 0);
+    }
+    const bool pass = differ10 && differ21;
+    printf("engine, unison voices differ: 1/0=%d 2/1=%d %s\n", (int)differ10, (int)differ21, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool engineCouplingRingsAClosedVoice() {
+    const auto closedVoiceRms = [](float coupling) {
+        auto e = makeEngine(48.0f, 48.0f, 48.0f);
+        e->SetFeedbackGain(1, -60.0f);
+        e->SetFeedbackGain(2, -60.0f);
+        e->SetPolyphony(true, true);
+        e->SetCoupling(coupling);
+        std::vector<float> tap(48000 * 3);
+        for (size_t i = 0; i < tap.size(); ++i) {
+            float l, r;
+            e->Process(0.0f, l, r);
+            tap[i] = e->VoiceTap(1, 0);
+        }
+        return rmsOf(tap, 48000 * 2, tap.size());
+    };
+    const double without = closedVoiceRms(0.0f), with = closedVoiceRms(0.5f);
+    const double db = 20.0 * std::log10(with / std::max(without, 1e-12));
+    const bool pass = db >= 6.0;
+    printf("engine, Coupling rings a closed voice: %.6f -> %.6f (%+.1f dB) %s\n", without, with, db, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool engineRampClickFree() {
+    bool ok = true;
+    // The open filter is the loop as it stands. Its steady signal already jumps by a lot and would
+    // hide a step, so the low cutoff is what catches one.
+    for (const float lpf : { 18000.0f, 800.0f }) {
+        auto e = makeEngine(48.0f, 55.0f, 64.0f);
+        e->SetFeedbackLPFCutoff(lpf);
+        std::vector<float> L(48000 * 5), R(L.size());
+        for (size_t i = 0; i < L.size(); ++i) {
+            if (i == 48000 * 2) e->SetPolyphony(true);
+            if (i == 48000 * 4) e->SetPolyphony(false);
+            e->Process(0.0f, L[i], R[i]);
+        }
+        for (const size_t start : { size_t(48000 * 2), size_t(48000 * 4) }) {
+            for (const auto* v : { &L, &R }) {
+                const float before = largestJump(*v, start - 48000, start), during = largestJump(*v, start, start + 960);
+                const bool pass = during <= 1.5f * before;
+                printf("engine, LPF %5.0f Hz, ramp at %d s: largest jump %.5f, before %.5f %s\n", lpf, (int)(start / 48000), during, before, pass ? "OK" : "FAIL");
+                ok &= pass;
+            }
+        }
+    }
+    return ok;
+}
+
+static bool engineRampEnds() {
+    auto e = makeEngine(48.0f, 55.0f, 64.0f);
+    float l, r;
+    const bool offByDefault = !e->PolyRunning();
+    e->SetPolyphony(true);
+    const bool onAtOnce = e->PolyRunning();
+    for (int i = 0; i < 4800; ++i) e->Process(0.0f, l, r);
+    const bool onDuring = e->PolyRunning();
+    e->SetPolyphony(false);
+    for (int i = 0; i < 959; ++i) e->Process(0.0f, l, r);
+    const bool onAt959 = e->PolyRunning();
+    e->Process(0.0f, l, r);
+    e->Process(0.0f, l, r);
+    const bool offAt961 = !e->PolyRunning();
+    // Init jumps a ramp in progress to its end.
+    e->SetPolyphony(true);
+    e->Process(0.0f, l, r);
+    e->SetPolyphony(false);
+    e->Init(48000.0f);
+    const bool offAfterInit = !e->PolyRunning();
+    const bool pass = offByDefault && onAtOnce && onDuring && onAt959 && offAt961 && offAfterInit;
+    printf("engine, ramp end: default off=%d on=%d during=%d at 959=%d off at 961=%d off after Init=%d %s\n",
+           (int)offByDefault, (int)onAtOnce, (int)onDuring, (int)onAt959, (int)offAt961, (int)offAfterInit, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Once the ramp has ended the output is the plain sum, with no movement left in the ramp.
+static bool engineRampSettles() {
+    auto e = makeEngine(48.0f, 55.0f, 64.0f);
+    e->SetPolyphony(true);
+    float l, r, worst = 0.0f;
+    for (int i = 0; i < 4800; ++i) {
+        e->Process(0.0f, l, r);
+        const float sum = e->VoiceTap(0, 0) + e->VoiceTap(1, 0) + e->VoiceTap(2, 0);
+        if (i >= 960) worst = std::max(worst, std::fabs(l - 0.25f * sum * (1.0f / std::sqrt(3.0f))));
+    }
+    const bool pass = worst < 1e-5f;
+    printf("engine, ramp settles on the sum: largest error %.7f %s\n", worst, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool engineRestartsFromSilence() {
+    auto e = makeEngine(48.0f, 55.0f, 64.0f);
+    float l, r;
+    e->SetPolyphony(true);
+    float loud = 0.0f;
+    for (int i = 0; i < 48000; ++i) { e->Process(0.0f, l, r); loud = std::max(loud, std::fabs(e->VoiceTap(1, 0))); }
+    e->SetPolyphony(false);
+    for (int i = 0; i < 961; ++i) e->Process(0.0f, l, r);
+    e->SetPolyphony(true);
+    float peak = std::fabs(e->VoiceTap(1, 0));
+    for (int i = 0; i < 10; ++i) { e->Process(0.0f, l, r); peak = std::max(peak, std::fabs(e->VoiceTap(1, 0))); }
+    const bool pass = loud > 0.01f && peak < 0.01f;
+    printf("engine, restart from silence: peak %.6f (was %.3f) %s\n", peak, loud, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool engineRampReverses() {
+    bool ok = true;
+    for (const bool startOn : { true, false }) {  // the ramp stays near the top, or returns to 0 and clears the voices
+        auto e = makeEngine(48.0f, 55.0f, 64.0f);
+        e->SetPolyphony(startOn, true);
+        std::vector<float> L(48000 * 3), R(L.size());
+        bool on = startOn, finite = true;
+        for (size_t i = 0; i < L.size(); ++i) {
+            if (i >= 48000 * 2 && (i - 48000 * 2) % 240 == 0) { on = !on; e->SetPolyphony(on); }
+            e->Process(0.0f, L[i], R[i]);
+            finite &= std::isfinite(L[i]) && std::isfinite(R[i]);
+        }
+        const float before = largestJump(L, 48000, 48000 * 2), during = largestJump(L, 48000 * 2, L.size());
+        const bool pass = finite && during <= 1.5f * before;
+        printf("engine, ramp reversing from %s: finite=%d largest jump %.5f, before %.5f %s\n", startOn ? "on" : "off", (int)finite, during, before, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+static bool engineVoiceTests() {
+    bool ok = true;
+    ok &= engineIndependentAtZeroCoupling();
+    ok &= engineUnisonNotIdentical();
+    ok &= engineCouplingRingsAClosedVoice();
+    ok &= engineRampClickFree();
+    ok &= engineRampEnds();
+    ok &= engineRampSettles();
+    ok &= engineRestartsFromSilence();
+    ok &= engineRampReverses();
+    return ok;
+}
+
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
     //                  freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
@@ -329,6 +522,7 @@ int main(int argc, char** argv) {
     ok &= recoversFromNan();
     ok &= filtersClearOnInit();
     ok &= publishedValues();
+    ok &= engineVoiceTests();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }
