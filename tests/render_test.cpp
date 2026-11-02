@@ -261,6 +261,9 @@ static bool noAllocationOnRender() {
         core.SetGate(on, true);
         core.SetEchoWarp(on);
         core.SetStringLock((block / 40) % 2 == 1);
+        core.SetEchoPong((block / 50) % 2 == 1);
+        core.SetEchoDrive((float)(block % 100) / 100.0f);
+        core.SetEchoTone((float)(block % 70) / 70.0f);
         core.SetPolyphony(((block + 37) / 75) % 2 == 1);  // out of step, so that polyphony meets both pitch modes
         core.SetCoupling(on ? 1.0f : 0.0f);
         core.SetVoiceNote(1, 48.0f + (float)(block / 50 % 12));
@@ -1344,6 +1347,226 @@ static bool pongDelayTests() {
     return ok;
 }
 
+// Echo Pong through Engine and DroseraCore.
+static std::unique_ptr<Engine> makePongEngine(float lpf) {
+    auto e = makeEngine(48.0f, 55.0f, 64.0f);
+    e->SetFeedbackLPFCutoff(lpf);
+    e->SetEchoDelaySendAmount(0.5f);
+    e->SetEchoDelayTime(0.3f);
+    e->SetEchoDelayFeedback(0.6f);
+    return e;
+}
+
+static bool pongOnFromFirstBlock() {
+    auto e = makeEngine(48.0f, 55.0f, 64.0f);
+    e->SetPong(true, true);
+    DroseraCore core;
+    core.Init();
+    core.SetEchoPong(true);
+    float L[4], R[4];
+    core.Render(nullptr, L, R, 4);
+    const bool pass = e->PongMix() == 1.0f && core.PongMix() == 1.0f;
+    printf("pongOnFromFirstBlock: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// The limit is what the signal does on its own on either side of the switch: PONG is louder than the classic echo.
+static bool jumpsWithinLimit(const char* name, const std::vector<float>& v, size_t start, size_t ramp) {
+    const float limit = 1.2f * std::max(largestJump(v, start - 48000, start), largestJump(v, start + ramp, start + ramp + 48000));
+    const float during = largestJump(v, start, start + ramp);
+    const bool pass = during <= limit;
+    printf("%s at %.2f s: largest jump %.5f, limit %.5f %s\n", name, (double)start / 48000.0, during, limit, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongSwitchClickFree() {
+    bool ok = true;
+    for (const float lpf : { 18000.0f, 800.0f }) {
+        auto e = makePongEngine(lpf);
+        std::vector<float> L(48000 * 5 + 2000), R(L.size());
+        for (size_t i = 0; i < L.size(); ++i) {
+            if (i == 48000 * 2) e->SetPong(true);
+            if (i == 48000 * 4) e->SetPong(false);
+            e->Process(0.0f, L[i], R[i]);
+        }
+        for (const size_t start : { size_t(48000 * 2), size_t(48000 * 4) })
+            for (const auto* v : { &L, &R }) ok &= jumpsWithinLimit("pongSwitchClickFree", *v, start, 960);
+    }
+    return ok;
+}
+
+static bool pongSwitchReverses() {
+    auto e = makePongEngine(800.0f);
+    const size_t on = 48000 * 2, off = on + 240;
+    std::vector<float> L(48000 * 4), R(L.size());
+    float mixAfter = -1.0f;
+    for (size_t i = 0; i < L.size(); ++i) {
+        if (i == on) e->SetPong(true);
+        if (i == off) e->SetPong(false);
+        e->Process(0.0f, L[i], R[i]);
+        if (i == off + 960) mixAfter = e->PongMix();
+    }
+    const bool back = mixAfter == 0.0f;
+    printf("pongSwitchReverses: mix %.3f 20 ms after switching back %s\n", mixAfter, back ? "OK" : "FAIL");
+    return back & jumpsWithinLimit("pongSwitchReverses", L, on, 240 + 960) & jumpsWithinLimit("pongSwitchReverses", R, on, 240 + 960);
+}
+
+//                               freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
+static const float kPongMax[] = {0.43f, 0.75f, 0.30f, 0.90f, 0.20f, 0.00f, 0.50f, 1.00f, 0.00f, 1.00f, 0.70f};
+
+static void setPongCore(DroseraCore& core, const float* knobs, float drive) {
+    core.Init();
+    for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, knobs[i]);
+    core.SetEchoPong(true);
+    core.SetEchoDrive(drive);
+}
+
+struct Bounded { bool finite = true; double peak = 0.0; void add(const float* L, const float* R, size_t n) {
+    for (size_t i = 0; i < n; ++i) { finite &= std::isfinite(L[i]) && std::isfinite(R[i]); peak = std::max({peak, (double)std::fabs(L[i]), (double)std::fabs(R[i])}); }
+} };
+
+static bool pongBoundsAtMaximum() {
+    static DroseraCore core;
+    setPongCore(core, kPongMax, 1.0f);
+    core.SetPolyphony(true);
+    core.SetCoupling(1.0f);
+    static float L[64], R[64];
+    Bounded b;
+    for (int block = 0; block < 45000; ++block) { core.Render(nullptr, L, R, 64); b.add(L, R, 64); }  // 60 s
+    const bool pass = b.finite && b.peak <= 1.0001 && core.RecoveryCount() == 0;
+    printf("pongBoundsAtMaximum: peak %.3f, recoveries %d %s\n", b.peak, core.RecoveryCount(), pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongBouncesThroughCore() {
+    static DroseraCore core;
+    //                     freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb     vol
+    const float knobs[] = {0.43f, 1.00f, 0.30f, 0.90f, 0.20f, 0.00f, 0.50f, 1.00f, 0.44f, 0.467f, 0.70f};
+    setPongCore(core, knobs, 0.0f);
+    const double T = DroseraCore::EchoTimeSeconds(0.44f, false);
+    const size_t open = 48000 * 3, close = open + 9600, total = (size_t)((3.0 + 3.0 * T) * 48000.0);
+    std::vector<float> L(total), R(total);
+    for (size_t pos = 0; pos < total; pos += 64) {  // closed at first: Echo Time settles from its initial 5 s
+        core.SetGate(true, pos >= open && pos < close);
+        core.Render(nullptr, &L[pos], &R[pos], std::min<size_t>(64, total - pos));
+    }
+    bool ok = true;
+    for (int k = 1; k <= 2; ++k) {
+        const size_t a = open + (size_t)((k * T + 0.05) * 48000.0), b = a + 9600;
+        const double lOverR = dbOf(rmsOf(L, a, b), rmsOf(R, a, b));
+        const bool pass = k == 1 ? lOverR >= 6.0 : lOverR <= -6.0;
+        printf("pongBouncesThroughCore, repeat %d: L over R %.1f dB %s\n", k, lOverR, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+// A self-sustaining tail with nothing feeding it, which only Recover can stop. A NaN on the input does not always reach
+// the output, so as in recoversFromNan this calls Recover itself.
+static bool pongRecoversFromNan() {
+    static DroseraCore core;
+    setPongCore(core, kPongMax, 1.0f);
+    static float L[64], R[64], in[64];
+    for (int block = 0; block < 3000; ++block) core.Render(in, L, R, 64);  // 4 s
+    core.SetGate(true, false);
+    core.SetParam(DroseraCore::EchoSend, 0.0f);
+    std::vector<float> tail(48000);
+    for (size_t pos = 0; pos + 64 <= tail.size(); pos += 64) core.Render(in, &tail[pos], R, 64);
+    const double before = rmsOf(tail, 24000, 48000 - 64);
+    in[0] = std::numeric_limits<float>::quiet_NaN();
+    core.Render(in, L, R, 64);
+    in[0] = 0.0f;
+    core.Recover();
+    Bounded b;
+    for (int block = 0; block < 3000; ++block) {
+        core.Render(in, L, R, 64);
+        b.add(L, R, 64);
+        if (block >= 2250) for (size_t i = 0; i < 64; ++i) tail[(size_t)(block - 2250) * 64 + i] = L[i];
+    }
+    const double after = rmsOf(tail, 0, 48000 - 64);
+    const bool pass = before > 0.01 && after < 1e-3 && b.finite && core.PongMix() == 1.0f;
+    printf("pongRecoversFromNan: tail RMS %.5f before, %.6f after, mix %.2f %s\n", before, after, core.PongMix(), pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongSurvivesTimeSweep() {
+    static DroseraCore core;
+    setPongCore(core, kPongMax, 1.0f);
+    static float L[64], R[64];
+    Bounded b;
+    for (int block = 0; block < 22500; ++block) {  // 30 s
+        core.SetParam(DroseraCore::EchoTime, (block / 375) % 2 == 0 ? 0.0f : 1.0f);  // every 0.5 s
+        core.Render(nullptr, L, R, 64);
+        b.add(L, R, 64);
+    }
+    const bool pass = b.finite && b.peak <= 1.0001 && core.RecoveryCount() == 0;
+    printf("pongSurvivesTimeSweep: peak %.3f, recoveries %d %s\n", b.peak, core.RecoveryCount(), pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool everyPresetWithPongOn() {
+    bool ok = true;
+    for (const auto& pr : infrasonic::kFactoryPresets) {
+        DroseraCore core;
+        core.Init();
+        applyPreset(core, pr);
+        core.SetEchoWarp(pr.echoHalve);
+        core.SetEchoPong(true);
+        core.SetEchoDrive(1.0f);
+        if (pr.midiGate) {
+            core.SetMidiPitch(true, 48.0f);
+            core.SetGate(true, true);
+            if (pr.poly) {
+                core.SetVoiceNote(1, 52.0f); core.SetVoiceNote(2, 55.0f);
+                core.SetVoiceGate(1, true, true); core.SetVoiceGate(2, true, true);
+            }
+        }
+        const size_t total = 48000 * 10;
+        std::vector<float> L(total), R(total);
+        for (size_t pos = 0; pos < total; pos += 64) core.Render(nullptr, &L[pos], &R[pos], 64);
+        Bounded b;
+        b.add(L.data(), R.data(), total);
+        const bool audible = rmsOf(L, total / 2, total) > 1e-3 && rmsOf(R, total / 2, total) > 1e-3;
+        const bool pass = b.finite && b.peak <= 1.0001 && (audible != pr.needsInput);
+        if (!pass) printf("everyPresetWithPongOn %s: peak %.3f, RMS %.5f, %.5f\n", pr.name, b.peak, rmsOf(L, total / 2, total), rmsOf(R, total / 2, total));
+        ok &= pass;
+    }
+    printf("everyPresetWithPongOn: %s\n", ok ? "OK" : "FAIL");
+    return ok;
+}
+
+static std::vector<float> renderPongPreset(size_t blockSize) {
+    DroseraCore core;
+    core.Init();
+    applyPreset(core, infrasonic::kFactoryPresets[0]);
+    core.SetEchoPong(true);
+    const size_t total = 48000 * 5;
+    std::vector<float> L(total), R(total);
+    for (size_t pos = 0; pos < total; pos += blockSize) core.Render(nullptr, &L[pos], &R[pos], std::min(blockSize, total - pos));
+    L.insert(L.end(), R.begin(), R.end());
+    return L;
+}
+
+static bool pongIndependentOfBlockSize() {
+    const bool pass = renderPongPreset(64) == renderPongPreset(480);
+    printf("pongIndependentOfBlockSize: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongEngineTests() {
+    bool ok = true;
+    ok &= pongOnFromFirstBlock();
+    ok &= pongSwitchClickFree();
+    ok &= pongSwitchReverses();
+    ok &= pongBoundsAtMaximum();
+    ok &= pongBouncesThroughCore();
+    ok &= pongRecoversFromNan();
+    ok &= pongSurvivesTimeSweep();
+    ok &= everyPresetWithPongOn();
+    ok &= pongIndependentOfBlockSize();
+    return ok;
+}
+
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
     //                  freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
@@ -1367,6 +1590,7 @@ int main(int argc, char** argv) {
     ok &= engineVoiceTests();
     ok &= polyphonyTests();
     ok &= pongDelayTests();
+    ok &= pongEngineTests();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }
