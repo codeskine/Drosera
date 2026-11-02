@@ -624,14 +624,15 @@ static void editorTests() {
                 std::printf("  released 55: its level %+.1f dB, 48's %+.1f dB\n", after55 - before55, after48 - before48);
                 check(after55 < before55 - 20.0 && after48 > before48 - 6.0, "releasedNoteCloses");
             }
-            {
+            {   // Voices 1 and 2 sound at their bent notes about as strongly as voice 0 does at its own, and no longer at the unbent ones
                 auto p = keys();
                 auto chord = notes({ 48, 55, 64 });
                 chord.addEvent(juce::MidiMessage::pitchWheel(1, 16383), 0);
                 render(*p, 3.0, &chord);
-                const double at57 = level(*p, 57), at55 = level(*p, 55);
-                std::printf("  bend +2: 57 is %+.1f dB over 55\n", at57 - at55);
-                check(at57 > at55 + 10.0, "bendMovesAllVoices");
+                const double v0 = level(*p, 50), v1 = level(*p, 57), v2 = level(*p, 66), old1 = level(*p, 55), old2 = level(*p, 64);
+                std::printf("  bend +2: voice 0 at 50 %+.1f dB, voice 1 at 57 %+.1f dB (55: %+.1f), voice 2 at 66 %+.1f dB (64: %+.1f)\n",
+                            v0, v1, old1, v2, old2);
+                check(v1 > v0 - 15.0 && v2 > v0 - 15.0 && v1 > old1 + 10.0 && v2 > old2 + 10.0, "bendMovesAllVoices");
             }
         }
         {   // Nothing allocates with polyphony on and notes arriving past the three voices.
