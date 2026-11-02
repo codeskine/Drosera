@@ -731,6 +731,45 @@ static void editorTests() {
     }
 }
 
+// A project from before polyphony, opened over an instance already in use: what it does not hold returns to its default.
+static void stateTests() {
+    // The fixture was saved by JUCE's VST3 host, which wraps the plugin's own state. Calling the plugin with the
+    // wrapper is ignored, as its root tag is not the plugin's, so unwrap it.
+    juce::MemoryBlock file, state;
+    const bool read = juce::File(DROSERA_STATE_FIXTURE).loadFileAsData(file);
+    const auto wrapper = read ? juce::AudioProcessor::getXmlFromBinary(file.getData(), (int) file.getSize()) : nullptr;
+    const auto* component = wrapper != nullptr ? wrapper->getChildByName("IComponent") : nullptr;
+    const bool unwrapped = component != nullptr && state.fromBase64Encoding(component->getAllSubText());
+    const auto plugin = unwrapped ? juce::AudioProcessor::getXmlFromBinary(state.getData(), (int) state.getSize()) : nullptr;
+    check(plugin != nullptr, "old state: fixture holds the plugin's");
+    if (plugin == nullptr) return;
+    std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+    const auto param = [&](const char* id) -> juce::RangedAudioParameter* {
+        for (auto* candidate : p->getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(candidate))
+                if (ranged->paramID == id) return ranged;
+        return nullptr;
+    };
+    const auto isDefault = [&](const char* id) { return std::abs(param(id)->getValue() - param(id)->getDefaultValue()) < 0.001f; };
+    param("poly")->setValueNotifyingHost(1.0f);
+    param("coupling")->setValueNotifyingHost(0.4f);
+    param("interval2")->setValueNotifyingHost(param("interval2")->convertTo0to1(3.0f));
+    param("interval3")->setValueNotifyingHost(param("interval3")->convertTo0to1(-12.0f));
+    param("freq")->setValueNotifyingHost(0.1f);
+    param("fbgain")->setValueNotifyingHost(0.1f);
+    param("lpf")->setValueNotifyingHost(0.1f);
+    check(! isDefault("poly") && ! isDefault("coupling"), "old state: instance modified first");
+    p->setStateInformation(state.getData(), (int) state.getSize());
+    check(isDefault("poly"), "old state: POLY returns to its default");
+    check(isDefault("coupling"), "old state: Coupling returns to its default");
+    check(isDefault("interval2"), "old state: Interval 2 returns to default");
+    check(isDefault("interval3"), "old state: Interval 3 returns to default");
+    // kSavedValues in plugin_host_test
+    check(std::abs(param("freq")->getValue() - 0.61f) < 0.001f, "old state: Frequency loads");
+    check(std::abs(param("fbgain")->getValue() - 0.83f) < 0.001f, "old state: Feedback loads");
+    check(std::abs(param("lpf")->getValue() - 0.37f) < 0.001f, "old state: Lowpass loads");
+}
+
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     tapTests();
@@ -738,6 +777,7 @@ int main() {
     readoutTests();
     plantTests();
     editorTests();
+    stateTests();
     std::printf(failures == 0 ? "ALL OK\n" : "SOME FAILED\n");
     return failures == 0 ? 0 : 1;
 }

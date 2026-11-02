@@ -112,7 +112,8 @@ if(DROSERA_BUILD_PLUGIN)
     juce_add_console_app(ui_test PRODUCT_NAME "ui_test")
     target_sources(ui_test PRIVATE tests/ui_test.cpp ${DROSERA_PLUGIN_SOURCES})
     target_include_directories(ui_test PRIVATE tests src/plugin)
-    target_compile_definitions(ui_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_compile_definitions(ui_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+        DROSERA_STATE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/state-baseline.bin")
     target_link_libraries(ui_test PRIVATE DroseraDSP
         juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 endif()

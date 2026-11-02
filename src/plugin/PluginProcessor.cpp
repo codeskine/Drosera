@@ -201,7 +201,18 @@ public:
         if (auto xml = getXmlFromBinary(data, size))
             if (xml->hasTagName(apvts.state.getType())) {
                 uiTab.store(xml->getIntAttribute(kTabProperty, 0));  // an atomic: hosts may call this off the message thread
-                apvts.replaceState(juce::ValueTree::fromXml(*xml));
+                auto tree = juce::ValueTree::fromXml(*xml);
+                // A parameter the project predates loads at its default. JUCE does this too, as a side effect of adding
+                // the child with no value: this does not depend on that.
+                for (auto* p : getParameters())
+                    if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p))
+                        if (! tree.getChildWithProperty("id", ranged->paramID).isValid()) {
+                            juce::ValueTree missing("PARAM");
+                            missing.setProperty("id", ranged->paramID, nullptr);
+                            missing.setProperty("value", ranged->convertFrom0to1(ranged->getDefaultValue()), nullptr);
+                            tree.appendChild(missing, nullptr);
+                        }
+                apvts.replaceState(tree);
                 currentProgram = juce::jlimit(0, getNumPrograms() - 1, (int) apvts.state.getProperty("program", 0));
             }
     }
