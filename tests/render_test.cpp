@@ -215,6 +215,21 @@ static bool presetTests(const char* outDir) {
         const bool pass = finite && peak <= 1.0001 && (audible != pr.needsInput);
         printf("preset %-24s rms=%.4f (%6.1f dBFS) peak=%.3f %s\n", pr.name, r, 20 * std::log10(r + 1e-12), peak, pass ? "OK" : "FAIL");
         ok &= pass;
+        if (pr.poly && !pr.midiPitch) {  // three strings that lock onto one partial sound as one tone
+            const size_t n = 1 << 17, from = 48000 * 5;
+            std::vector<std::complex<double>> a(n);
+            for (size_t i = 0; i < n; ++i) a[i] = (0.5 - 0.5 * std::cos(2.0 * M_PI * (double)i / (double)n)) * L[from + i];
+            fft(a);
+            std::vector<double> power(n / 2);
+            double all = 0;
+            for (size_t k = 1; k < n / 2; ++k) { power[k] = std::norm(a[k]); all += power[k]; }
+            const size_t peak = (size_t)(std::max_element(power.begin(), power.end()) - power.begin());
+            double near = 0;
+            for (size_t k = peak > 2 ? peak - 2 : 1; k <= peak + 2 && k < n / 2; ++k) near += power[k];
+            const bool spread = near / all < 0.9;
+            printf("threeStringsSound %-18s strongest partial %.1f Hz holds %.0f%% of the power %s\n", pr.name, (double)peak * 48000.0 / (double)n, 100.0 * near / all, spread ? "OK" : "FAIL");
+            ok &= spread;
+        }
         if (outDir && !pr.needsInput) {
             std::string n = pr.name; for (char& c : n) if (c == ' ' || c == '(' || c == ')') c = '_';
             writeWav(std::string(outDir) + "/preset_" + n + ".wav", L, R);

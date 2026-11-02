@@ -254,7 +254,8 @@ private:
         midiPitchActive_.store(pitchOn);
         polyMidiActive_.store(polyMidi);
         for (int v = 0; v < VoiceAllocator::kVoices; ++v)
-            voiceNotes_[v].store(polyMidi && allocator.Note(v) != VoiceAllocator::kNoNote ? (float) allocator.Note(v) : -1.0f);
+            voiceNotes_[v].store(polyMidi && allocator.Note(v) != VoiceAllocator::kNoNote
+                                     ? juce::jlimit(16.0f, 84.0f, (float) allocator.Note(v) + bendSemis) : -1.0f);
 
         if (!polyMidi) {
             core->SetMidiPitch(pitchOn, (float) lastNote + bendSemis);

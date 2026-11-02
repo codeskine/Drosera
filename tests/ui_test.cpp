@@ -571,6 +571,69 @@ static void editorTests() {
             std::printf("  chord at 44.1 kHz: rms %.4f\n", rms);
             check(rms > 1e-3, "chordAt44100");
         }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            chord.addEvent(juce::MidiMessage::pitchWheel(1, 16383), 0);  // +2 semitones, less one step of 16384
+            render(*p, 0.1, &chord);
+            const float bend = 2.0f * 8191.0f / 8192.0f;
+            check(std::abs(bridge->voiceNote(0) - (48.0f + bend)) < 0.01f && std::abs(bridge->voiceNote(1) - (55.0f + bend)) < 0.01f
+                  && std::abs(bridge->voiceNote(2) - (64.0f + bend)) < 0.01f, "voiceNoteIncludesBend");
+        }
+        {   // What sounds, judged at each note's fundamental: a released voice closes, and the bend moves every voice.
+            // 2 s of output, as the strongest Hann-windowed bin within 40 cents of the note: the drone's pitch wanders a little
+            auto level = [](juce::AudioProcessor& p, double note) {
+                juce::AudioBuffer<float> buffer(2, 512);
+                juce::MidiBuffer none;
+                const int blocks = (int) (2.0 * 48000.0 / 512.0);
+                const int n = blocks * 512;
+                std::vector<float> x((size_t) n);
+                for (int b = 0; b < blocks; ++b) {
+                    buffer.clear();
+                    p.processBlock(buffer, none);
+                    for (int i = 0; i < 512; ++i) x[(size_t) (b * 512 + i)] = buffer.getSample(0, i);
+                }
+                double best = 0;
+                for (int cents = -40; cents <= 40; cents += 10) {
+                    const double hz = 440.0 * std::pow(2.0, (note + cents / 100.0 - 69.0) / 12.0);
+                    double re = 0, im = 0;
+                    for (int k = 0; k < n; ++k) {
+                        const double w = 0.5 - 0.5 * std::cos(2.0 * M_PI * k / n), a = 2.0 * M_PI * hz * k / 48000.0;
+                        re += w * x[(size_t) k] * std::cos(a);
+                        im += w * x[(size_t) k] * std::sin(a);
+                    }
+                    best = std::max(best, re * re + im * im);
+                }
+                return 10.0 * std::log10(best + 1e-20);
+            };
+            auto keys = [&] {
+                auto p = fresh();
+                setPolyMidi(*p);
+                setParameter(*p, "midigate", 1.0f);
+                return p;
+            };
+            {
+                auto p = keys();
+                auto chord = notes({ 48, 55, 64 }), off = notes({}, { 55 });
+                render(*p, 2.0, &chord);
+                const double before55 = level(*p, 55), before48 = level(*p, 48);
+                render(*p, 0.1, &off);
+                const double after55 = level(*p, 55), after48 = level(*p, 48);
+                std::printf("  released 55: its level %+.1f dB, 48's %+.1f dB\n", after55 - before55, after48 - before48);
+                check(after55 < before55 - 20.0 && after48 > before48 - 6.0, "releasedNoteCloses");
+            }
+            {
+                auto p = keys();
+                auto chord = notes({ 48, 55, 64 });
+                chord.addEvent(juce::MidiMessage::pitchWheel(1, 16383), 0);
+                render(*p, 3.0, &chord);
+                const double at57 = level(*p, 57), at55 = level(*p, 55);
+                std::printf("  bend +2: 57 is %+.1f dB over 55\n", at57 - at55);
+                check(at57 > at55 + 10.0, "bendMovesAllVoices");
+            }
+        }
         {   // Nothing allocates with polyphony on and notes arriving past the three voices.
             auto p = fresh();
             setPolyMidi(*p);
