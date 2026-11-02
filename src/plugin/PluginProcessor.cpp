@@ -374,19 +374,21 @@ private:
             juce::ParameterID{"midipitch", 1}, "MIDI Pitch", false));
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{"midigate", 1}, "MIDI Gate", false));
+        // Version hint 2: new since 0.1.1. Audio Units order parameters by this hint and hosts store automation by index,
+        // so a hint of 1 here would move the released parameters.
         layout.add(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID{"poly", 1}, "Polyphony", false));
+            juce::ParameterID{"poly", 2}, "Polyphony", false));
         layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{"coupling", 1}, "Coupling", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f,
+            juce::ParameterID{"coupling", 2}, "Coupling", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f,
             juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + " %"; })));
         // Semitones above voice 0 when MIDI is not in control.
         auto semitones = juce::AudioParameterIntAttributes().withStringFromValueFunction([](int v, int) {
             return juce::String(v > 0 ? "+" : "") + juce::String(v) + " st";
         });
-        layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval2", 1}, "Interval 2", -24, 24, 7, semitones));
-        layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval3", 1}, "Interval 3", -24, 24, 12, semitones));
+        layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval2", 2}, "Interval 2", -24, 24, 7, semitones));
+        layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval3", 2}, "Interval 3", -24, 24, 12, semitones));
         layout.add(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID{"polylock", 1}, "String Lock", true));
+            juce::ParameterID{"polylock", 2}, "String Lock", true));
         return layout;
     }
 

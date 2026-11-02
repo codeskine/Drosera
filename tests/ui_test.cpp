@@ -496,6 +496,18 @@ static void editorTests() {
             check(parameter(*second, "poly") == 1.0f && std::abs(parameter(*second, "coupling") - 0.4f) < 0.001f
                   && text(*second, "interval2") == "-5 st" && text(*second, "interval3") == "+12 st", "polyStateRoundTrip");
         }
+        {   // Audio Units order parameters by this hint, and hosts like Logic store automation by index: what is new since 0.1.1 needs a higher one.
+            auto p = fresh();
+            std::map<juce::String, int> hints;
+            for (auto* parameter : p->getParameters())
+                if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter)) hints[withId->paramID] = withId->getVersionHint();
+            bool ok = true;
+            for (const char* added : { "poly", "coupling", "interval2", "interval3", "polylock" })
+                ok = ok && hints.at(added) == 2;
+            for (const char* released : { "freq", "fbgain", "body", "lpf", "hpf", "revmix", "revdecay", "echosend", "echotime", "echofb", "volume", "echohalve", "inputgain", "midipitch", "midigate" })
+                ok = ok && hints.at(released) == 1;
+            check(ok, "polyphonyParametersKeepAudioUnitOrder");
+        }
         {
             auto p = fresh();
             p->setCurrentProgram(13);
