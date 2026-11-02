@@ -126,8 +126,9 @@ void Engine::ProcessPoly(float in, float &outL, float &outR) {
   for (size_t v = 0; v < kNumVoices; v++) {
     const size_t a = (v + 1) % kNumVoices;
     const size_t b = (v + 2) % kNumVoices;
-    const float couplingL = coupling_ * (weight[a] * tap_[a][0] + weight[b] * tap_[b][0]);
-    const float couplingR = coupling_ * (weight[a] * tap_[a][1] + weight[b] * tap_[b][1]);
+    const float receive = coupling_ * coupling_receive_[v];
+    const float couplingL = receive * (weight[a] * tap_[a][0] + weight[b] * tap_[b][0]);
+    const float couplingR = receive * (weight[a] * tap_[a][1] + weight[b] * tap_[b][1]);
     voices_[v].Process(noise_[v].Process(), in, couplingL, couplingR, next[v][0], next[v][1]);
   }
 

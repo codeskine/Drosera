@@ -29,9 +29,9 @@ public:
     };
 
     static constexpr size_t kNumVoices = FeedbackSynth::Engine::kNumVoices;
-    // Top of Coupling's range, as linear gain. A closed voice has to stay faint here and an open one has to change:
-    // closedVoiceStaysFaint and couplingChangesOpenVoices in render_test leave little room, from 0.015 to a little under 0.02.
-    static constexpr float kMaxCoupling = 0.016f;
+    // Top of Coupling's range, as linear gain. The smallest of the gains tried that changes the spectrum under MIDI, see
+    // couplingChangesTheSpectrum in render_test. At 0.2 the loops start to leave their notes.
+    static constexpr float kMaxCoupling = 0.1f;
 
     DroseraCore() : engine_(std::make_unique<FeedbackSynth::Engine>()) {}
 
@@ -120,7 +120,7 @@ private:
     using Registry = ParameterRegistry<Param>;
 
     // Their own registry: registry_ iterates an unordered_map, so more entries could reorder its handlers.
-    enum VoiceParam : int { Voice1Pitch, Voice2Pitch, Voice1Gain, Voice2Gain, Coupling };
+    enum VoiceParam : int { Voice1Pitch, Voice2Pitch, Voice1Gain, Voice2Gain, Coupling, Voice0Receive, Voice1Receive, Voice2Receive };
 
     void pushControls() {
         const bool imm = first_;  // jump to initial values instead of gliding from defaults
@@ -146,7 +146,8 @@ private:
         first_ = false;
     }
 
-    float gainNormOf(size_t voice) const { return (gate_enabled_[voice] && !gate_open_[voice]) ? 0.0f : norm_[FeedbackGain]; }
+    bool gateClosed(size_t voice) const { return gate_enabled_[voice] && !gate_open_[voice]; }
+    float gainNormOf(size_t voice) const { return gateClosed(voice) ? 0.0f : norm_[FeedbackGain]; }
 
     void pushVoiceControls(bool imm) {
         // Engine cleared voices that stopped, which sets their delay lag back to kKnobDelayLag.
@@ -164,6 +165,9 @@ private:
             voice_registry_.UpdateNormalized(VoiceParam(Voice1Gain + v - 1), gainNormOf(v), jump);
         }
         voice_registry_.UpdateNormalized(Coupling, coupling_norm_, jump);
+        // A closed voice hears nothing, or Coupling would defeat MIDI Gate.
+        for (size_t v = 0; v < kNumVoices; ++v)
+            voice_registry_.Update(VoiceParam(Voice0Receive + v), gateClosed(v) ? 0.0f : 1.0f, jump);
     }
 
     // Ranges, curves and smoothing times copied from FeedbackSynthControls::registerParams
@@ -200,9 +204,12 @@ private:
             voice_registry_.Register(VoiceParam(Voice1Gain + v - 1), -60.0f, -60.0f, 12.0f,
                 [&e, v](float db) { e.SetFeedbackGain(v, db); });
         }
-        // Square-law, as the top of a linear range would ring closed voices as loud as open ones.
+        // Square-law: under MIDI most of the change is at the top of the range, in knob mode it comes much sooner.
         voice_registry_.Register(Coupling, 0.0f, 0.0f, kMaxCoupling,
             [&e](float gain) { e.SetCoupling(gain); }, 0.05f, daisysp::Mapping::EXP);
+        for (size_t v = 0; v < kNumVoices; ++v)
+            voice_registry_.Register(VoiceParam(Voice0Receive + v), 1.0f, 0.0f, 1.0f,
+                [&e, v](float amount) { e.SetCouplingReceive(v, amount); });
     }
 
     // Knob mode: values go straight to the engine (firmware behaviour).

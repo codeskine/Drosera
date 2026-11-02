@@ -58,8 +58,8 @@ today's noise generator.
 the coupled amount does not depend on Feedback or on the make-up gain of up to 8×. Each voice adds
 `coupling × (sum of the other two voices' taps)` to its loop input, channel by channel, with one sample of delay so
 there is no algebraic loop. The signal then goes through the receiving voice's string, so it rings mainly on
-harmonically related intervals, like a sympathetic string. A voice whose gate is closed can still ring faintly when
-Coupling is high. This is intended.
+harmonically related intervals, like a sympathetic string. A voice whose gate is closed receives no coupling, at any
+Coupling, so MIDI Gate still closes it to at least 40 dB below the open voices.
 
 **Noise.** DaisySP's `WhiteNoise` always seeds with 1 and has no way to change it, so three strings in unison would be
 identical and coupling would do nothing. Voice 0 uses the existing generator. Voices 1 and 2 have their own, advanced
@@ -84,15 +84,20 @@ not change.
 | `interval2` | Interval 2 | -24 to +24 semitones, whole steps | +7 |
 | `interval3` | Interval 3 | -24 to +24 semitones, whole steps | +12 |
 
-Coupling maps through `daisysp::Mapping::EXP` (norm squared) to a gain from 0 to `kMaxCoupling`, which is 0.016: a linear
-range up to 0.5 reached an open voice's level at 10% of the knob and defeated MIDI Gate, so at 100% a closed voice stays
-at least 12 dB below an open one while an open voice still changes measurably. Saved projects find the new parameters at
-their defaults, so they sound as before.
+Coupling maps through `daisysp::Mapping::EXP` (norm squared) to a gain from 0 to `kMaxCoupling`, which is 0.1: the smallest
+gain tried that changes the output's magnitude spectrum by more than 10% under MIDI. Above it the loops start to leave
+their notes: at 0.2, chord 36 43 52 jumps to higher partials. Under MIDI the dominant partial moves by at most 0.5 cents at
+100% against 0%, and stays within 1 cent of the note, on the five chords the tuning test uses. Without MIDI Coupling acts far
+sooner: the same measure is 0.88 at 100%, against 0.15 under MIDI. Saved projects find the new parameters at their
+defaults, so they sound as before.
 
 **`DroseraCore`.** Voices 1 and 2 use a second `ParameterRegistry`, for their pitch and feedback gain, and it also holds
 Coupling. New entries must not go in the existing registry: it iterates an `unordered_map` in `Process()`, so more
 entries could reorder the handlers and change renders with polyphony off. `DroseraCore::Param` also stays as it is,
 because `kSpecs` follows its order.
+
+That registry also holds what each voice receives through Coupling, smoothed: 1 when its gate is open or disabled, 0 when
+it is enabled and closed.
 
 `applyPitchAndBody` becomes per voice, so each note has its own snapped Body, band-pass and phase compensation, with
 Frequency's 0.2 s glide. The Body knob stays single. The published note and Body delay become one value per voice.
@@ -159,10 +164,10 @@ regenerated.
 - **Tuning (rule 3):** at Coupling 0, three-note chords in several registers, judged by the dominant partial of each
   note, never by a fit to a harmonic grid. It avoids the notes `docs/MANUAL.md` lists as a known limit (16 to 18, 80).
 - **Independence:** at Coupling 0, a `FeedbackVoice`'s output is identical, sample by sample, whatever the others do.
-- **Coupling:** the spectrum with Coupling up differs measurably from Coupling 0.
+- **Coupling:** the output's magnitude spectrum at Coupling 100% differs from Coupling 0 by more than 10%, under MIDI and
+  from the knobs. This test sets `kMaxCoupling`. At 100% a closed voice stays at least 40 dB below the open voices.
 - **Stability:** Coupling and Feedback at maximum, across extreme notes and filters, for 60 s, with no non-finite value
-  and no `Recover`. With the two tests that compare a closed voice to an open one and Coupling 100% to 0, it sets
-  `kMaxCoupling`.
+  and no `Recover`, under MIDI and from the knobs.
 - **Clicks:** the largest sample-to-sample jump stays bounded through the ramp, both ways.
 - **Allocations:** none on the audio thread with polyphony on, during the ramp, and while voices are being taken.
 - **Allocator:** note sequences for a free voice, taking a voice, picking up a waiting note, and All Notes Off.

@@ -46,6 +46,8 @@ class Engine {
         void SetPolyphony(bool on, bool immediate = false);
         // Linear gain from the other voices' taps to each voice's loop input
         void SetCoupling(const float gain) { coupling_ = gain; }
+        // 0-1, default 1, multiplies what that voice receives. Init leaves it alone.
+        void SetCouplingReceive(const size_t voice, const float amount) { coupling_receive_[voice] = amount; }
         // True from switch-on until the ramp ends on the way off
         bool PolyRunning() const { return poly_running_; }
         // Last sample's samp, before the ramp. Zero while polyphony is not running.
@@ -68,6 +70,7 @@ class Engine {
         bool poly_running_ = false;
         float ramp_ = 0.0f;
         float coupling_ = 0.0f;
+        float coupling_receive_[kNumVoices] = { 1.0f, 1.0f, 1.0f };
         float tap_[kNumVoices][2] = {};
 
         FeedbackVoice voices_[kNumVoices];

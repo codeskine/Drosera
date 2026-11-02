@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <complex>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -546,16 +547,18 @@ static double centsOff(const std::vector<float>& tap, float note) {
 static bool chordTuning() {
     bool ok = true;
     const float chords[][3] = { {36, 43, 52}, {45, 52, 57}, {48, 55, 64}, {60, 64, 67}, {64, 69, 76} };
-    for (const auto& c : chords) {
-        DroseraCore core; makeCore(core, kDryBase);
-        setChord(core, c[0], c[1], c[2]);
-        core.SetCoupling(0.0f);
-        const auto r = renderTaps(core, 48000 * 5);
-        for (size_t v = 0; v < 3; ++v) {
-            const double cents = centsOff(r.tap[v], c[v]);
-            const bool pass = std::fabs(cents) < 25.0;
-            printf("poly chord %.0f %.0f %.0f, voice %zu: %+.1f c %s\n", c[0], c[1], c[2], v, cents, pass ? "OK" : "FAIL");
-            ok &= pass;
+    for (const float coupling : { 0.0f, 1.0f }) {
+        for (const auto& c : chords) {
+            DroseraCore core; makeCore(core, kDryBase);
+            setChord(core, c[0], c[1], c[2]);
+            core.SetCoupling(coupling);
+            const auto r = renderTaps(core, 48000 * 5);
+            for (size_t v = 0; v < 3; ++v) {
+                const double cents = centsOff(r.tap[v], c[v]);
+                const bool pass = std::fabs(cents) < 25.0;
+                printf("poly chord %.0f %.0f %.0f, Coupling %.0f%%, voice %zu: %+.1f c %s\n", c[0], c[1], c[2], coupling * 100.0f, v, cents, pass ? "OK" : "FAIL");
+                ok &= pass;
+            }
         }
     }
     return ok;
@@ -590,12 +593,12 @@ static bool chordTuningAfterRestart() {
 // A voice's delay lag has to return to MIDI's short one on restart, or the delay is still gliding from the old
 // chord's and the loop takes longer to build. Tuning 5 s later cannot show this. A fresh start is the yardstick.
 static bool restartBuildsAsFast() {
-    const auto onset = [](const std::vector<float>& tap, size_t start) {  // first 50 ms with the voice at full level
+    const auto onset = [](const std::vector<float>& tap, size_t start) {  // samples to the first 50 ms at full level
         size_t a = start;
         while (a + 2400 < tap.size() && rmsOf(tap, a, a + 2400) < 0.5) a += 2400;
-        return (double)(a - start) / 48000.0;
+        return a - start;
     };
-    const float chord[] = { 36, 43, 48 };
+    const float chord[] = { 36, 43, 43 };  // voices 1 and 2 both have far to glide from 67 and 72
     DroseraCore fresh; makeCore(fresh, kDryBase);
     setChord(fresh, chord[0], chord[1], chord[2]);
     const auto f = renderTaps(fresh, 48000 * 2);
@@ -608,9 +611,9 @@ static bool restartBuildsAsFast() {
     });
     bool ok = true;
     for (size_t v = 1; v < 3; ++v) {
-        const double restarted = onset(r.tap[v], start), first = onset(f.tap[v], 0);
-        const bool pass = restarted <= first + 0.05;
-        printf("poly restart builds as fast, voice %zu: %.2f s, fresh %.2f s %s\n", v, restarted, first, pass ? "OK" : "FAIL");
+        const size_t restarted = onset(r.tap[v], start), first = onset(f.tap[v], 0);
+        const bool pass = restarted <= first + 2400;
+        printf("poly restart builds as fast, voice %zu: %.2f s, fresh %.2f s %s\n", v, (double)restarted / 48000.0, (double)first / 48000.0, pass ? "OK" : "FAIL");
         ok &= pass;
     }
     return ok;
@@ -727,13 +730,10 @@ static bool chordIsAudibleImmediately() {
     return pass;
 }
 
-// With Coupling and Feedback at maximum, across the extreme notes and filters. Sets kMaxCoupling.
+// With Coupling and Feedback at maximum, across the extreme notes and filters, under MIDI and from the knobs.
 static bool stabilityAtMaximum() {
     bool ok = true;
-    const float chords[][3] = { {16, 50, 84}, {48, 48, 48} };
-    for (const auto& c : chords) {
-        DroseraCore core; makeCore(core, kDryBase);
-        setChord(core, c[0], c[1], c[2]);
+    const auto check = [&](const std::string& name, DroseraCore& core) {
         core.SetCoupling(1.0f);
         core.SetParam(DroseraCore::FeedbackGain, 1.0f);
         bool finite = true;
@@ -752,48 +752,107 @@ static bool stabilityAtMaximum() {
             }
         }
         const bool pass = finite && peak <= 1.0001 && core.RecoveryCount() == 0;
-        printf("poly stability at maximum, chord %.0f %.0f %.0f: finite=%d peak=%.3f recoveries=%d %s\n", c[0], c[1], c[2], (int)finite, peak, core.RecoveryCount(), pass ? "OK" : "FAIL");
+        printf("poly stability at maximum, %s: finite=%d peak=%.3f recoveries=%d %s\n", name.c_str(), (int)finite, peak, core.RecoveryCount(), pass ? "OK" : "FAIL");
         ok &= pass;
+    };
+    const float chords[][3] = { {16, 50, 84}, {48, 48, 48} };
+    for (const auto& c : chords) {
+        DroseraCore core; makeCore(core, kDryBase);
+        setChord(core, c[0], c[1], c[2]);
+        check("chord " + std::to_string((int)c[0]) + " " + std::to_string((int)c[1]) + " " + std::to_string((int)c[2]), core);
+    }
+    for (const float body : { 0.0f, 1.0f }) {
+        DroseraCore core; makeCore(core, kDryBase);
+        core.SetPolyphony(true);
+        core.SetIntervals(0, 12);
+        core.SetParam(DroseraCore::FeedbackBody, body);
+        check(std::string("knobs, Body ") + (body > 0.5f ? "1" : "0"), core);
     }
     return ok;
 }
 
-// The spec's "ring faintly": at the top of the range a closed voice is heard, but stays well below an open one.
+// A closed voice hears none of the others: MIDI Gate closes it whatever Coupling does.
 static bool closedVoiceStaysFaint() {
     bool ok = true;
-    for (const int interval : { 0, 7, 6 }) {
-        const auto rendered = [&](float coupling) {
-            DroseraCore core; makeCore(core, kDryBase);
-            setChord(core, 48, 48.0f + interval, 48.0f + interval);
-            core.SetVoiceGate(1, true, false);
-            core.SetVoiceGate(2, true, false);
-            core.SetCoupling(coupling);
-            return renderTaps(core, 48000 * 5);
-        };
-        const auto with = rendered(1.0f), without = rendered(0.0f);
-        const double belowOpen = dbOf(tapRms(with, 1, 3.0, 5.0), tapRms(with, 0, 3.0, 5.0));
-        const double aboveClosed = dbOf(tapRms(with, 1, 3.0, 5.0), tapRms(without, 1, 3.0, 5.0));
-        const bool pass = belowOpen <= -12.0 && aboveClosed >= 6.0;
-        printf("poly closed voice at Coupling 100%%, interval %d: %.1f dB against the open voice, %+.1f dB against Coupling 0 %s\n", interval, belowOpen, aboveClosed, pass ? "OK" : "FAIL");
-        ok &= pass;
+    struct Gates { const char* name; bool open[3]; };
+    const Gates gates[] = { {"voice 0 open", {true, false, false}}, {"voices 0 and 1 open", {true, true, false}}, {"voices 1 and 2 open", {false, true, true}} };
+    for (const float reverb : { 0.0f, 0.5f }) {
+        float p[DroseraCore::NumParams]; std::copy(kDryBase, kDryBase + DroseraCore::NumParams, p);
+        p[DroseraCore::ReverbMix] = reverb;
+        for (const Gates& g : gates) {
+            for (const int interval : { 0, 7, 6 }) {
+                DroseraCore core; makeCore(core, p);
+                float notes[3];
+                float open = 48.0f;
+                for (size_t v = 0; v < 3; ++v) { notes[v] = g.open[v] ? open : 48.0f + (float)interval; if (g.open[v]) open += 12.0f; }
+                setChord(core, notes[0], notes[1], notes[2]);
+                for (size_t v = 0; v < 3; ++v) core.SetVoiceGate(v, true, g.open[v]);
+                core.SetCoupling(1.0f);
+                const auto r = renderTaps(core, 48000 * 5);
+                double loudestOpen = 0.0, loudestClosed = 0.0;
+                for (size_t v = 0; v < 3; ++v) (g.open[v] ? loudestOpen : loudestClosed) = std::max(g.open[v] ? loudestOpen : loudestClosed, tapRms(r, v, 3.0, 5.0));
+                const double db = dbOf(loudestClosed, loudestOpen);
+                const bool pass = db <= -40.0;
+                printf("poly closed voice at Coupling 100%%, reverb %.1f, %s, interval %d: %.1f dB %s\n", reverb, g.name, interval, db, pass ? "OK" : "FAIL");
+                ok &= pass;
+            }
+        }
     }
     return ok;
 }
 
-static bool couplingChangesOpenVoices() {
-    const auto voice0 = [](float coupling) {
-        DroseraCore core; makeCore(core, kDryBase);
-        setChord(core, 48, 55, 64);
-        core.SetCoupling(coupling);
-        return renderTaps(core, 48000 * 5).tap[0];
-    };
-    const auto a = voice0(1.0f), b = voice0(0.0f);
-    std::vector<float> difference(a.size());
-    for (size_t i = 0; i < a.size(); ++i) difference[i] = a[i] - b[i];
-    const double ratio = rmsOf(difference, 48000 * 3, a.size()) / rmsOf(a, 48000 * 3, a.size());
-    const bool pass = ratio > 0.1;
-    printf("poly Coupling 100%% changes an open voice: rms(a-b)/rms(a) = %.3f %s\n", ratio, pass ? "OK" : "FAIL");
+// The same holds from the first sample of a restart: a voice that stopped open and restarts closed must not glide shut.
+static bool closedVoiceStaysFaintFromRestart() {
+    DroseraCore core; makeCore(core, kDryBase);
+    setChord(core, 48, 48, 48);
+    core.SetCoupling(1.0f);
+    const size_t stop = 48000 * 2, start = stop + 4800;
+    const auto r = renderTaps(core, start + 24000, [&](size_t i) {
+        if (i == stop) core.SetPolyphony(false);
+        if (i == start) { core.SetPolyphony(true); core.SetVoiceGate(1, true, false); core.SetVoiceGate(2, true, false); }
+    });
+    const double db = dbOf(rmsOf(r.tap[1], start, r.tap[1].size()), rmsOf(r.tap[0], start, r.tap[0].size()));
+    const bool pass = db <= -40.0;
+    printf("poly voice restarting closed at Coupling 100%%: %.1f dB %s\n", db, pass ? "OK" : "FAIL");
     return pass;
+}
+
+static std::vector<double> magnitudeSpectrum(const std::vector<float>& x, size_t start) {
+    const size_t N = 1 << 17;
+    std::vector<std::complex<double>> a(N);
+    for (size_t i = 0; i < N; ++i) a[i] = (double)x[start + i] * (0.5 - 0.5 * std::cos(2.0 * M_PI * (double)i / (double)N));
+    fft(a);
+    std::vector<double> m(N / 2);
+    for (size_t k = 0; k < N / 2; ++k) m[k] = std::abs(a[k]);
+    return m;
+}
+
+// ||A-B|| / ||A||, on magnitudes: a voice locked to its note can shift in phase with no change in sound, and a
+// difference of waveforms would count that.
+static double spectralRatio(const std::vector<double>& A, const std::vector<double>& B) {
+    double difference = 0.0, level = 0.0;
+    for (size_t k = 0; k < A.size(); ++k) { difference += (A[k] - B[k]) * (A[k] - B[k]); level += A[k] * A[k]; }
+    return std::sqrt(difference / level);
+}
+
+static bool couplingChangesTheSpectrum() {
+    bool ok = true;
+    const auto compare = [&](const std::string& name, auto setup) {
+        const auto output = [&](float coupling) {
+            DroseraCore core; makeCore(core, kDryBase);
+            setup(core);
+            core.SetCoupling(coupling);
+            return magnitudeSpectrum(renderTaps(core, 48000 * 6).L, 48000 * 3);
+        };
+        const double ratio = spectralRatio(output(1.0f), output(0.0f));
+        const bool pass = ratio > 0.1;
+        printf("poly Coupling 100%% changes the spectrum, %s: %.3f %s\n", name.c_str(), ratio, pass ? "OK" : "FAIL");
+        ok &= pass;
+    };
+    compare("chord 48 55 64", [](DroseraCore& core) { setChord(core, 48, 55, 64); });
+    compare("chord 60 64 67", [](DroseraCore& core) { setChord(core, 60, 64, 67); });
+    compare("knobs +7 +12", [](DroseraCore& core) { core.SetPolyphony(true); core.SetIntervals(7, 12); });
+    return ok;
 }
 
 static bool coupledRampClickFree() {
@@ -862,7 +921,8 @@ static bool polyphonyTests() {
     ok &= chordIsAudibleImmediately();
     ok &= stabilityAtMaximum();
     ok &= closedVoiceStaysFaint();
-    ok &= couplingChangesOpenVoices();
+    ok &= closedVoiceStaysFaintFromRestart();
+    ok &= couplingChangesTheSpectrum();
     ok &= coupledRampClickFree();
     ok &= recoverRestoresAllVoices();
     cpuReport();
