@@ -109,8 +109,16 @@ void Engine::StopPoly() {
   for (auto &tap : tap_) tap[0] = tap[1] = 0.0f;
 }
 
+void Engine::ProcessEcho(float &sampL, float &sampR) {
+  const float echoL = echo_delay_[0]->Process(sampL * echo_send_);
+  const float echoR = echo_delay_[1]->Process(sampR * echo_send_);
+
+  sampL = 0.5f * (sampL + echoL);
+  sampR = 0.5f * (sampR + echoR);
+}
+
 void Engine::ProcessPoly(float in, float &outL, float &outR) {
-  float sampL, sampR, echoL, echoR;
+  float sampL, sampR;
 
   const float target = poly_on_ ? 1.0f : 0.0f;
   if (ramp_ != target) {
@@ -143,13 +151,7 @@ void Engine::ProcessPoly(float in, float &outL, float &outR) {
   sampL = (next[0][0] + ramp_ * (next[1][0] + next[2][0])) * scale;
   sampR = (next[0][1] + ramp_ * (next[1][1] + next[2][1])) * scale;
 
-  // ---> Echo Delay
-
-  echoL = echo_delay_[0]->Process(sampL * echo_send_);
-  echoR = echo_delay_[1]->Process(sampR * echo_send_);
-
-  sampL = 0.5f * (sampL + echoL);
-  sampR = 0.5f * (sampR + echoR);
+  ProcessEcho(sampL, sampR);
 
   // ---> Output
   outL = sampL * output_level_;
@@ -164,20 +166,14 @@ void Engine::Process(float in, float &outL, float &outR) {
     return;
   }
 
-  float sampL, sampR, echoL, echoR;
+  float sampL, sampR;
   const float noise_samp = noise_[0].Process();
 
   // ---> Feedback Loop, reverb and resonator feedback
 
   voices_[0].Process(noise_samp, in, 0.0f, 0.0f, sampL, sampR);
 
-  // ---> Echo Delay
-
-  echoL = echo_delay_[0]->Process(sampL * echo_send_);
-  echoR = echo_delay_[1]->Process(sampR * echo_send_);
-
-  sampL = 0.5f * (sampL + echoL);
-  sampR = 0.5f * (sampR + echoR);
+  ProcessEcho(sampL, sampR);
 
   // ---> Output
   outL = sampL * output_level_;

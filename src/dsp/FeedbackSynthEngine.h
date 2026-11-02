@@ -80,6 +80,7 @@ class Engine {
         EchoDelayPtr echo_delay_[2];
 
         void ProcessPoly(float in, float &outL, float &outR);
+        void ProcessEcho(float &sampL, float &sampR);
         void StopPoly();
 
         Engine(const Engine &other) = delete;
