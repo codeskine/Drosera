@@ -55,10 +55,17 @@ Both are in the feedback path, so they shape which partials sustain, not only th
 | Echo Time | 50 ms to 5 s |
 | Echo Feedback | 100 % is unity, and up to 150 % it runs away, bounded by a soft clip |
 | Echo Warp (WARP) | The firmware's delay switch. Echo Time's readout shows the shortened time |
+| Echo Drive | 0 to +12 dB into the saturation of Echo Pong. Dimmed while PONG is off |
+| Echo Tone | 800 Hz to 18 kHz, how fast Echo Pong's repeats get darker. Dimmed while PONG is off |
+| Echo Pong (PONG) | Replaces the firmware's echo with repeats that bounce between left and right. Off by default |
 
 **WARP** halves the Echo Time knob's position before its square-law curve. Above about a quarter of the knob's
 travel the echo gets 2.8 to 3.9 times shorter, not twice as short, so it acts as a doppler warp and not as a tempo
 halving. Lower down the difference shrinks, because Echo Time cannot go below 50 ms.
+
+**PONG** sums the input to mono and starts on the left, and Echo Time is the time between bounces. Unlike the firmware's
+echo, which passes everything through a band-pass at 800 Hz, it keeps the low end of the drone. Echo Drive also raises the
+gain of each bounce: with Drive at zero, Echo Feedback runs away above 100 %, and with Drive at maximum, above 50 %.
 
 ## Output tab
 
@@ -131,10 +138,10 @@ released note keeps sounding until its voice is taken. With MIDI Pitch off, the 
 
 ## Presets
 
-15 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
-"Init" is silent by design. The last three use three strings: "Open Fifths" (knobs only, LOCK on, Coupling 0), "Sympathetic"
+16 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
+"Init" is silent by design. Three use three strings: "Open Fifths" (knobs only, LOCK on, Coupling 0), "Sympathetic"
 (knobs only, LOCK off, Coupling at 40 %) and "Chord Keys" (MIDI Pitch and MIDI Gate on, Coupling at 80 %). Choosing any of the
-other 12 turns POLY off.
+others turns POLY off. "Ember Pong" uses PONG and sustains itself, and choosing any other preset turns PONG off.
 
 ## Known limits
 
@@ -150,8 +157,8 @@ other 12 turns POLY off.
   on a neighbouring Body resonance.
 - Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. With POLY on,
   chords can go sour: with "Chord Keys" otherwise as it is, at Reverb Mix 35 % a C major chord read +20, -28 and -8 cents.
-- The values of "Open Fifths", "Sympathetic" and "Chord Keys" were chosen by measurement and have not been judged by
-  ear.
+- The values of "Open Fifths", "Sympathetic", "Chord Keys" and "Ember Pong", and the defaults of Echo Drive and Echo Tone,
+  were chosen by measurement and have not been judged by ear.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared
   to the host only when the input bus is connected.
 - The drone is chaotic. A small change to a knob, or to when it moves, can lead the loop somewhere else, so automation

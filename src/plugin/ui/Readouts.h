@@ -42,4 +42,9 @@ inline std::string echoTime(bool warp, float seconds, const std::string& knobTex
     return warp ? format("%.2f s", seconds) : knobText;
 }
 
+/// Drive and Tone only shape the echo while PONG is on.
+inline Text echoShaping(bool pong, const std::string& knobText) {
+    return {knobText, pong ? "" : "PONG OFF"};
+}
+
 } // namespace drosera::readouts

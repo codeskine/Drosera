@@ -24,7 +24,8 @@ const std::map<juce::String, juce::String>& captions() {
     static const std::map<juce::String, juce::String> names {
         {"lpf", "Lowpass"}, {"hpf", "Highpass"}, {"revmix", "Mix"}, {"revdecay", "Decay"}, {"echosend", "Send"},
         {"echotime", "Time"}, {"echofb", "Feedback"}, {"volume", "Volume"}, {"inputgain", "Input"},
-        {"echohalve", "WARP"}, {"midipitch", "PITCH"}, {"midigate", "GATE"},
+        {"echodrive", "Drive"}, {"echotone", "Tone"},
+        {"echohalve", "WARP"}, {"echopong", "PONG"}, {"midipitch", "PITCH"}, {"midigate", "GATE"},
         {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"}, {"poly", "POLY"}, {"polylock", "LOCK"},
     };
     return names;
@@ -63,7 +64,7 @@ void LabeledKnob::resized() {
 TabPanel::TabPanel(juce::AudioProcessorValueTreeState& apvts)
     : pages_ {{"FILTERS", {"lpf", "hpf"}, {}},
               {"REVERB", {"revmix", "revdecay"}, {}},
-              {"ECHO", {"echosend", "echotime", "echofb"}, {"echohalve"}},
+              {"ECHO", {"echosend", "echotime", "echofb", "echodrive", "echotone"}, {"echohalve", "echopong"}},
               {"OUTPUT", {"volume", "inputgain"}, {}},
               {"MIDI", {}, {"midipitch", "midigate"}},
               {"STRINGS", {"coupling", "interval2", "interval3"}, {"poly", "polylock"}}} {
@@ -118,15 +119,16 @@ void TabPanel::resized() {
 
     for (const auto& page : pages_) {
         const int count = (int) (page.knobs.size() + page.toggles.size());
-        int x = (getWidth() - (count - 1) * kCellStep) / 2;
+        const int step = count > 1 ? juce::jmin(kCellStep, (getWidth() - 2 * kMargin - kCellWidth) / (count - 1)) : kCellStep;
+        int x = (getWidth() - (count - 1) * step) / 2;
         for (const auto& id : page.knobs) {
             knobs_[id]->setBounds(x - kCellWidth / 2, kCellTop, kCellWidth, kCellHeight);
-            x += kCellStep;
+            x += step;
         }
         const int top = kCellTop + (kCellHeight - kToggleHeight) / 2 - 8;
         for (const auto& id : page.toggles) {
             toggles_[id]->button.setBounds(x - kToggleWidth / 2, top, kToggleWidth, kToggleHeight);
-            x += kCellStep;
+            x += step;
         }
     }
 }

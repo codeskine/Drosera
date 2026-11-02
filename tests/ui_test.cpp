@@ -190,6 +190,8 @@ static void readoutTests() {
     check(is(body(false, 0.0971f, "30.0 ms"), "30.0 ms", ""), "body from the knob");
     check(echoTime(true, 0.359f, "x") == "0.36 s", "echo time with WARP");
     check(echoTime(false, 0.359f, "1.29 s") == "1.29 s", "echo time from the knob");
+    check(is(echoShaping(true, "+6.0 dB"), "+6.0 dB", ""), "echo shaping with PONG on");
+    check(is(echoShaping(false, "+6.0 dB"), "+6.0 dB", "PONG OFF"), "echo shaping with PONG off");
     check(is(interval(false, 60.0f, "+7 st"), "+7 st", ""), "interval from the knob");
     check(is(interval(true, 60.0f, "+7 st"), "C4", "MIDI"), "interval with a MIDI note");
     check(is(interval(true, -1.0f, "+7 st"), "-", "MIDI"), "interval with no note");
@@ -712,6 +714,32 @@ static void editorTests() {
             auto shown = [&](const char* id) { return editor->slider(id)->getParentComponent()->isVisible(); };
             check(shown("coupling") && shown("interval2") && shown("interval3") && !shown("lpf"), "stringsTabShowsItsControls");
             check(editor->tabBounds(5).getRight() <= 760 - 26, "tabsFitTheWindow");
+            const auto knobBounds = [&](const char* id) { return editor->slider(id)->getParentComponent()->getBounds(); };
+            check(knobBounds("interval2").getX() - knobBounds("coupling").getX() == 112, "otherTabsKeepTheirPlaces");
+
+            editor->setTab(2);
+            check(shown("echosend") && shown("echotime") && shown("echofb") && shown("echodrive") && shown("echotone"), "echoTabShowsItsControls");
+            std::vector<juce::Rectangle<int>> cells;
+            for (const char* id : { "echosend", "echotime", "echofb", "echodrive", "echotone" }) cells.push_back(knobBounds(id));
+            cells.push_back(editor->toggleBounds("echohalve"));
+            cells.push_back(editor->toggleBounds("echopong"));
+            bool fit = true;
+            for (size_t i = 0; i < cells.size(); ++i) {
+                fit = fit && !cells[i].isEmpty() && cells[i].getX() >= 26 && cells[i].getRight() <= 760 - 26;
+                for (size_t j = i + 1; j < cells.size(); ++j) fit = fit && !cells[i].intersects(cells[j]);
+            }
+            check(fit, "echoControlsFit");
+
+            setParameter(*p, "echopong", 0.0f);
+            editor->refreshDisplay(0.0f);
+            check(editor->tag("echodrive") == "PONG OFF" && editor->tag("echotone") == "PONG OFF" && editor->slider("echodrive")->getAlpha() < 1.0f
+                      && editor->tag("echofb").isEmpty(), "shapingTagWithPongOff");
+            editor->slider("echodrive")->setValue(0.8, juce::sendNotificationSync);
+            check(std::abs(parameter(*p, "echodrive") - 0.8f) < 0.001f, "shapingStaysEditableWithPongOff");
+            setParameter(*p, "echopong", 1.0f);
+            editor->refreshDisplay(0.0f);
+            check(editor->tag("echodrive").isEmpty() && editor->tag("echotone").isEmpty() && editor->slider("echotone")->getAlpha() == 1.0f, "shapingTagWithPongOn");
+            editor->setTab(5);
             p->getStateInformation(state);
         }
         std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
