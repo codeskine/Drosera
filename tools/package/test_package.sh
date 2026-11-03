@@ -82,6 +82,23 @@ else
     fail readme_escapes_html "the Read Me does not hold the escaped AGPL address"
 fi
 
+# standalone_asks_for_microphone
+microphone_text="Drosera uses audio input to feed external sound into its feedback loop."
+entitlements="$here/resources/Drosera.entitlements"
+app_plist="$tmp/good-full/Drosera-Standalone.pkg/Payload/Drosera.app/Contents/Info.plist"
+if [ -f "$good" ]; then pkgutil --expand-full "$good" "$tmp/good-full" > /dev/null 2>&1; fi
+asked=$(/usr/libexec/PlistBuddy -c "Print :NSMicrophoneUsageDescription" "$app_plist" 2>/dev/null || true)
+keys=$(plutil -convert json -o - "$entitlements" 2>/dev/null || true)
+if [ "$asked" != "$microphone_text" ]; then
+    fail standalone_asks_for_microphone "NSMicrophoneUsageDescription is '$asked'"
+elif ! plutil -lint "$entitlements" > /dev/null 2>&1; then
+    fail standalone_asks_for_microphone "Drosera.entitlements is missing or invalid"
+elif [ "$keys" != '{"com.apple.security.device.audio-input":true}' ]; then
+    fail standalone_asks_for_microphone "Drosera.entitlements holds $keys"
+else
+    pass standalone_asks_for_microphone
+fi
+
 # missing_au
 mkdir -p "$tmp/no-au"
 ditto "$artefacts/VST3" "$tmp/no-au/VST3"
