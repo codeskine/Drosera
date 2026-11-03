@@ -108,8 +108,8 @@ where Echo Feedback runs away. At 0 %, Width plays each repeat in the middle at 
 
 The output has a limiter and a final hard clip at full scale, because the loop can get loud.
 
-The audio input is optional, and excites the strings. It stays off until the host connects the plugin's input
-bus. Some presets need it to make sound.
+The audio input is optional, and excites the strings. In a host, it stays off until the host connects the plugin's
+input bus. In the standalone app, it starts muted: see below. Some presets need it to make sound.
 
 ## SETUP: MIDI
 
@@ -170,6 +170,23 @@ so one note sounds one string.
 
 **MIDI Gate per voice.** With MIDI Pitch on, each voice is open only while its own note is held. With MIDI Gate off, a
 released note keeps sounding until its voice is taken. With MIDI Pitch off, the gate opens all three voices together.
+
+## The standalone app
+
+`/Applications/Drosera.app` plays Drosera without a host. The window is the same, with an **Options** button in its
+title bar:
+
+- **Audio/MIDI Settings…** chooses the output device, the input device and its channels, the sample rate and buffer
+  size, and the MIDI inputs to listen to.
+- **Save current state…** and **Load a saved state…** keep the settings of every control in a file of your own.
+- **Reset to default state** returns every control to its default.
+
+The audio input starts muted, so that a microphone near the speakers does not feed the output back into Drosera. A
+banner says so. To use the input, untick **Mute audio input**, next to Feedback Loop in the settings. The first time the
+app opens, macOS asks whether it may use the microphone. If you refused, allow it again in System Settings → Privacy &
+Security → Microphone.
+
+The app keeps its devices and the last state in `~/Library/Application Support/Drosera.settings`.
 
 ## Presets
 

@@ -2,7 +2,8 @@
 
 Contributions are welcome, and are accepted under the project's license, AGPLv3.
 
-See [docs/BUILDING.md](docs/BUILDING.md) for how to build and test. CI must pass.
+See [docs/BUILDING.md](docs/BUILDING.md) for how to build and test. CI must pass. If you change `tools/package/` or
+the workflows, also run `tools/package/test_package.sh build/Drosera_artefacts/Release`.
 
 ## Rules
 
