@@ -66,17 +66,18 @@ halving. Lower down the difference shrinks, because Echo Time cannot go below 50
 
 | Control | What it does |
 |---|---|
-| Echo Drive | 0 to +12 dB into the saturation of Echo Pong |
-| Echo Tone | 800 Hz to 18 kHz, how fast Echo Pong's repeats get darker |
+| Echo Drive | 0 to +12 dB into the echo's soft clip. 0 dB by default |
+| Echo Tone | 200 Hz to 3.2 kHz, the center of the echo's band-pass. 800 Hz by default, as in the firmware |
 | Echo Width | 0 % puts every repeat in the middle, 100 % bounces them fully left and right. 100 % by default |
-| Echo Level | -30 to +6 dB on Echo Pong's repeats. 0 dB by default |
-| Echo Pong (PONG) | Replaces the firmware's echo with repeats that bounce between left and right. Off by default |
+| Echo Level | -30 to +6 dB on the echo's repeats. 0 dB by default |
+| Echo Pong (PONG) | Makes the firmware's echo bounce between left and right. Off by default |
 
 The four knobs are dimmed while PONG is off, and stay usable.
 
-**PONG** sums the input to mono and starts on the left, and Echo Time is the time between bounces. Unlike the firmware's
-echo, which passes everything through a band-pass at 800 Hz, it keeps the low end of the drone. Echo Drive also raises the
-gain of each bounce: with Drive at zero, Echo Feedback runs away above 100 %, and with Drive at maximum, above 50 %.
+**PONG** sums the input to mono and starts on the left, and Echo Time is the time between bounces. The two lines of the
+echo feed each other, so the repeats keep the firmware's color, band-passed above the drone, until Drive and Tone move.
+Switching PONG takes 20 ms, and a tail already playing starts or stops bouncing. Echo Drive also raises the gain of each
+bounce: with Drive at zero, Echo Feedback runs away above 100 %, and with Drive at maximum, above 50 %.
 Echo Width and Echo Level act on what comes out, not on the loop, so they change neither how long the repeats last nor
 where Echo Feedback runs away. At 0 %, Width plays each repeat in the middle at half the level it had on its side.
 
@@ -172,8 +173,8 @@ others turns POLY off. "Ember Pong" uses PONG and sustains itself, and choosing 
   chords can go sour: with "Chord Keys" otherwise as it is, at Reverb Mix 35 % a C major chord read +20, -28 and -8 cents.
 - The values of "Open Fifths", "Sympathetic", "Chord Keys" and "Ember Pong", and the defaults of Echo Drive, Echo Tone and Echo Level,
   were chosen by measurement and have not been judged by ear.
-- Echo Pong's saturation is not oversampled, so loud high partials alias at high Drive. At Drive 100 %, with no feedback, a
-  3.1 kHz tone at half scale measured -54 dB of inharmonic power, and a 9.1 kHz tone at full scale -10.5 dB.
+- With PONG on, the echo's saturation is not oversampled, so loud high partials alias at high Drive. At Drive 100 % and
+  Echo Tone at 3.2 kHz, with no feedback, a 3.1 kHz tone at half scale measured -54 dB of inharmonic power.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared
   to the host only when the input bus is connected.
 - The drone is chaotic. A small change to a knob, or to when it moves, can lead the loop somewhere else, so automation

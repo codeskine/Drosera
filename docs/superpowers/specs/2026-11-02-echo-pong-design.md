@@ -1,5 +1,8 @@
 # Echo Pong design
 
+> Superseded by `2026-11-03-echo-pong-revision-design.md`: PONG now makes the firmware's echo bounce, and `PongDelay`
+> is removed.
+
 ## Goal
 
 Add a second echo algorithm whose repeats bounce between left and right and stay dense and saturated, even on low

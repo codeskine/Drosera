@@ -11,13 +11,9 @@ static constexpr float kInvSqrt3 = 0.57735027f;
 static constexpr int kNoiseOffset[Engine::kNumVoices] = { 0, 20011, 40009 };
 
 void Engine::Init(const float sample_rate) {
-  using ED = EchoDelay<kMaxEchoDelaySamp>;
-
   // Only the first call allocates: Init also clears the state on the audio thread.
-  if (!echo_delay_[0]) {
-    echo_delay_[0] = std::make_unique<ED>();
-    echo_delay_[1] = std::make_unique<ED>();
-    pong_delay_ = std::make_unique<PongDelay<kMaxEchoDelaySamp>>();
+  if (!stereo_echo_) {
+    stereo_echo_ = std::make_unique<StereoEcho<kMaxEchoDelaySamp>>();
   }
 
   sample_rate_ = sample_rate;
@@ -34,18 +30,10 @@ void Engine::Init(const float sample_rate) {
   poly_running_ = poly_on_;
   for (auto &tap : tap_) tap[0] = tap[1] = 0.0f;
 
-  for (unsigned int i = 0; i < 2; i++) {
-    echo_delay_[i]->Init(sample_rate);
-    echo_delay_[i]->SetDelayTime(5.0f, true);
-    echo_delay_[i]->SetFeedback(0.5f);
-    echo_delay_[i]->SetLagTime(0.5f);
-  }
-
-  pong_delay_->Init(sample_rate);
-  pong_delay_->SetDelayTime(5.0f, true);
-  pong_delay_->SetFeedback(0.5f);
-  pong_delay_->SetLagTime(0.5f);
-  pong_mix_ = pong_on_ ? 1.0f : 0.0f;
+  stereo_echo_->Init(sample_rate);
+  stereo_echo_->SetDelayTime(5.0f, true);
+  stereo_echo_->SetFeedback(0.5f);
+  stereo_echo_->SetLagTime(0.5f);
 }
 
 void Engine::SetFeedbackTracking(const size_t voice, const bool enabled, const float center_hz, const float makeup_gain, const float coupling_makeup) {
@@ -77,15 +65,11 @@ void Engine::SetFeedbackHPFCutoff(const float cutoff_hz) {
 }
 
 void Engine::SetEchoDelayTime(const float echo_time) {
-  echo_delay_[0]->SetDelayTime(echo_time);
-  echo_delay_[1]->SetDelayTime(echo_time);
-  pong_delay_->SetDelayTime(echo_time);
+  stereo_echo_->SetDelayTime(echo_time);
 }
 
 void Engine::SetEchoDelayFeedback(const float echo_fb) {
-  echo_delay_[0]->SetFeedback(echo_fb);
-  echo_delay_[1]->SetFeedback(echo_fb);
-  pong_delay_->SetFeedback(echo_fb);
+  stereo_echo_->SetFeedback(echo_fb);
 }
 
 void Engine::SetEchoDelaySendAmount(const float echo_send) {
@@ -110,11 +94,6 @@ void Engine::SetPolyphony(bool on, bool immediate) {
   if (!on && poly_running_ && sample_rate_ > 0.0f) StopPoly();
 }
 
-void Engine::SetPong(bool on, bool immediate) {
-  pong_on_ = on;
-  if (immediate) pong_mix_ = on ? 1.0f : 0.0f;
-}
-
 void Engine::StopPoly() {
   poly_running_ = false;
   voices_[1].Init(sample_rate_);
@@ -124,23 +103,8 @@ void Engine::StopPoly() {
 }
 
 void Engine::ProcessEcho(float &sampL, float &sampR) {
-  float wetL = echo_delay_[0]->Process(sampL * echo_send_);
-  float wetR = echo_delay_[1]->Process(sampR * echo_send_);
-
-  float pongL, pongR;
-  pong_delay_->Process(0.5f * (sampL + sampR) * echo_send_, pongL, pongR);
-
-  const float target = pong_on_ ? 1.0f : 0.0f;
-  if (pong_mix_ != target) {
-    pong_mix_ += pong_mix_ < target ? kRampStep : -kRampStep;
-    if (fabsf(pong_mix_ - target) < 0.5f * kRampStep) pong_mix_ = target;
-  }
-
-  // Not a plain crossfade: + 0 * x would change the bits of -0.0f, and with PONG off renders must match the firmware's
-  if (pong_mix_ != 0.0f) {
-    wetL += pong_mix_ * (pongL - wetL);
-    wetR += pong_mix_ * (pongR - wetR);
-  }
+  float wetL, wetR;
+  stereo_echo_->Process(sampL * echo_send_, sampR * echo_send_, wetL, wetR);
 
   sampL = 0.5f * (sampL + wetL);
   sampR = 0.5f * (sampR + wetR);

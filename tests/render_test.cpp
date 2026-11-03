@@ -7,17 +7,20 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <limits>
 #include <memory>
 #include <new>
+#include <random>
 #include <string>
 #include <vector>
 #include "DroseraCore.h"
+#include "EchoDelay.h"
 #include "pitch_estimator.h"
-#include "PongDelay.h"
 #include "Presets.h"
 #include "SincResampler.h"
+#include "StereoEcho.h"
 
 using infrasonic::DroseraCore;
 
@@ -1194,28 +1197,7 @@ static bool polyphonyTests() {
     return ok;
 }
 
-// PongDelay alone: the only place the wet signal is isolated.
-using Pong = infrasonic::PongDelay<48000 * 5>;
-
-static std::unique_ptr<Pong> makePong(float seconds, float feedback, float drive, float toneHz = 18000.0f) {
-    auto pong = std::make_unique<Pong>();
-    pong->Init(48000.0f);
-    pong->SetDelayTime(seconds, true);
-    pong->SetFeedback(feedback);
-    pong->SetDrive(drive);
-    pong->SetTone(toneHz);
-    return pong;
-}
-
-struct PongRender { std::vector<float> L, R; };
-
-template <typename Input>
-static PongRender renderPong(Pong& pong, size_t n, Input input) {
-    PongRender r { std::vector<float>(n), std::vector<float>(n) };
-    for (size_t i = 0; i < n; ++i) pong.Process(input(i), r.L[i], r.R[i]);
-    return r;
-}
-
+// Signals and peaks for the echo tests.
 static auto impulse(float amount) { return [amount](size_t i) { return i == 0 ? amount : 0.0f; }; }
 static auto burst(float hz, float amount, size_t length) {
     return [=](size_t i) { return i < length ? amount * std::sin(2.0f * float(M_PI) * hz * (float)i / 48000.0f) : 0.0f; };
@@ -1227,100 +1209,233 @@ static size_t peakAt(const std::vector<float>& v, size_t a, size_t b) {
 }
 static float peakOf(const std::vector<float>& v, size_t a, size_t b) { return std::fabs(v[peakAt(v, a, b)]); }
 
-static bool pongBounces() {
-    auto pong = makePong(0.25f, 0.7f, 0.0f);
+// StereoEcho alone: the only place the wet signal is isolated.
+using Line = infrasonic::EchoDelay<48000 * 5>;
+using Stereo = infrasonic::StereoEcho<48000 * 5>;
+
+template <typename Echo>
+static void setUpEcho(Echo& echo, float seconds, float feedback) {
+    echo.Init(48000.0f);
+    echo.SetDelayTime(seconds, true);
+    echo.SetFeedback(feedback);
+    echo.SetLagTime(0.5f);
+}
+
+static std::vector<float> noise(size_t n, unsigned seed, float amount) {
+    std::minstd_rand gen(seed);
+    std::uniform_real_distribution<float> dist(-amount, amount);
+    std::vector<float> v(n);
+    for (auto& x : v) x = dist(gen);
+    return v;
+}
+
+static bool sameBits(const std::vector<float>& a, const std::vector<float>& b) {
+    return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0;
+}
+
+// The firmware's branch of StereoEcho is two EchoDelay lines, bit for bit.
+static bool stereoEchoMatchesTwoLines() {
+    auto left = std::make_unique<Line>(), right = std::make_unique<Line>();
+    auto stereo = std::make_unique<Stereo>();
+    setUpEcho(*left, 0.3f, 1.2f);
+    setUpEcho(*right, 0.3f, 1.2f);
+    setUpEcho(*stereo, 0.3f, 1.2f);
+    const size_t n = 48000 * 3;
+    const auto inL = noise(n, 1, 0.3f), inR = noise(n, 2, 0.3f);
+    std::vector<float> lineL(n), lineR(n), wetL(n), wetR(n);
+    for (size_t i = 0; i < n; ++i) {
+        lineL[i] = left->Process(inL[i]);
+        lineR[i] = right->Process(inR[i]);
+        stereo->Process(inL[i], inR[i], wetL[i], wetR[i]);
+    }
+    const bool pass = sameBits(lineL, wetL) && sameBits(lineR, wetR);
+    printf("stereoEchoMatchesTwoLines: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Moving the center away and back gives the coefficients Init gives.
+static bool echoCenterReturnsBitForBit() {
+    auto plain = std::make_unique<Line>(), moved = std::make_unique<Line>();
+    setUpEcho(*plain, 0.1f, 0.9f);
+    setUpEcho(*moved, 0.1f, 0.9f);
+    moved->SetCenter(300.0f);
+    moved->SetCenter(800.0f);
+    const auto in = noise(48000 * 2, 3, 0.3f);
+    std::vector<float> a(in.size()), b(in.size());
+    for (size_t i = 0; i < in.size(); ++i) { a[i] = plain->Process(in[i]); b[i] = moved->Process(in[i]); }
+    const bool pass = sameBits(a, b);
+    printf("echoCenterReturnsBitForBit: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// ReadShaped(1) followed by Write is Process.
+static bool echoShapedAtUnityIsProcess() {
+    auto plain = std::make_unique<Line>(), shaped = std::make_unique<Line>();
+    setUpEcho(*plain, 0.1f, 0.9f);
+    setUpEcho(*shaped, 0.1f, 0.9f);
+    const auto in = noise(48000 * 2, 4, 0.3f);
+    std::vector<float> a(in.size()), b(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        a[i] = plain->Process(in[i]);
+        b[i] = shaped->ReadShaped(1.0f);
+        shaped->Write(b[i], in[i]);
+    }
+    const bool pass = sameBits(a, b);
+    printf("echoShapedAtUnityIsProcess: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+struct StereoRender { std::vector<float> L, R; };
+
+// The same input on both sides, as a mono source sends it.
+template <typename Input>
+static StereoRender renderStereo(Stereo& echo, size_t n, Input input) {
+    StereoRender r { std::vector<float>(n), std::vector<float>(n) };
+    for (size_t i = 0; i < n; ++i) echo.Process(input(i), input(i), r.L[i], r.R[i]);
+    return r;
+}
+
+static std::unique_ptr<Stereo> makeStereo(float seconds, float feedback, float drive, float toneHz = 800.0f, bool pong = true) {
+    auto echo = std::make_unique<Stereo>();
+    setUpEcho(*echo, seconds, feedback);
+    echo->SetDrive(drive);
+    echo->SetTone(toneHz);
+    echo->SetPong(pong, true);
+    return echo;
+}
+
+// An impulse of 1: the band-pass passes about 5% of it, and less with each repeat.
+static bool stereoBounces() {
+    auto echo = makeStereo(0.25f, 0.7f, 0.0f);
     const size_t T = 12000;
-    const auto r = renderPong(*pong, 4 * T, impulse(0.1f));
+    const auto r = renderStereo(*echo, 4 * T, impulse(1.0f));
     bool pass = true;
     for (size_t k = 1; k <= 3; ++k) {
         const auto& on = k % 2 == 1 ? r.L : r.R;
         const auto& off = k % 2 == 1 ? r.R : r.L;
-        const float peak = peakOf(on, k * T - 20, k * T + 20), other = peakOf(off, k * T - 20, k * T + 20);
-        pass &= peak > 0.01f && other < 0.001f * peak;
+        const float peak = peakOf(on, k * T - 40, k * T + 40), other = peakOf(off, k * T - 40, k * T + 40);
+        pass &= peak > 1e-3f && other < 1e-3f * peak;
     }
-    printf("pongBounces: %s\n", pass ? "OK" : "FAIL");
+    printf("stereoBounces: %s\n", pass ? "OK" : "FAIL");
     return pass;
 }
 
-static bool pongTiming() {
+// The band-pass delays every repeat by a few samples, so the bounces are timed against a single firmware line.
+static bool stereoTiming() {
     bool ok = true;
     for (const float seconds : { 0.25f, DroseraCore::EchoTimeSeconds(0.5f, true) }) {
-        auto pong = makePong(seconds, 0.7f, 0.0f);
-        const auto T = (long)std::lround(seconds * 48000.0f);
-        const auto r = renderPong(*pong, (size_t)(4 * T), impulse(0.1f));
-        const long first = (long)peakAt(r.L, (size_t)(T / 2), (size_t)(T * 3 / 2));
-        const long second = (long)peakAt(r.R, (size_t)(T * 3 / 2), (size_t)(T * 5 / 2));
-        const long third = (long)peakAt(r.L, (size_t)(T * 5 / 2), (size_t)(T * 7 / 2));
-        const bool pass = std::labs(first - T) <= 2 && std::labs(second - 2 * T) <= 2 && std::labs(third - 3 * T) <= 2;
-        printf("pongTiming, T %ld samples: peaks at %ld, %ld, %ld %s\n", T, first, second, third, pass ? "OK" : "FAIL");
+        auto echo = makeStereo(seconds, 0.7f, 0.0f);
+        auto line = std::make_unique<Line>();
+        setUpEcho(*line, seconds, 0.7f);
+        const auto T = (size_t)std::lround(seconds * 48000.0f);
+        const auto r = renderStereo(*echo, 4 * T, impulse(1.0f));
+        std::vector<float> single(4 * T);
+        for (size_t i = 0; i < single.size(); ++i) single[i] = line->Process(i == 0 ? 1.0f : 0.0f);
+        bool pass = true;
+        for (size_t k = 1; k <= 3; ++k) {
+            const size_t a = k * T - T / 2, b = k * T + T / 2;
+            const long bounce = (long)peakAt(k % 2 == 1 ? r.L : r.R, a, b), firmware = (long)peakAt(single, a, b);
+            pass &= std::labs(bounce - firmware) <= 2;
+        }
+        printf("stereoTiming, T %zu samples: %s\n", T, pass ? "OK" : "FAIL");
         ok &= pass;
     }
     return ok;
 }
 
-// The middle of a burst, on left at T against on right at 2T.
-static double lossPerBounce(float hz, float toneHz) {
-    auto pong = makePong(0.5f, 0.7f, 0.0f, toneHz);
-    const auto r = renderPong(*pong, 48000 * 2, burst(hz, 0.05f, 12000));
-    const size_t a = 3000, b = 10200;
-    return dbOf(rmsOf(r.L, 24000 + a, 24000 + b), rmsOf(r.R, 48000 + a, 48000 + b));
+static std::vector<double> firstRepeatSpectrum(Stereo& echo, size_t T) {
+    const auto r = renderStereo(echo, T - 100 + (1 << 17), impulse(1.0f));
+    return magnitudeSpectrum(r.L, T - 100);
 }
 
-static bool pongKeepsLowEnd() {
-    const double loss = lossPerBounce(82.0f, 18000.0f);
-    const bool pass = loss <= 3.6;
-    printf("pongKeepsLowEnd: %.2f dB per bounce at 82 Hz %s\n", loss, pass ? "OK" : "FAIL");
+static double binOf(double hz) { return hz * (double)(1 << 17) / 48000.0; }
+
+static bool stereoSameColor() {
+    auto on = makeStereo(0.25f, 0.0f, 0.0f, 800.0f, true), off = makeStereo(0.25f, 0.0f, 0.0f, 800.0f, false);
+    const auto a = firstRepeatSpectrum(*on, 12000), b = firstRepeatSpectrum(*off, 12000);
+    double worst = 0.0;
+    for (const double hz : { 200.0, 800.0, 3200.0 }) {
+        const size_t k = (size_t)std::lround(binOf(hz));
+        worst = std::max(worst, std::fabs(dbOf(a[k], b[k])));
+    }
+    const bool pass = worst <= 0.5;
+    printf("stereoSameColor: largest difference %.3f dB %s\n", worst, pass ? "OK" : "FAIL");
     return pass;
 }
 
-static bool pongToneDarkens() {
-    const double dark = lossPerBounce(3200.0f, 800.0f), open = lossPerBounce(3200.0f, 18000.0f);
-    const bool pass = dark >= open + 6.0;
-    printf("pongToneDarkens: %.2f dB per bounce at 800 Hz, %.2f at 18 kHz %s\n", dark, open, pass ? "OK" : "FAIL");
-    return pass;
-}
-
-static bool pongSelfOscillates() {
+static bool stereoToneMovesCenter() {
     bool ok = true;
-    for (const float feedback : { 0.6f, 0.4f }) {
-        auto pong = makePong(0.1f, feedback, 1.0f);
-        const auto r = renderPong(*pong, 48000 * 20, burst(440.0f, 0.1f, 2400));
-        const double level = rmsOf(r.L, 48000 * 19, 48000 * 20);
-        const bool pass = feedback > 0.5f ? level > 0.1 : level < 1e-3;
-        printf("pongSelfOscillates, Feedback %.1f, Drive 1: RMS %.5f after 20 s %s\n", feedback, level, pass ? "OK" : "FAIL");
+    for (const float center : { 300.0f, 3000.0f }) {
+        auto echo = makeStereo(0.25f, 0.0f, 0.0f, center);
+        const auto m = firstRepeatSpectrum(*echo, 12000);
+        size_t peak = (size_t)binOf(20.0);
+        for (size_t k = peak; k < m.size(); ++k) if (m[k] > m[peak]) peak = k;
+        const double hz = (double)peak * 48000.0 / (double)(1 << 17), octaves = std::log2(hz / center);
+        const bool pass = std::fabs(octaves) <= 1.0 / 3.0;
+        printf("stereoToneMovesCenter, Tone %.0f Hz: peak at %.0f Hz %s\n", center, hz, pass ? "OK" : "FAIL");
         ok &= pass;
     }
     return ok;
 }
 
-static bool pongFeedbackZeroIsOneRepeat() {
-    auto pong = makePong(0.1f, 0.0f, 1.0f);
-    const auto r = renderPong(*pong, 48000, impulse(0.1f));
-    const float peak = peakOf(r.L, 4800 - 20, 4800 + 20);
-    const bool pass = peak > 0.01f && peakOf(r.R, 0, r.R.size()) == 0.0f && peakOf(r.L, 7200, r.L.size()) < peak * 3.2e-5f;
-    printf("pongFeedbackZeroIsOneRepeat: %s\n", pass ? "OK" : "FAIL");
+static bool stereoRunaway() {
+    bool ok = true;
+    const struct { float drive, feedback; bool sustains; } cases[] = { {1.0f, 0.6f, true}, {1.0f, 0.4f, false}, {0.0f, 0.9f, false} };
+    for (const auto& c : cases) {
+        auto echo = makeStereo(0.1f, c.feedback, c.drive);
+        const auto r = renderStereo(*echo, 48000 * 20, burst(800.0f, 0.1f, 2400));
+        const double level = rmsOf(r.L, 48000 * 19, 48000 * 20);
+        const bool pass = c.sustains ? level > 0.1 : level < 1e-3;
+        printf("stereoRunaway, Drive %.0f, Feedback %.1f: RMS %.5f after 20 s %s\n", c.drive, c.feedback, level, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+static bool stereoFeedbackZeroIsOneRepeat() {
+    auto echo = makeStereo(0.1f, 0.0f, 1.0f);
+    const auto r = renderStereo(*echo, 48000, impulse(1.0f));
+    const float first = peakOf(r.L, 4800 - 40, 4800 + 40);
+    const bool pass = first > 1e-3f && peakOf(r.R, 0, r.R.size()) == 0.0f && peakOf(r.L, 7200, r.L.size()) < first * 3.2e-5f;
+    printf("stereoFeedbackZeroIsOneRepeat: %s\n", pass ? "OK" : "FAIL");
     return pass;
 }
 
-static bool pongBlocksDc() {
-    auto pong = makePong(0.05f, 1.5f, 1.0f);
-    const auto r = renderPong(*pong, 48000 * 60, [](size_t i) { return 0.1f + 0.1f * std::sin(2.0f * float(M_PI) * 440.0f * (float)i / 48000.0f); });
-    double meanL = 0.0, meanR = 0.0;
-    for (size_t i = 48000 * 30; i < r.L.size(); ++i) { meanL += r.L[i]; meanR += r.R[i]; }
-    meanL /= (double)(r.L.size() - 48000 * 30);
-    meanR /= (double)(r.L.size() - 48000 * 30);
-    const float peak = std::max(peakOf(r.L, 0, r.L.size()), peakOf(r.R, 0, r.R.size()));
-    const bool pass = std::fabs(meanL) < 0.01 && std::fabs(meanR) < 0.01 && peak <= 1.0001f;  // SoftClip reaches 1 give or take rounding
-    printf("pongBlocksDc: mean %.5f, %.5f, peak %.7f %s\n", meanL, meanR, peak, pass ? "OK" : "FAIL");
+// Width 0 puts every repeat in the middle, at half the level of the side it came from.
+static bool stereoWidthZeroIsMono() {
+    auto wide = makeStereo(0.25f, 0.7f, 0.0f), narrow = makeStereo(0.25f, 0.7f, 0.0f);
+    narrow->SetWidth(0.0f);
+    const auto w = renderStereo(*wide, 48000, impulse(1.0f)), m = renderStereo(*narrow, 48000, impulse(1.0f));
+    bool same = true;
+    for (size_t i = 0; i < m.L.size(); ++i) same &= m.L[i] == m.R[i];
+    const float half = 0.5f * peakOf(w.L, 12000 - 40, 12000 + 40), mid = peakOf(m.L, 12000 - 40, 12000 + 40);
+    const bool pass = same && std::fabs(mid - half) < 1e-6f;
+    printf("stereoWidthZeroIsMono: repeat %.6f, half the side %.6f %s\n", mid, half, pass ? "OK" : "FAIL");
     return pass;
 }
 
-// Power away from the harmonics against the power on them. 3100 Hz: 3 kHz's aliases would land on its harmonics at 48 kHz.
-static double inharmonicDb(float feedback) {
+// Width and Level only shape what comes out: the loop, so every repeat after the first, is the same.
+static bool stereoWidthAndLevelLeaveTheLoop() {
+    auto plain = makeStereo(0.1f, 0.6f, 1.0f), shaped = makeStereo(0.1f, 0.6f, 1.0f);
+    shaped->SetWidth(0.3f);
+    shaped->SetLevel(0.5f);
+    const auto a = renderStereo(*plain, 48000 * 5, burst(800.0f, 0.1f, 2400)), b = renderStereo(*shaped, 48000 * 5, burst(800.0f, 0.1f, 2400));
+    float worst = 0.0f;
+    for (size_t i = 0; i < a.L.size(); ++i) {
+        const float mid = 0.5f * (a.L[i] + a.R[i]), side = 0.5f * (a.L[i] - a.R[i]);
+        worst = std::max({worst, std::fabs(b.L[i] - 0.5f * (mid + 0.3f * side)), std::fabs(b.R[i] - 0.5f * (mid - 0.3f * side))});
+    }
+    const bool pass = worst < 1e-6f && rmsOf(a.L, 48000 * 4, 48000 * 5) > 0.1;  // still self-oscillating after 4 s
+    printf("stereoWidthAndLevelLeaveTheLoop: largest difference %.2g %s\n", (double)worst, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Power away from the harmonics against the power on them, as inharmonicDb, with Tone at its top.
+static double stereoInharmonicDb(float feedback) {
     const double hz = 3100.0;
-    auto pong = makePong(0.25f, feedback, 1.0f);
+    auto echo = makeStereo(0.25f, feedback, 1.0f, 3200.0f);
     const size_t n = 1 << 17, from = 48000 * 4;
-    const auto r = renderPong(*pong, from + n, [hz](size_t i) { return 0.5f * (float)std::sin(2.0 * M_PI * hz * (double)i / 48000.0); });
+    const auto r = renderStereo(*echo, from + n, [hz](size_t i) { return 0.5f * (float)std::sin(2.0 * M_PI * hz * (double)i / 48000.0); });
     std::vector<std::complex<double>> a(n);
     for (size_t i = 0; i < n; ++i) a[i] = (0.5 - 0.5 * std::cos(2.0 * M_PI * (double)i / (double)n)) * r.L[from + i];
     fft(a);
@@ -1333,58 +1448,46 @@ static double inharmonicDb(float feedback) {
     return 10.0 * std::log10(std::max(off, 1e-30) / std::max(on, 1e-30));
 }
 
-// 3 dB above what was measured. Feedback 0 is the aliasing alone: -54.3 dB, so no oversampling. At Feedback 0.9 the loop
-// runs away on its own modes, which are not harmonics of the input either: this is not a measure of aliasing.
-static constexpr double kAliasLimitDry = -51.3, kAliasLimitLoop = -10.3;
+// 3 dB above what was measured: -54.0 dB at Feedback 0, the aliasing alone, so no oversampling. At Feedback 0.9, -31.4 dB:
+// the loop also runs on its own modes, which are not harmonics of the input either.
+static constexpr double kStereoAliasLimitDry = -51.0, kStereoAliasLimitLoop = -28.4;
 
-static bool pongAliasing() {
-    const double dry = inharmonicDb(0.0f), loop = inharmonicDb(0.9f);
-    const bool pass = dry <= kAliasLimitDry && loop <= kAliasLimitLoop;
-    printf("pongAliasing at 3100 Hz, Drive 1: %.1f dB at Feedback 0, %.1f dB at Feedback 0.9 %s\n", dry, loop, pass ? "OK" : "FAIL");
+static bool stereoAliasing() {
+    const double dry = stereoInharmonicDb(0.0f), loop = stereoInharmonicDb(0.9f);
+    const bool pass = dry <= kStereoAliasLimitDry && loop <= kStereoAliasLimitLoop;
+    printf("stereoAliasing at 3100 Hz, Drive 1, Tone 3200 Hz: %.1f dB at Feedback 0, %.1f dB at Feedback 0.9 %s\n", dry, loop, pass ? "OK" : "FAIL");
     return pass;
 }
 
-// Width 0 puts every repeat in the middle, at half the level of the side it came from.
-static bool pongWidthZeroIsMono() {
-    auto wide = makePong(0.25f, 0.7f, 0.0f), narrow = makePong(0.25f, 0.7f, 0.0f);
-    narrow->SetWidth(0.0f);
-    const auto w = renderPong(*wide, 48000, impulse(0.1f)), m = renderPong(*narrow, 48000, impulse(0.1f));
-    bool same = true;
-    for (size_t i = 0; i < m.L.size(); ++i) same &= m.L[i] == m.R[i];
-    const float half = 0.5f * peakOf(w.L, 12000 - 20, 12000 + 20), mid = peakOf(m.L, 12000 - 20, 12000 + 20);
-    const bool pass = same && std::fabs(mid - half) < 1e-6f;
-    printf("pongWidthZeroIsMono: repeat %.5f, half the side %.5f %s\n", mid, half, pass ? "OK" : "FAIL");
+static bool stereoRampSettles() {
+    auto echo = makeStereo(0.1f, 0.5f, 0.0f, 800.0f, false);
+    float l, r;
+    echo->SetPong(true);
+    for (int i = 0; i < 960; ++i) echo->Process(0.0f, 0.0f, l, r);
+    const float on = echo->PongMix();
+    echo->SetPong(false);
+    for (int i = 0; i < 960; ++i) echo->Process(0.0f, 0.0f, l, r);
+    const float off = echo->PongMix();
+    const bool pass = on == 1.0f && off == 0.0f;
+    printf("stereoRampSettles: %.7f after switching on, %.7f after switching off %s\n", on, off, pass ? "OK" : "FAIL");
     return pass;
 }
 
-// Width and Level only shape what comes out: the loop, so every repeat after the first, is the same.
-static bool pongWidthAndLevelLeaveTheLoop() {
-    auto plain = makePong(0.1f, 0.6f, 1.0f), shaped = makePong(0.1f, 0.6f, 1.0f);
-    shaped->SetWidth(0.3f);
-    shaped->SetLevel(0.5f);
-    const auto a = renderPong(*plain, 48000 * 5, burst(440.0f, 0.1f, 2400)), b = renderPong(*shaped, 48000 * 5, burst(440.0f, 0.1f, 2400));
-    float worst = 0.0f;
-    for (size_t i = 0; i < a.L.size(); ++i) {
-        const float mid = 0.5f * (a.L[i] + a.R[i]), side = 0.5f * (a.L[i] - a.R[i]);
-        worst = std::max({worst, std::fabs(b.L[i] - 0.5f * (mid + 0.3f * side)), std::fabs(b.R[i] - 0.5f * (mid - 0.3f * side))});
-    }
-    const bool pass = worst < 1e-6f && rmsOf(a.L, 48000 * 4, 48000 * 5) > 0.1;  // still self-oscillating after 4 s
-    printf("pongWidthAndLevelLeaveTheLoop: largest difference %.2g %s\n", (double)worst, pass ? "OK" : "FAIL");
-    return pass;
-}
-
-static bool pongDelayTests() {
+static bool stereoEchoTests() {
     bool ok = true;
-    ok &= pongWidthZeroIsMono();
-    ok &= pongWidthAndLevelLeaveTheLoop();
-    ok &= pongBounces();
-    ok &= pongTiming();
-    ok &= pongKeepsLowEnd();
-    ok &= pongToneDarkens();
-    ok &= pongSelfOscillates();
-    ok &= pongFeedbackZeroIsOneRepeat();
-    ok &= pongBlocksDc();
-    ok &= pongAliasing();
+    ok &= stereoBounces();
+    ok &= stereoTiming();
+    ok &= stereoSameColor();
+    ok &= stereoToneMovesCenter();
+    ok &= stereoRunaway();
+    ok &= stereoFeedbackZeroIsOneRepeat();
+    ok &= stereoWidthZeroIsMono();
+    ok &= stereoWidthAndLevelLeaveTheLoop();
+    ok &= stereoAliasing();
+    ok &= stereoRampSettles();
+    ok &= echoCenterReturnsBitForBit();
+    ok &= echoShapedAtUnityIsProcess();
+    ok &= stereoEchoMatchesTwoLines();
     return ok;
 }
 
@@ -1475,9 +1578,15 @@ static bool pongBoundsAtMaximum() {
     core.SetEchoLevel(1.0f);  // +6 dB
     static float L[64], R[64];
     Bounded b;
-    for (int block = 0; block < 45000; ++block) { core.Render(nullptr, L, R, 64); b.add(L, R, 64); }  // 60 s
-    const bool pass = b.finite && b.peak <= 1.0001 && core.RecoveryCount() == 0;
-    printf("pongBoundsAtMaximum: peak %.3f, recoveries %d %s\n", b.peak, core.RecoveryCount(), pass ? "OK" : "FAIL");
+    double sumL = 0.0, sumR = 0.0;
+    for (int block = 0; block < 45000; ++block) {  // 60 s
+        core.Render(nullptr, L, R, 64);
+        b.add(L, R, 64);
+        if (block >= 22500) for (size_t i = 0; i < 64; ++i) { sumL += L[i]; sumR += R[i]; }  // the last 30 s
+    }
+    const double meanL = sumL / (22500.0 * 64.0), meanR = sumR / (22500.0 * 64.0);
+    const bool pass = b.finite && b.peak <= 1.0001 && core.RecoveryCount() == 0 && std::fabs(meanL) < 0.01 && std::fabs(meanR) < 0.01;
+    printf("pongBoundsAtMaximum: peak %.3f, recoveries %d, mean %.5f, %.5f %s\n", b.peak, core.RecoveryCount(), meanL, meanR, pass ? "OK" : "FAIL");
     return pass;
 }
 
@@ -1640,8 +1749,143 @@ static bool emberPongSelfSustains() {
     return pass;
 }
 
+// L + R over a window: what a mono sum of the output hears.
+static std::vector<float> monoSum(const std::vector<float>& L, const std::vector<float>& R) {
+    std::vector<float> m(L.size());
+    for (size_t i = 0; i < L.size(); ++i) m[i] = L[i] + R[i];
+    return m;
+}
+
+static StereoRender renderDefault(bool pong, size_t total) {
+    static DroseraCore core;
+    core.Init();
+    applyPreset(core, infrasonic::kFactoryPresets[0]);
+    core.SetEchoPong(pong);
+    StereoRender r { std::vector<float>(total), std::vector<float>(total) };
+    for (size_t pos = 0; pos < total; pos += 64) core.Render(nullptr, &r.L[pos], &r.R[pos], std::min<size_t>(64, total - pos));
+    return r;
+}
+
+static bool pongMonoSum() {
+    const size_t total = 48000 * 10;
+    const auto on = renderDefault(true, total), off = renderDefault(false, total);
+    const double drop = dbOf(rmsOf(monoSum(on.L, on.R), total / 2, total), rmsOf(monoSum(off.L, off.R), total / 2, total));
+    const bool pass = drop >= -3.0;
+    printf("pongMonoSum: L + R with PONG on is %.2f dB from PONG off %s\n", drop, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// The first repeat of a short burst, summed to mono and scaled to its own RMS, as in pongBouncesThroughCore.
+static std::vector<double> firstRepeatShape(bool pong) {
+    static DroseraCore core;
+    //                     freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
+    const float knobs[] = {0.43f, 1.00f, 0.30f, 0.90f, 0.20f, 0.00f, 0.50f, 1.00f, 0.44f, 0.00f, 0.70f};
+    core.Init();
+    for (int i = 0; i < DroseraCore::NumParams; ++i) core.SetParam((DroseraCore::Param)i, knobs[i]);
+    core.SetEchoPong(pong);
+    const double T = DroseraCore::EchoTimeSeconds(0.44f, false);
+    const size_t open = 48000 * 3, close = open + 9600, a = open + (size_t)((T + 0.05) * 48000.0), total = a + (1 << 17);
+    std::vector<float> L(total), R(total);
+    for (size_t pos = 0; pos < total; pos += 64) {
+        core.SetGate(true, pos >= open && pos < close);
+        core.Render(nullptr, &L[pos], &R[pos], std::min<size_t>(64, total - pos));
+    }
+    auto m = monoSum(L, R);
+    for (size_t i = 0; i < a; ++i) m[i] = 0.0f;
+    for (size_t i = a + 9600; i < m.size(); ++i) m[i] = 0.0f;
+    auto spectrum = magnitudeSpectrum(m, a);
+    double power = 0.0;
+    for (const double v : spectrum) power += v * v;
+    for (auto& v : spectrum) v /= std::sqrt(power);
+    return spectrum;
+}
+
+// With Drive and Tone at their defaults PONG keeps the firmware's color: only the position changes.
+static bool pongSameColorThroughCore() {
+    const double ratio = spectralRatio(firstRepeatShape(false), firstRepeatShape(true));
+    const bool pass = ratio < 0.1;
+    printf("pongSameColorThroughCore: spectral difference %.3f %s\n", ratio, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongBackToFirmware() {
+    static DroseraCore plain, switched;
+    for (auto* core : { &plain, &switched }) {
+        core->Init();
+        applyPreset(*core, infrasonic::kFactoryPresets[0]);
+        core->SetParam(DroseraCore::EchoSend, 0.0f);
+    }
+    switched.SetEchoDrive(0.9f);
+    switched.SetEchoTone(0.1f);
+    const size_t total = 48000 * 7;
+    std::vector<float> a(total), b(total), R(64);
+    for (size_t pos = 0; pos < total; pos += 64) {
+        if (pos == 48000 * 0) switched.SetEchoPong(true);
+        if (pos == 48000 * 1) switched.SetEchoPong(false);
+        if (pos == 48000 * 2) { plain.SetParam(DroseraCore::EchoSend, 0.3f); switched.SetParam(DroseraCore::EchoSend, 0.3f); }
+        plain.Render(nullptr, &a[pos], R.data(), 64);
+        switched.Render(nullptr, &b[pos], R.data(), 64);
+    }
+    const bool pass = std::memcmp(a.data() + 48000 * 2, b.data() + 48000 * 2, 48000 * 5 * sizeof(float)) == 0;
+    printf("pongBackToFirmware: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongToneSweepWhileRunningAway() {
+    static DroseraCore core;
+    setPongCore(core, kPongMax, 1.0f);
+    static float L[64], R[64];
+    Bounded b;
+    for (int block = 0; block < 22500; ++block) {  // 30 s
+        core.SetEchoTone((block / 375) % 2 == 0 ? 0.0f : 1.0f);  // every 0.5 s
+        core.Render(nullptr, L, R, 64);
+        b.add(L, R, 64);
+    }
+    const bool pass = b.finite && b.peak <= 1.0001 && core.RecoveryCount() == 0;
+    printf("pongToneSweepWhileRunningAway: peak %.3f, recoveries %d %s\n", b.peak, core.RecoveryCount(), pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Recover calls Init, and EchoDelay::Init puts the band-pass back at 800 Hz: PONG must bring Tone's center back.
+static bool pongToneSurvivesRecover() {
+    auto echo = makeStereo(0.25f, 0.0f, 0.0f, 300.0f);
+    float l, r;
+    for (int i = 0; i < 4800; ++i) echo->Process(0.1f, 0.1f, l, r);
+    setUpEcho(*echo, 0.25f, 0.0f);
+    const auto m = firstRepeatSpectrum(*echo, 12000);
+    size_t peak = (size_t)binOf(20.0);
+    for (size_t k = peak; k < m.size(); ++k) if (m[k] > m[peak]) peak = k;
+    const double hz = (double)peak * 48000.0 / (double)(1 << 17);
+    const bool pass = std::fabs(std::log2(hz / 300.0)) <= 1.0 / 3.0 && echo->PongMix() == 1.0f;
+    printf("pongToneSurvivesRecover: peak at %.0f Hz after Init %s\n", hz, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool pongSwitchDuringRunaway() {
+    static DroseraCore core;
+    setPongCore(core, kPongMax, 1.0f);
+    std::vector<float> L(48000 * 8), R(L.size());
+    for (size_t pos = 0; pos < L.size(); pos += 64) {
+        if (pos == 48000 * 4) core.SetEchoPong(false);
+        if (pos == 48000 * 6) core.SetEchoPong(true);
+        core.Render(nullptr, &L[pos], &R[pos], 64);
+    }
+    Bounded b;
+    b.add(L.data(), R.data(), L.size());
+    bool ok = b.finite;
+    for (const size_t start : { size_t(48000 * 4), size_t(48000 * 6) })
+        for (const auto* v : { &L, &R }) ok &= jumpsWithinLimit("pongSwitchDuringRunaway", *v, start, 960);
+    return ok;
+}
+
 static bool pongEngineTests() {
     bool ok = true;
+    ok &= pongMonoSum();
+    ok &= pongSameColorThroughCore();
+    ok &= pongBackToFirmware();
+    ok &= pongToneSweepWhileRunningAway();
+    ok &= pongToneSurvivesRecover();
+    ok &= pongSwitchDuringRunaway();
     ok &= pongOnFromFirstBlock();
     ok &= pongSwitchClickFree();
     ok &= pongSwitchReverses();
@@ -1655,6 +1899,7 @@ static bool pongEngineTests() {
     ok &= emberPongSelfSustains();
     return ok;
 }
+
 
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
@@ -1678,8 +1923,8 @@ int main(int argc, char** argv) {
     ok &= publishedValues();
     ok &= engineVoiceTests();
     ok &= polyphonyTests();
-    ok &= pongDelayTests();
     ok &= pongEngineTests();
+    ok &= stereoEchoTests();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }
