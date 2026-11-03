@@ -870,6 +870,25 @@ static void bypassTests() {
     }
 }
 
+// A restored state must not glide from the defaults: the drone would settle differently on every load.
+static void stateJumpTests() {
+    std::unique_ptr<juce::AudioProcessor> source(createPluginFilter());
+    setParameter(*source, "freq", 0.9f);
+    juce::MemoryBlock state; source->getStateInformation(state);
+    const float target = 16.0f + 0.9f * 56.0f;  // the knob's note
+
+    std::unique_ptr<juce::AudioProcessor> glided(createPluginFilter()), jumped(createPluginFilter());
+    for (auto* p : {glided.get(), jumped.get()}) { p->prepareToPlay(48000.0, 512); render(*p, 0.1); }
+    setParameter(*glided, "freq", 0.9f);                                   // a knob move glides (0.2 s)
+    jumped->setStateInformation(state.getData(), (int) state.getSize());   // a loaded project jumps
+    render(*glided, 512.0 / 48000.0); render(*jumped, 512.0 / 48000.0);
+    const float noteGlided = dynamic_cast<EditorBridge*>(glided.get())->soundingNote();
+    const float noteJumped = dynamic_cast<EditorBridge*>(jumped.get())->soundingNote();
+    std::printf("  after one block: knob move %.1f, state restore %.1f, target %.1f\n", noteGlided, noteJumped, target);
+    check(std::abs(noteJumped - target) < 0.01f, "restoredStateJumps");
+    check(noteGlided < target - 1.0f, "knobMoveStillGlides");
+}
+
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     tapTests();
@@ -879,6 +898,7 @@ int main() {
     editorTests();
     stateTests();
     bypassTests();
+    stateJumpTests();
     std::printf(failures == 0 ? "ALL OK\n" : "SOME FAILED\n");
     return failures == 0 ? 0 : 1;
 }

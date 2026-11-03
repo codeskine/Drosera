@@ -103,6 +103,9 @@ accepted. While a note is in control:
 - Body is snapped to a whole number of the note's periods, so the Body knob selects a multiple.
 - A band-pass on the note keeps the loop on the fundamental.
 
+Keep Reverb Mix low while playing notes below C3 (note 48): the reverb sits in the loop and pulls low notes out
+of tune, up to about half a semitone at 35 % (see the known limits).
+
 Moving Frequency returns control to the knob once no key is held. A knob moved while a key is down does not take
 pitch back after release: move it again.
 
@@ -169,7 +172,9 @@ others turns POLY off. "Ember Pong" uses PONG and sustains itself, and choosing 
   the free drone finds another resonance instead.
 - With MIDI Pitch or LOCK on and Body at about 0.7 or more, a few chord notes sit up to about 60 cents off, at any Coupling,
   on a neighbouring Body resonance.
-- Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. With POLY on,
+- Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. Measured
+  dry, notes 18 to 84 stay within 17 cents at every Body; at 35 % Mix, notes below 48 read up to 46 cents off
+  (and one case of +105 cents at Body 0.9), while notes from 48 up stay within about 20 cents. With POLY on,
   chords can go sour: with "Chord Keys" otherwise as it is, at Reverb Mix 35 % a C major chord read +20, -28 and -8 cents.
 - The values of "Open Fifths", "Sympathetic", "Chord Keys" and "Ember Pong", and the defaults of Echo Drive, Echo Tone and Echo Level,
   were chosen by measurement and have not been judged by ear.

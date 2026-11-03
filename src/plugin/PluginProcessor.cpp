@@ -238,6 +238,7 @@ public:
                 uiTab.store(xml->getIntAttribute(kTabProperty, 0));  // an atomic: hosts may call this off the message thread
                 apvts.replaceState(juce::ValueTree::fromXml(*xml));
                 currentProgram = juce::jlimit(0, getNumPrograms() - 1, (int) apvts.state.getProperty("program", 0));
+                stateJump.store(true);  // a project must load onto the same drone every time: no glide from the defaults
             }
     }
 
@@ -273,6 +274,7 @@ private:
             allocator.Assign(held, heldCount);
             if (heldCount == 0 && haveNote) { allocator.NoteOn(lastNote); allocator.NoteOff(lastNote); }  // a latched drone keeps sounding
         }
+        if (stateJump.exchange(false)) core->JumpToTargets();
         for (int i = 0; i < DroseraCore::NumParams; ++i)
             core->SetParam((DroseraCore::Param) i, raw[i]->load());
         core->SetEchoWarp(halveRaw->load() > 0.5f);
@@ -479,6 +481,7 @@ private:
     std::atomic<bool> midiPitchActive_ { false };  // read by the editor
     std::atomic<bool> polyMidiActive_ { false };
     std::atomic<bool> polyLocked_ { false };
+    std::atomic<bool> stateJump { false };  // set by setStateInformation, taken by the next block
     std::atomic<float> voiceNotes_[VoiceAllocator::kVoices] { -1.0f, -1.0f, -1.0f };
 
     drosera::SpectrumTap tap;

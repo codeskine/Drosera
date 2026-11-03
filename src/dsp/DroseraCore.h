@@ -122,6 +122,10 @@ public:
         }
     }
 
+    /// The next Render takes the parameters as they are, with no glide, as the first one after Init does. For a
+    /// restored project: gliding from the defaults can land the drone on another resonance each time it loads.
+    void JumpToTargets() { first_ = true; echo_jump_ = true; }
+
     /// Clears the engine's state and keeps the current parameters. Safe on the audio thread.
     void Recover() {
         engine_->Init(kRate);

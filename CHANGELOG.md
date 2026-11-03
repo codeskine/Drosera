@@ -27,6 +27,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
   fixed order, the one the reference renders were made with.
 - The Audio Unit is built and validated with `auval` and `pluginval` in CI.
 - JUCE is fetched by commit, not by tag.
+- A restored project takes its parameters at once instead of gliding from the defaults, so it settles on the
+  same drone every time it loads. Presets chosen in the window still glide.
+- The manual says how far Reverb Mix detunes low MIDI notes, from measurement.
 
 ## [0.1.1] - 2026-11-01
 
