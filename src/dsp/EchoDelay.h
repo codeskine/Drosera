@@ -29,7 +29,8 @@ class EchoDelay {
             sample_rate_ = sample_rate;
             delayLine_.Init();
             bpf_.Init(sample_rate);
-            bpf_.SetParams(800.0f, 1.0f);
+            bpf_.SetParams(kCenterHz, 1.0f);
+            center_hz_ = kCenterHz;
         }
 
         /**
@@ -79,12 +80,25 @@ class EchoDelay {
          */
         inline float Read()
         {
-            daisysp::fonepole(delay_time_current_, delay_time_target_, delay_smooth_coef_);
-            delayLine_.SetDelay(delay_time_current_ * sample_rate_);
-            float out = delayLine_.Read();
+            float out = readLine();
             out = bpf_.Process(out);
             out = daisysp::SoftClip(out);
             return out;
+        }
+
+        /// As Read, with drive_gain between the band-pass and the soft clip.
+        inline float ReadShaped(const float drive_gain)
+        {
+            return daisysp::SoftClip(drive_gain * bpf_.Process(readLine()));
+        }
+
+        /// Band-pass center, 800 Hz from Init. Recomputes the filter only when it changes, so returning to 800 Hz
+        /// gives the coefficients Init gave.
+        void SetCenter(const float hz)
+        {
+            if (hz == center_hz_) return;
+            center_hz_ = hz;
+            bpf_.SetParams(hz, 1.0f);
         }
 
         /// Stores fed_back * feedback + in. Process feeds back its own output; StereoEcho can feed back the other line's.
@@ -94,6 +108,15 @@ class EchoDelay {
         }
 
     private:
+
+        static constexpr float kCenterHz = 800.0f;
+
+        inline float readLine()
+        {
+            daisysp::fonepole(delay_time_current_, delay_time_target_, delay_smooth_coef_);
+            delayLine_.SetDelay(delay_time_current_ * sample_rate_);
+            return delayLine_.Read();
+        }
 
         EchoDelay(const EchoDelay &other) = delete;
         EchoDelay(EchoDelay &&other) = delete;
@@ -106,6 +129,7 @@ class EchoDelay {
         float delay_smooth_coef_;
 
         float feedback_;
+        float center_hz_;
 
         daisysp::DelayLine<float, MaxLength> delayLine_;
         BPF12 bpf_;

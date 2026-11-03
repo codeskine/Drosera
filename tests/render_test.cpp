@@ -1704,8 +1704,42 @@ static bool stereoEchoMatchesTwoLines() {
     return pass;
 }
 
+// Moving the center away and back gives the coefficients Init gives.
+static bool echoCenterReturnsBitForBit() {
+    auto plain = std::make_unique<Line>(), moved = std::make_unique<Line>();
+    setUpEcho(*plain, 0.1f, 0.9f);
+    setUpEcho(*moved, 0.1f, 0.9f);
+    moved->SetCenter(300.0f);
+    moved->SetCenter(800.0f);
+    const auto in = noise(48000 * 2, 3, 0.3f);
+    std::vector<float> a(in.size()), b(in.size());
+    for (size_t i = 0; i < in.size(); ++i) { a[i] = plain->Process(in[i]); b[i] = moved->Process(in[i]); }
+    const bool pass = sameBits(a, b);
+    printf("echoCenterReturnsBitForBit: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// ReadShaped(1) followed by Write is Process.
+static bool echoShapedAtUnityIsProcess() {
+    auto plain = std::make_unique<Line>(), shaped = std::make_unique<Line>();
+    setUpEcho(*plain, 0.1f, 0.9f);
+    setUpEcho(*shaped, 0.1f, 0.9f);
+    const auto in = noise(48000 * 2, 4, 0.3f);
+    std::vector<float> a(in.size()), b(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        a[i] = plain->Process(in[i]);
+        b[i] = shaped->ReadShaped(1.0f);
+        shaped->Write(b[i], in[i]);
+    }
+    const bool pass = sameBits(a, b);
+    printf("echoShapedAtUnityIsProcess: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
 static bool stereoEchoTests() {
     bool ok = true;
+    ok &= echoCenterReturnsBitForBit();
+    ok &= echoShapedAtUnityIsProcess();
     ok &= stereoEchoMatchesTwoLines();
     return ok;
 }
