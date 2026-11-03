@@ -54,15 +54,15 @@ public:
     /// echo gets 2.8 to 3.9 times shorter, not twice: a doppler warp rather than a tempo halving.
     void SetEchoWarp(bool on)          { echo_warp_ = on; }
 
-    /// Plugin extension: the echo's repeats bounce between left and right and saturate. Off by default.
+    /// Plugin extension: the echo's repeats bounce between left and right. Off by default.
     void SetEchoPong(bool on)          { echo_pong_ = on; }
-    /// 0..1, to 0..+12 dB into PongDelay's soft clip.
+    /// 0..1, to 0..+12 dB into the echo's soft clip while PONG is on.
     void SetEchoDrive(float norm)      { echo_drive_norm_ = norm; }
-    /// 0..1, LOG to 800..18000 Hz.
+    /// 0..1, LOG to 200..3200 Hz, the echo's band-pass center while PONG is on.
     void SetEchoTone(float norm)       { echo_tone_norm_ = norm; }
     /// 0..1: from every repeat in the middle to fully left and right.
     void SetEchoWidth(float norm)      { echo_width_norm_ = norm; }
-    /// 0..1, to -30..+6 dB on PongDelay's output.
+    /// 0..1, to -30..+6 dB on the echo's output while PONG is on.
     void SetEchoLevel(float norm)      { echo_level_norm_ = norm; }
 
     /// MIDI pitch override of the Frequency knob (note number, may be fractional).
@@ -238,9 +238,9 @@ private:
         for (size_t v = 0; v < kNumVoices; ++v)
             voice_registry_.Register(VoiceParam(Voice0Receive + v), 1.0f, 0.0f, 1.0f,
                 [&e, v](float amount) { e.SetCouplingReceive(v, amount); });
-        echo_registry_.Register(Drive, 0.5f, 0.0f, 1.0f,
+        echo_registry_.Register(Drive, 0.0f, 0.0f, 1.0f,
             [&e](float drive) { e.SetPongDrive(drive); });
-        echo_registry_.Register(Tone, 3795.0f, kPongToneMin, kPongToneMax,
+        echo_registry_.Register(Tone, 800.0f, kPongToneMin, kPongToneMax,
             [&e](float hz) { e.SetPongTone(hz); }, 0.05f, daisysp::Mapping::LOG);
         echo_registry_.Register(Width, 1.0f, 0.0f, 1.0f,
             [&e](float width) { e.SetPongWidth(width); });
@@ -330,7 +330,7 @@ private:
 
     static constexpr float kNoteMin = 16.0f, kKnobNoteMax = 72.0f, kNoteMax = 84.0f;  // above this the loop filters make the string run flat (-120 cents at 90)
     static constexpr float kEchoMin = 0.05f, kEchoMax = 5.0f;
-    static constexpr float kPongToneMin = 800.0f, kPongToneMax = 18000.0f;
+    static constexpr float kPongToneMin = 200.0f, kPongToneMax = 3200.0f;  // the LOG mapping puts 800 Hz, the firmware's, at 0.5
     static constexpr float kPongLevelMinDb = -30.0f, kPongLevelMaxDb = 6.0f;
     static constexpr float kKnobDelayLag = 0.2f;  // same as FeedbackSynth::Engine::Init
     static constexpr float kMidiDelayLag = 0.03f;
@@ -349,7 +349,7 @@ private:
     std::array<float, NumParams> norm_ {};
     bool echo_warp_ = false;
     bool echo_pong_ = false;
-    float echo_drive_norm_ = 0.5f, echo_tone_norm_ = 0.5f;
+    float echo_drive_norm_ = 0.0f, echo_tone_norm_ = 0.5f;
     float echo_width_norm_ = 1.0f, echo_level_norm_ = 30.0f / 36.0f;  // full width, 0 dB
     bool midi_pitch_on_ = false;
     std::array<bool, kNumVoices> gate_enabled_ {}, gate_open_ {};

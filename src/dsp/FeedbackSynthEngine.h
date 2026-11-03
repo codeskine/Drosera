@@ -6,7 +6,6 @@
 #include <daisysp.h>
 #include "EchoDelay.h"
 #include "FeedbackVoice.h"
-#include "PongDelay.h"
 #include "StereoEcho.h"
 
 namespace infrasonic {
@@ -55,16 +54,18 @@ class Engine {
         // Last sample's samp, before the ramp. Zero while polyphony is not running.
         float VoiceTap(const size_t voice, const size_t channel) const { return tap_[voice][channel]; }
 
-        // Plugin extension, not in the firmware (off by default): crossfades the echo's wet signal to PongDelay over
-        // 20 ms, or jumps there if immediate. Both always run. Init leaves it alone. Same thread as Process.
-        void SetPong(bool on, bool immediate = false);
+        // Plugin extension, not in the firmware (off by default): the echo's two lines feed each other, so its repeats
+        // bounce between left and right. Ramps over 20 ms, or jumps there if immediate. Init leaves it alone. Same
+        // thread as Process.
+        void SetPong(bool on, bool immediate = false) { stereo_echo_->SetPong(on, immediate); }
         // 0-1
-        void SetPongDrive(const float drive) { pong_delay_->SetDrive(drive); }
-        void SetPongTone(const float hz) { pong_delay_->SetTone(hz); }
-        void SetPongWidth(const float width) { pong_delay_->SetWidth(width); }
-        void SetPongLevel(const float gain) { pong_delay_->SetLevel(gain); }
+        void SetPongDrive(const float drive) { stereo_echo_->SetDrive(drive); }
+        // Band-pass center
+        void SetPongTone(const float hz) { stereo_echo_->SetTone(hz); }
+        void SetPongWidth(const float width) { stereo_echo_->SetWidth(width); }
+        void SetPongLevel(const float gain) { stereo_echo_->SetLevel(gain); }
         // 0-1, for tests
-        float PongMix() const { return pong_mix_; }
+        float PongMix() const { return stereo_echo_->PongMix(); }
 
         void Process(float in, float &outL, float &outR);
 
@@ -90,9 +91,6 @@ class Engine {
         daisysp::WhiteNoise noise_[kNumVoices];
 
         std::unique_ptr<StereoEcho<kMaxEchoDelaySamp>> stereo_echo_;
-        std::unique_ptr<PongDelay<kMaxEchoDelaySamp>> pong_delay_;
-        bool pong_on_ = false;
-        float pong_mix_ = 0.0f;
 
         void ProcessPoly(float in, float &outL, float &outR);
         void ProcessEcho(float &sampL, float &sampR);
