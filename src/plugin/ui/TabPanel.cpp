@@ -7,7 +7,7 @@ namespace drosera {
 namespace {
 // In the panel's coordinates. The panel starts 306 px down the window.
 constexpr int kStripTop = 8, kStripHeight = 22, kLineY = 32;
-constexpr int kTabStep = 118, kTabWidth = 108, kMargin = 26;
+constexpr int kTabStep = 101, kTabWidth = 91, kMargin = 26;
 constexpr int kCellTop = 48, kCellWidth = 92, kCellHeight = 92, kCellStep = 112;
 constexpr int kToggleWidth = 78, kToggleHeight = 22;
 
@@ -24,7 +24,8 @@ const std::map<juce::String, juce::String>& captions() {
     static const std::map<juce::String, juce::String> names {
         {"lpf", "Lowpass"}, {"hpf", "Highpass"}, {"revmix", "Mix"}, {"revdecay", "Decay"}, {"echosend", "Send"},
         {"echotime", "Time"}, {"echofb", "Feedback"}, {"volume", "Volume"}, {"inputgain", "Input"},
-        {"echohalve", "WARP"}, {"midipitch", "PITCH"}, {"midigate", "GATE"},
+        {"echodrive", "Drive"}, {"echotone", "Tone"}, {"echowidth", "Width"}, {"echolevel", "Level"},
+        {"echohalve", "WARP"}, {"echopong", "PONG"}, {"midipitch", "PITCH"}, {"midigate", "GATE"},
         {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"}, {"poly", "POLY"}, {"polylock", "LOCK"},
     };
     return names;
@@ -61,17 +62,18 @@ void LabeledKnob::resized() {
 }
 
 TabPanel::TabPanel(juce::AudioProcessorValueTreeState& apvts)
-    : pages_ {{"FILTERS", {"lpf", "hpf"}, {}},
-              {"REVERB", {"revmix", "revdecay"}, {}},
-              {"ECHO", {"echosend", "echotime", "echofb"}, {"echohalve"}},
-              {"OUTPUT", {"volume", "inputgain"}, {}},
-              {"MIDI", {}, {"midipitch", "midigate"}},
-              {"STRINGS", {"coupling", "interval2", "interval3"}, {"poly", "polylock"}}} {
+    : pages_ {{0, "FILTERS", {"lpf", "hpf"}, {}},
+              {1, "REVERB", {"revmix", "revdecay"}, {}},
+              {2, "ECHO", {"echosend", "echotime", "echofb"}, {"echohalve"}},
+              {6, "PONG", {"echodrive", "echotone", "echowidth", "echolevel"}, {"echopong"}},
+              {3, "OUTPUT", {"volume", "inputgain"}, {}},
+              {4, "MIDI", {}, {"midipitch", "midigate"}},
+              {5, "STRINGS", {"coupling", "interval2", "interval3"}, {"poly", "polylock"}}} {
     for (int i = 0; i < kNumTabs; ++i) {
         auto& page = pages_[(size_t) i];
         auto& button = tabButtons_[i];
         button.setButtonText(page.title);
-        button.onClick = [this, i] { if (onTabClicked) onTabClicked(i); };
+        button.onClick = [this, id = page.id] { if (onTabClicked) onTabClicked(id); };
         addAndMakeVisible(button);
 
         for (const auto& id : page.knobs) {
@@ -94,13 +96,19 @@ TabPanel::TabPanel(juce::AudioProcessorValueTreeState& apvts)
     setTab(0);
 }
 
-void TabPanel::setTab(int index) {
-    tab_ = juce::isPositiveAndBelow(index, kNumTabs) ? index : 0;  // a damaged project opens the first tab
+int TabPanel::place(int id) const {
+    for (int i = 0; i < kNumTabs; ++i)
+        if (pages_[(size_t) i].id == id) return i;
+    return 0;
+}
+
+void TabPanel::setTab(int id) {
+    tab_ = pages_[(size_t) place(id)].id;  // a damaged project opens the first tab
     for (int i = 0; i < kNumTabs; ++i) {
-        const bool open = i == tab_;
+        const bool open = pages_[(size_t) i].id == tab_;
         tabButtons_[i].setToggleState(open, juce::dontSendNotification);
-        for (const auto& id : pages_[(size_t) i].knobs) knobs_[id]->setVisible(open);
-        for (const auto& id : pages_[(size_t) i].toggles) toggles_[id]->button.setVisible(open);
+        for (const auto& paramId : pages_[(size_t) i].knobs) knobs_[paramId]->setVisible(open);
+        for (const auto& paramId : pages_[(size_t) i].toggles) toggles_[paramId]->button.setVisible(open);
     }
     repaint();
 }
@@ -109,7 +117,7 @@ void TabPanel::paint(juce::Graphics& g) {
     g.setColour(theme::track());
     g.fillRect(kMargin, kLineY, getWidth() - 2 * kMargin, 1);
     g.setColour(theme::dew());
-    g.fillRect(kMargin + tab_ * kTabStep, kLineY - 2, kTabWidth, 3);
+    g.fillRect(kMargin + place(tab_) * kTabStep, kLineY - 2, kTabWidth, 3);
 }
 
 void TabPanel::resized() {
@@ -118,15 +126,16 @@ void TabPanel::resized() {
 
     for (const auto& page : pages_) {
         const int count = (int) (page.knobs.size() + page.toggles.size());
-        int x = (getWidth() - (count - 1) * kCellStep) / 2;
+        const int step = count > 1 ? juce::jmin(kCellStep, (getWidth() - 2 * kMargin - kCellWidth) / (count - 1)) : kCellStep;
+        int x = (getWidth() - (count - 1) * step) / 2;
         for (const auto& id : page.knobs) {
             knobs_[id]->setBounds(x - kCellWidth / 2, kCellTop, kCellWidth, kCellHeight);
-            x += kCellStep;
+            x += step;
         }
         const int top = kCellTop + (kCellHeight - kToggleHeight) / 2 - 8;
         for (const auto& id : page.toggles) {
             toggles_[id]->button.setBounds(x - kToggleWidth / 2, top, kToggleWidth, kToggleHeight);
-            x += kCellStep;
+            x += step;
         }
     }
 }

@@ -17,6 +17,8 @@ public:
     int tab() const { return tabs_.tab(); }
     juce::Rectangle<int> tabBounds(int index) const { return tabs_.tabBounds(index).translated(tabs_.getX(), tabs_.getY()); }
 
+    juce::Rectangle<int> toggleBounds(const juce::String& paramId) const { return tabs_.toggleBounds(paramId); }
+
     /// The timer's body: moves the plant on by dtSeconds and refreshes every readout.
     void refreshDisplay(float dtSeconds);
 
