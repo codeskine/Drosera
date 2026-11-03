@@ -44,6 +44,7 @@ public:
         for (auto& l : limiter_) l.Init();
         phase_ = 0;
         first_ = true;
+        echo_jump_ = true;
         voices_running_ = false;
         tracking_.fill(false);
     }
@@ -121,9 +122,14 @@ public:
         }
     }
 
+    /// The next Render takes the parameters as they are, with no glide, as the first one after Init does. For a
+    /// restored project: gliding from the defaults can land the drone on another resonance each time it loads.
+    void JumpToTargets() { first_ = true; echo_jump_ = true; }
+
     /// Clears the engine's state and keeps the current parameters. Safe on the audio thread.
     void Recover() {
         engine_->Init(kRate);
+        echo_jump_ = true;
         tracking_.fill(false);
         for (auto& l : limiter_) l.Init();
     }
@@ -136,12 +142,12 @@ public:
     int RecoveryCount() const { return recovery_count_; }
 
 private:
-    using Registry = ParameterRegistry<Param>;
+    using Registry = ParameterRegistry<Param, NumParams>;
 
-    // Their own registries: registry_ iterates an unordered_map, so more entries could reorder its handlers.
-    enum VoiceParam : int { Voice1Pitch, Voice2Pitch, Voice1Gain, Voice2Gain, Coupling, Voice0Receive, Voice1Receive, Voice2Receive };
+    // Their own registries, so registry_ keeps the handler order the reference renders were made with.
+    enum VoiceParam : int { Voice1Pitch, Voice2Pitch, Voice1Gain, Voice2Gain, Coupling, Voice0Receive, Voice1Receive, Voice2Receive, NumVoiceParams };
 
-    enum EchoParam : int { Drive, Tone, Width, Level };
+    enum EchoParam : int { Drive, Tone, Width, Level, NumEchoParams };
 
     void pushControls() {
         const bool imm = first_;  // jump to initial values instead of gliding from defaults
@@ -219,8 +225,9 @@ private:
             std::bind(&Engine::SetReverbFeedback, &e, _1));
         registry_.Register(EchoSend, 0.0f, 0.0f, 1.0f,
             std::bind(&Engine::SetEchoDelaySendAmount, &e, _1), 0.05f, daisysp::Mapping::EXP);
+        // Engine::Init leaves the echo at 5 s: jump there on the first tick, or the first repeats come late and warped.
         registry_.Register(EchoTime, 0.5f, kEchoMin, kEchoMax,
-            std::bind(&Engine::SetEchoDelayTime, &e, _1), 0.1f, daisysp::Mapping::EXP);
+            [this, &e](float s) { e.SetEchoDelayTime(s, echo_jump_); echo_jump_ = false; }, 0.1f, daisysp::Mapping::EXP);
         registry_.Register(EchoFeedback, 0.0f, 0.0f, 1.5f,
             std::bind(&Engine::SetEchoDelayFeedback, &e, _1));
         registry_.Register(OutputVolume, 0.5f, 0.0f, 1.0f,
@@ -343,8 +350,8 @@ private:
     float body_s_ = 0.001f, lpf_hz_ = 18000.0f, hpf_hz_ = 250.0f;
     std::array<bool, kNumVoices> tracking_ {};
     Registry registry_;
-    ParameterRegistry<VoiceParam> voice_registry_;
-    ParameterRegistry<EchoParam> echo_registry_;
+    ParameterRegistry<VoiceParam, NumVoiceParams> voice_registry_;
+    ParameterRegistry<EchoParam, NumEchoParams> echo_registry_;
     daisysp::Limiter limiter_[2];
     std::array<float, NumParams> norm_ {};
     bool echo_warp_ = false;
@@ -359,7 +366,7 @@ private:
     float coupling_norm_ = 0.0f;
     std::array<int, kNumVoices> interval_ { 0, 7, 12 };
     int recovery_count_ = 0;
-    bool first_ = true;
+    bool first_ = true, echo_jump_ = true;
     size_t phase_ = 0;
     std::atomic<float> published_note_[kNumVoices] { { 40.0f }, { 40.0f }, { 40.0f } };
     std::atomic<float> published_body_s_[kNumVoices] { { 0.001f }, { 0.001f }, { 0.001f } };

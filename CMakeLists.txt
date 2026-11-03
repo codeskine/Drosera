@@ -47,7 +47,7 @@ if(DROSERA_BUILD_PLUGIN)
     include(FetchContent)
     FetchContent_Declare(JUCE
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG 8.0.9
+        GIT_TAG f72bad64d29715216226685810c5196bd0d79d77  # 8.0.9, pinned to the commit: tags can move
         GIT_SHALLOW ON)
     FetchContent_MakeAvailable(JUCE)
 

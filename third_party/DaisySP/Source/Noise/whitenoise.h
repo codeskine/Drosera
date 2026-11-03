@@ -31,7 +31,8 @@ class WhiteNoise
     */
     inline float Process()
     {
-        randseed_ *= 16807;
+        // Unsigned: the signed product overflows (undefined behaviour), the unsigned one wraps to the same bits.
+        randseed_ = (int32_t) ((uint32_t) randseed_ * 16807u);
         return (randseed_ * coeff_) * amp_;
     }
 

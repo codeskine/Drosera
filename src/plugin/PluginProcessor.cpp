@@ -138,6 +138,7 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int) override {
+        if (sampleRate <= 0.0) sampleRate = DroseraCore::kRate;  // some hosts prepare with a placeholder rate
         core->Init();  // allocates; only ever called off the audio thread
         ratio = (double) DroseraCore::kRate / sampleRate;   // engine samples consumed per host output sample
         inRatio = sampleRate / (double) DroseraCore::kRate; // host samples consumed per engine input sample
@@ -168,10 +169,32 @@ public:
         const auto latency = (double) SincResampler::kLatencyInputSamples
                            + ((double) kPrime + SincResampler::kLatencyInputSamples) / ratio;
         setLatencySamples(useResampler && getTotalNumInputChannels() > 0 ? juce::roundToInt(latency) : 0);
+        for (auto& ring : bypassRing) ring.assign((size_t) std::max(1, getLatencySamples()), 0.0f);
+        bypassPos = 0;
         prepared = true;
     }
 
     void releaseResources() override { prepared = false; }
+
+    // Bypass must delay the input by the declared latency, or the host's compensation shifts the bypassed audio.
+    void processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
+        const int total = buffer.getNumSamples(), latency = prepared ? getLatencySamples() : 0;
+        const int numIn = prepared ? getTotalNumInputChannels() : 0;
+        for (int c = 0; c < buffer.getNumChannels(); ++c) {
+            float* d = buffer.getWritePointer(c);
+            if (c >= numIn) { juce::FloatVectorOperations::clear(d, total); continue; }
+            if (latency == 0 || c >= 2) continue;
+            float* ring = bypassRing[(size_t) c].data();
+            int p = bypassPos;
+            for (int i = 0; i < total; ++i) {
+                const float in = d[i];
+                d[i] = ring[p];
+                ring[p] = in;
+                if (++p == latency) p = 0;
+            }
+        }
+        if (latency > 0) bypassPos = (bypassPos + total) % latency;
+    }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) override {
         juce::ScopedNoDenormals noDenormals;
@@ -215,6 +238,7 @@ public:
                 uiTab.store(xml->getIntAttribute(kTabProperty, 0));  // an atomic: hosts may call this off the message thread
                 apvts.replaceState(juce::ValueTree::fromXml(*xml));
                 currentProgram = juce::jlimit(0, getNumPrograms() - 1, (int) apvts.state.getProperty("program", 0));
+                stateJump.store(true);  // a project must load onto the same drone every time: no glide from the defaults
             }
     }
 
@@ -250,6 +274,7 @@ private:
             allocator.Assign(held, heldCount);
             if (heldCount == 0 && haveNote) { allocator.NoteOn(lastNote); allocator.NoteOff(lastNote); }  // a latched drone keeps sounding
         }
+        if (stateJump.exchange(false)) core->JumpToTargets();
         for (int i = 0; i < DroseraCore::NumParams; ++i)
             core->SetParam((DroseraCore::Param) i, raw[i]->load());
         core->SetEchoWarp(halveRaw->load() > 0.5f);
@@ -456,6 +481,7 @@ private:
     std::atomic<bool> midiPitchActive_ { false };  // read by the editor
     std::atomic<bool> polyMidiActive_ { false };
     std::atomic<bool> polyLocked_ { false };
+    std::atomic<bool> stateJump { false };  // set by setStateInformation, taken by the next block
     std::atomic<float> voiceNotes_[VoiceAllocator::kVoices] { -1.0f, -1.0f, -1.0f };
 
     drosera::SpectrumTap tap;
@@ -468,6 +494,8 @@ private:
     SincResampler resampleL, resampleR, resampleIn;
     std::vector<float> outL, outR, inFifo, in48, inMono;
     size_t outCount = 0, inCount = 0;
+    std::vector<float> bypassRing[2];  // the input, delayed by the declared latency while bypassed
+    int bypassPos = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DroseraProcessor)
 };

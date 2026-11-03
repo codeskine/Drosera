@@ -13,6 +13,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 - Echo Pong: a second echo, off by default, whose repeats bounce between left and right and saturate, with PONG, Drive, Tone, Width and Level in its own PONG tab.
 - The Ember Pong preset.
 
+### Fixed
+
+- The echo's first repeats after loading, or after the engine recovers from a bad sample, came late and warped:
+  its delay line started at 5 s and glided towards the knob for seconds, settling up to 3 ms short of it. It now
+  starts at the knob. The three reference renders with echo change throughout, the seven without are byte-identical,
+  so `tools/hardware-comparison/reference/SHA256SUMS` was regenerated.
+- Bypass delays the input by the declared latency, so hosts at rates other than 48 kHz keep the bypassed audio aligned.
+- A host that prepares with a sample rate of 0 no longer makes the resampling buffers unbounded.
+- The noise generator multiplied a signed integer past its range, which is undefined behaviour: it now wraps
+  as unsigned. Same sound.
+- The parameter registry no longer depends on the standard library's hash-map order: its handlers run in a
+  fixed order, the one the reference renders were made with.
+- The Audio Unit is built and validated with `auval` and `pluginval` in CI.
+- JUCE is fetched by commit, not by tag.
+- A restored project takes its parameters at once instead of gliding from the defaults, so it settles on the
+  same drone every time it loads. Presets chosen in the window still glide.
+- The manual says how far Reverb Mix detunes low MIDI notes, from measurement.
+
 ## [0.1.1] - 2026-11-01
 
 ### Fixed

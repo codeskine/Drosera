@@ -1,1 +1,3 @@
-Vendored DaisySP commit 7f67768 (MIT). Only change: headers got #include <cstddef>/<cstdint>.
+Vendored DaisySP commit 7f67768 (MIT). Changes:
+- Headers got #include <cstddef>/<cstdint>.
+- Noise/whitenoise.h: the LCG multiplies as uint32_t, so it no longer overflows a signed int (undefined behaviour). Same output bits.
