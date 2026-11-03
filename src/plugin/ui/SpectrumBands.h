@@ -7,7 +7,7 @@
 namespace drosera {
 
 constexpr int kNumBands = 54;
-constexpr float kFloorDb = -72.0f;
+constexpr float kFloorDb = -54.0f;  // lower, the loop's noise and far harmonics kept every tentacle half open
 
 /// Log-spaced from 30 Hz to 16 kHz.
 inline float bandCentreHz(int band) {

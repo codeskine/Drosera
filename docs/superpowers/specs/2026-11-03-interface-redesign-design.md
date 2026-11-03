@@ -72,8 +72,10 @@ background. 54 tentacles grow from its rim, one per band, log-spaced from 30 Hz 
 band at the top, then clockwise. A change of pitch moves the light around the plant. (An earlier version spread
 neighbouring bands around the leaf; it hid every change of pitch, so it was dropped.)
 
-Each tentacle tapers from its base to its tip and ends in a drop of dew. Its band's level, from −72 dBFS to 0 dBFS as
-today, drives it as a real sundew moves:
+Each tentacle tapers from its base to its tip and ends in a drop of dew. Levels are shown from −54 dBFS to 0 dBFS.
+(Rugiada's −72 dBFS kept the loop's noise and far harmonics showing, so a third of the tentacles stood half open under a
+single note; from −54 dBFS the bands well below a played note rest.) A band's level drives its tentacle as a real sundew
+moves:
 
 - **At rest** the tentacle is short and curled, and its drop is small and dim. A sounding tentacle stands on average at
   least five times as far from its root as a silent one, so what sounds stands out from the plant's shape.

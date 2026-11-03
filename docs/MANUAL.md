@@ -21,7 +21,7 @@ Drag the window's corner to scale it from 75 % to 150 %. The scale is saved with
 
 The sundew in the middle of the window shows the output's real spectrum. Each of its 54 tentacles is a frequency band,
 from 30 Hz at the top, clockwise to 16 kHz, so a change of pitch moves the light around the plant. A band's
-level, from −72 dBFS to 0 dBFS, unfurls its tentacle and swells its drop of dew: at rest the tentacles are short and
+level, from −54 dBFS to 0 dBFS, unfurls its tentacle and swells its drop of dew: at rest the tentacles are short and
 curled. Nothing moves unless the sound does: a silent plugin shows a still, closed plant.
 
 Low bands are coarser than high ones. Below about 150 Hz several tentacles share what one FFT bin measured.

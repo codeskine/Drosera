@@ -957,6 +957,30 @@ static void editorTests() {
                   && editor->plant().isMarked(bandOfNote(48.0f)), "gatedReleasedVoiceIsNotNamed");
     }
 
+    {   // A played note must stand out on the plant: bands far below it, its noise and distant harmonics, stay near rest.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 800);
+        auto editor = openEditor(*p);
+        for (const char* id : { "midipitch", "midigate" }) setParameter(*p, id, 1.0f);
+        setParameter(*p, "fbgain", 63.0f / 72.0f);  // +3 dB: the loop sings
+        juce::MidiBuffer note, none;
+        note.addEvent(juce::MidiMessage::noteOn(1, 48, (juce::uint8) 100), 0);
+        juce::AudioBuffer<float> buffer(2, 800);
+        for (int b = 0; b < 90; ++b) {  // 1.5 s, a display tick per block as at 60 Hz
+            buffer.clear();
+            p->processBlock(buffer, b == 0 ? note : none);
+            editor->refreshDisplay(1.0f / 60.0f);
+        }
+        std::vector<float> amounts;
+        for (int i = 0; i < kNumBands; ++i) amounts.push_back(bandAmount(editor->plant().level(i)));
+        const float peak = *std::max_element(amounts.begin(), amounts.end());
+        std::nth_element(amounts.begin(), amounts.begin() + kNumBands / 2, amounts.end());
+        const float median = amounts[(size_t) kNumBands / 2];
+        const auto out = [&](float above) { return (int) std::count_if(amounts.begin(), amounts.end(), [above](float a) { return a > above; }); };
+        std::printf("  played note: peak tentacle %.2f, median %.2f; out past 0.3: %d, past 0.5: %d of %d\n", peak, median, out(0.3f), out(0.5f), kNumBands);
+        check(peak > 0.6f && median < 0.1f, "playedNoteStandsOut");
+    }
+
     {   // A preset chosen in the window reaches the host's own display.
         struct Listener final : juce::AudioProcessorListener {
             bool programChanged = false;
