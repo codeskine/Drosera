@@ -66,6 +66,19 @@ if [ -n "$vst3" ]; then
         || fail "plugin_host_test fails on the packaged VST3: $(tail -3 "$work/host.log" | tr '\n' ' ')"
 fi
 
+# A signed package must be signed for installation, notarized and stapled, with every bundle on the hardened runtime.
+signature=$(pkgutil --check-signature "$package" 2>&1 || true)
+if [[ "$signature" != *"no signature"* ]]; then
+    [[ "$signature" == *"Developer ID Installer"* ]] || fail "the package is not signed with Developer ID Installer"
+    spctl --assess --type install -vv "$package" 2>&1 | grep -q 'source=Notarized Developer ID' \
+        || fail "spctl does not accept the package as notarized"
+    xcrun stapler validate "$package" > /dev/null 2>&1 || fail "the package has no stapled ticket"
+    for bundle in "$expanded"/*.pkg/Payload/Drosera.*; do
+        codesign -dv "$bundle" 2>&1 | grep -q 'flags=.*runtime' \
+            || fail "$(basename "$bundle") is not signed with the hardened runtime"
+    done
+fi
+
 if [ "$failures" -ne 0 ]; then
     exit 1
 fi

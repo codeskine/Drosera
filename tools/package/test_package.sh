@@ -99,6 +99,34 @@ else
     pass standalone_asks_for_microphone
 fi
 
+# partial_signing_vars_rejected
+partial_ok=1
+for vars in "DEVELOPER_ID_APPLICATION=x" \
+    "DEVELOPER_ID_APPLICATION=x DEVELOPER_ID_INSTALLER=y APPLE_ID=a APPLE_TEAM_ID=t"; do
+    rm -f "$tmp/partial.pkg"
+    started=$SECONDS
+    # shellcheck disable=SC2086 # each word of $vars is one assignment
+    if env -u DEVELOPER_ID_APPLICATION -u DEVELOPER_ID_INSTALLER -u APPLE_ID -u APPLE_TEAM_ID -u APPLE_APP_PASSWORD \
+        $vars "$build" "$artefacts" 0.0.0 "$tmp/partial.pkg" > /dev/null 2> "$tmp/partial.err"; then
+        fail partial_signing_vars_rejected "build_pkg.sh succeeded with only $vars"; partial_ok=0
+    elif ! grep -q 'signing' "$tmp/partial.err"; then
+        fail partial_signing_vars_rejected "the error does not mention signing: $(cat "$tmp/partial.err")"; partial_ok=0
+    elif [ -e "$tmp/partial.pkg" ]; then
+        fail partial_signing_vars_rejected "a package was written with only $vars"; partial_ok=0
+    elif [ $((SECONDS - started)) -gt 1 ]; then
+        fail partial_signing_vars_rejected "the check came after build work"; partial_ok=0
+    fi
+done
+[ "$partial_ok" = 1 ] && pass partial_signing_vars_rejected
+
+# unsigned_package_has_no_signature
+signature=$( [ -f "$good" ] && pkgutil --check-signature "$good" 2>&1 || true)
+if [[ "$signature" == *"no signature"* ]] && "$check" "$good" > /dev/null 2>&1; then
+    pass unsigned_package_has_no_signature
+else
+    fail unsigned_package_has_no_signature "the unsigned package carries a signature, or check_pkg.sh rejects it"
+fi
+
 # missing_au
 mkdir -p "$tmp/no-au"
 ditto "$artefacts/VST3" "$tmp/no-au/VST3"

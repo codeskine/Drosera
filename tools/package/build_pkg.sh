@@ -17,6 +17,16 @@ artefacts=$1
 version=$2
 output=$3
 
+# Signing takes all five variables or none: a half-configured CI must fail, not ship an unsigned package.
+signing_vars=(DEVELOPER_ID_APPLICATION DEVELOPER_ID_INSTALLER APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD)
+set_count=0
+for var in "${signing_vars[@]}"; do [ -n "${!var:-}" ] && set_count=$((set_count + 1)); done
+if [ "$set_count" -ne 0 ] && [ "$set_count" -ne "${#signing_vars[@]}" ]; then
+    echo "build_pkg: signing needs all of ${signing_vars[*]}; only $set_count are set" >&2
+    exit 1
+fi
+signing=$([ "$set_count" -ne 0 ] && echo 1 || echo 0)
+
 # format, bundle, identifier, install location
 formats=(
     "VST3 Drosera.vst3 com.codeskine.drosera.vst3 /Library/Audio/Plug-Ins/VST3"
@@ -43,7 +53,30 @@ for row in "${formats[@]}"; do
     ditto "$artefacts/$format/$bundle" "$work/root-$format/$bundle"
 done
 
-# Task 3 adds sign_and_notarize here, on the staged bundles.
+# Each bundle on its own, never --deep: notarization needs the hardened runtime on every executable. Only the app
+# takes entitlements; the plug-ins run with their host's.
+sign_bundles() {
+    local -a sign=(codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_APPLICATION")
+    "${sign[@]}" "$work/root-VST3/Drosera.vst3"
+    "${sign[@]}" "$work/root-AU/Drosera.component"
+    "${sign[@]}" --entitlements "$resources/Drosera.entitlements" "$work/root-Standalone/Drosera.app"
+}
+
+notarize_and_staple() {
+    local package=$1 result id status
+    local -a credentials=(--apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD")
+    result=$(xcrun notarytool submit "$package" "${credentials[@]}" --wait --output-format json) || true
+    id=$(plutil -extract id raw -o - - <<< "$result" 2>/dev/null || true)
+    status=$(plutil -extract status raw -o - - <<< "$result" 2>/dev/null || true)
+    if [ "$status" != Accepted ]; then
+        echo "build_pkg: notarization ended with '${status:-no status}': $result" >&2
+        [ -n "$id" ] && xcrun notarytool log "$id" "${credentials[@]}" >&2
+        exit 1
+    fi
+    xcrun stapler staple "$package"
+}
+
+[ "$signing" = 1 ] && sign_bundles
 
 licences=(
     LICENSE
@@ -76,7 +109,10 @@ done
 
 sed "s/@VERSION@/$version/g" "$resources/distribution.xml" > "$work/distribution.xml"
 mkdir -p "$(dirname "$output")"
+product_signing=()
+[ "$signing" = 1 ] && product_signing=(--sign "$DEVELOPER_ID_INSTALLER" --timestamp)
 productbuild --quiet --distribution "$work/distribution.xml" --resources "$work/screens" \
-    --package-path "$work/components" "$work/Drosera.pkg"
+    --package-path "$work/components" ${product_signing[@]+"${product_signing[@]}"} "$work/Drosera.pkg"
+[ "$signing" = 1 ] && notarize_and_staple "$work/Drosera.pkg"
 mv -f "$work/Drosera.pkg" "$output"
 echo "build_pkg: wrote $output"
