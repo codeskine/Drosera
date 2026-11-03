@@ -9,6 +9,8 @@ Read this before distributing a binary. Nothing here is legal advice.
 | `ReverbSc`, `Tone` from that DaisySP | `third_party/DaisySP/Source/Effects/reverbsc.*`, `Filters/tone.*` | **Treat as LGPL-2.1** | See below. |
 | JUCE 8.0.9 | fetched by CMake | **AGPLv3 or commercial** | A binary built on it must comply with one of the two. |
 | VST3 SDK | inside JUCE | Steinberg proprietary or GPLv3 | See JUCE's `LICENSE.md`. |
+| Inter 4.1 (The Inter Project Authors) | `assets/fonts/Inter-*.ttf`, embedded in the plugin | SIL Open Font License 1.1, see `assets/fonts/OFL-Inter.txt` | The interface's text. Unmodified. |
+| Cormorant Garamond 4.002 (the Cormorant Project Authors) | `assets/fonts/CormorantGaramond-Medium.otf`, embedded in the plugin | SIL Open Font License 1.1, see `assets/fonts/OFL-Cormorant.txt` | The name in the header. Unmodified. |
 
 ## ReverbSc and Tone
 
