@@ -21,26 +21,32 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
       body_(*apvts.getParameter("body"), "Body", drosera::KnobSize::large, drosera::KnobGroup::loop),
       row_(apvts), setup_(apvts), header_(p) {
     setLookAndFeel(&lookAndFeel_);
-    addAndMakeVisible(plant_);
-    addAndMakeVisible(frequency_);
-    addAndMakeVisible(body_);
-    addAndMakeVisible(row_);
+    content_.setInterceptsMouseClicks(false, true);
+    addAndMakeVisible(content_);
+    content_.addAndMakeVisible(plant_);
+    content_.addAndMakeVisible(frequency_);
+    content_.addAndMakeVisible(body_);
+    content_.addAndMakeVisible(row_);
     scrim_.onClick = [this] { setSetupOpen(false); };
-    addChildComponent(scrim_);
-    addChildComponent(setup_);
+    content_.addChildComponent(scrim_);
+    content_.addChildComponent(setup_);
 
     header_.onProgramChosen = [this](int index) { selectProgram(index); };
     header_.onSetupClicked = [this] { setSetupOpen(!setupOpen()); };
-    addAndMakeVisible(header_);
+    content_.addAndMakeVisible(header_);
 
     setWantsKeyboardFocus(true);
-    setResizable(false, false);
-    setSize(kWidth, kHeight);
+    const float scale = bridge_.uiScale();  // read first: setting the limits resizes the window, which saves its scale
+    setResizable(true, true);
+    getConstrainer()->setFixedAspectRatio((double) kWidth / kHeight);
+    setResizeLimits(kWidth * 3 / 4, kHeight * 3 / 4, kWidth * 3 / 2, kHeight * 3 / 2);
+    layOut();
+    setSize(juce::roundToInt(kWidth * scale), juce::roundToInt(kHeight * scale));
 
     bridge_.spectrumTap().setActive(true);
     refreshDisplay(0.0f);
     lastTick_ = juce::Time::getMillisecondCounterHiRes();
-    startTimerHz(30);
+    startTimerHz(60);
 }
 
 DroseraEditor::~DroseraEditor() {
@@ -161,12 +167,19 @@ juce::String DroseraEditor::tag(const juce::String& paramId) const {
 }
 
 void DroseraEditor::paint(juce::Graphics& g) {
+    g.addTransform(juce::AffineTransform::scale(scale()));
     g.setGradientFill(juce::ColourGradient(drosera::theme::backgroundCentre(), {450.0f, 240.0f},
                                            drosera::theme::backgroundEdge(), {450.0f, 240.0f + 560.0f}, true));
     g.fillAll();
 }
 
 void DroseraEditor::resized() {
+    content_.setBounds(0, 0, kWidth, kHeight);
+    content_.setTransform(juce::AffineTransform::scale(scale()));
+    bridge_.setUiScale(scale());
+}
+
+void DroseraEditor::layOut() {
     plant_.setBounds(juce::Rectangle<int>(520, 340).withCentre({kWidth / 2, kBandY}));
     auto placeLarge = [](drosera::LabeledKnob& knob, int x) {
         const int fromTop = drosera::LabeledKnob::radius(drosera::KnobSize::large) + drosera::LabeledKnob::margin(drosera::KnobSize::large);

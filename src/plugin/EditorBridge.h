@@ -17,4 +17,6 @@ public:
     virtual float echoSeconds() const = 0;
     virtual double hostSampleRate() const = 0;  // 0 until prepared
     virtual drosera::SpectrumTap& spectrumTap() = 0;
+    virtual float uiScale() const = 0;    // the window's scale, 0.75 to 1.5, as saved
+    virtual void setUiScale(float) = 0;
 };

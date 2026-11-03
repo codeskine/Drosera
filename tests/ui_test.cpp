@@ -363,6 +363,58 @@ static void editorTests() {
         check(editor->getWidth() == 900 && std::abs(parameter(*second, "lpf") - 0.33f) < 0.001f, "savedTabIsIgnored");
     }
 
+    {   // The window scales from 75 % to 150 % with its proportions, and the scale lives in the plugin's state.
+        std::unique_ptr<juce::AudioProcessor> first(createPluginFilter());
+        setParameter(*first, "lpf", 0.33f);
+        juce::MemoryBlock state;
+        {
+            auto editor = openEditor(*first);
+            editor->setSize(1350, 840);
+            first->getStateInformation(state);
+        }
+        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
+        second->setStateInformation(state.getData(), (int) state.getSize());
+        {
+            auto reopened = openEditor(*second);
+            check(reopened->getWidth() == 1350 && reopened->getHeight() == 840 && std::abs(reopened->scale() - 1.5f) < 0.001f, "scalePersists");
+        }
+
+        auto xml = juce::AudioProcessor::getXmlFromBinary(state.getData(), (int) state.getSize());
+        xml->setAttribute("uiScale", 9.0);
+        juce::MemoryBlock bad;
+        juce::AudioProcessor::copyXmlToBinary(*xml, bad);
+        xml->removeAttribute("uiScale");
+        juce::MemoryBlock missing;
+        juce::AudioProcessor::copyXmlToBinary(*xml, missing);
+        std::unique_ptr<juce::AudioProcessor> third(createPluginFilter()), fourth(createPluginFilter());
+        third->setStateInformation(bad.getData(), (int) bad.getSize());
+        fourth->setStateInformation(missing.getData(), (int) missing.getSize());
+        check(openEditor(*third)->getWidth() == 900 && std::abs(parameter(*third, "lpf") - 0.33f) < 0.001f, "scaleSurvivesBadState");
+        check(openEditor(*fourth)->getWidth() == 900 && std::abs(parameter(*fourth, "lpf") - 0.33f) < 0.001f, "scaleSurvivesMissingState");
+
+        auto editor = openEditor(*fourth);
+        editor->setBoundsConstrained({0, 0, 1000, 1000});
+        const bool proportional = std::abs(editor->getHeight() - editor->getWidth() * 560.0 / 900.0) <= 1.0;
+        editor->setBoundsConstrained({0, 0, 200, 100});
+        check(proportional && editor->getWidth() == 675 && editor->getHeight() == 420, "windowKeepsItsProportions");
+    }
+
+    {   // A host may restore state off the message thread while the window is resized.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        juce::MemoryBlock state;
+        p->getStateInformation(state);
+        auto editor = openEditor(*p);
+        std::atomic<bool> done { false };
+        std::thread host([&] { for (int i = 0; i < 2000 && !done; ++i) p->setStateInformation(state.getData(), (int) state.getSize()); });
+        for (int i = 0; i < 4000; ++i) {
+            editor->setSize(675 + (i % 8) * 96, juce::roundToInt((675 + (i % 8) * 96) * 560.0 / 900.0));
+            editor->refreshDisplay(0.0f);
+        }
+        done = true;
+        host.join();
+        check(true, "scaleSafeOffThread");
+    }
+
     {   // A host may restore state off the message thread while the window reads the open tab.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         juce::MemoryBlock state;

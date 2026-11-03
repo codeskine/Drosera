@@ -20,6 +20,8 @@ public:
     void selectProgram(int index);
     void setSetupOpen(bool);
     bool setupOpen() const { return setup_.isVisible(); }
+    /// The window's size over its 900×560 design.
+    float scale() const { return (float) getWidth() / 900.0f; }
 
     /// The timer's body: moves the plant on by dtSeconds and refreshes every readout.
     void refreshDisplay(float dtSeconds);
@@ -44,6 +46,8 @@ private:
     };
 
     void timerCallback() override;
+    /// Places every child in the 900×560 content, which never changes size: the window scales it.
+    void layOut();
     const drosera::LabeledKnob* findKnob(const juce::String& paramId) const;
 
     drosera::DroseraLookAndFeel lookAndFeel_;
@@ -51,6 +55,7 @@ private:
     EditorBridge& bridge_;
     drosera::PlantView plant_;
     juce::SliderParameterAttachment feedbackAttachment_;
+    juce::Component content_;  // everything, laid out at 900×560 and scaled as a whole
     drosera::LabeledKnob frequency_, body_;
     drosera::ControlRow row_;
     Scrim scrim_;
