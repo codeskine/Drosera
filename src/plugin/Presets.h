@@ -60,7 +60,7 @@ inline constexpr std::array<Preset, 16> kFactoryPresets {{
     {"Chord Keys",
      {0.40f, 0.75f, 0.30f, 0.80f, 0.20f, 0.10f, 0.60f, 0.20f, 0.50f, 0.30f, 0.70f}, false, 0.5f, true, true, false, true, 0.8f},
     {"Ember Pong",
-     {0.35f, 0.75f, 0.35f, 0.75f, 0.15f, 0.20f, 0.55f, 0.55f, 0.45f, 0.60f, 0.65f}, false, 0.5f, false, false, false, false, 0.0f, 7, 12, true, true, 0.70f, 0.60f},
+     {0.35f, 0.75f, 0.35f, 0.75f, 0.15f, 0.20f, 0.55f, 0.55f, 0.45f, 0.46f, 0.65f}, false, 0.5f, false, false, false, false, 0.0f, 7, 12, true, true, 0.80f, 0.146f},
 }};
 
 } // namespace infrasonic
