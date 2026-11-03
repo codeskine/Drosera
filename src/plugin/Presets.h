@@ -21,8 +21,8 @@ struct Preset {
     int   interval2 = 7;    // semitones above voice 0, when MIDI is not in control
     int   interval3 = 12;
     bool  stringLock = true;  // the knobs' voices sound the notes they show
-    bool  echoPong = false;   // the echo's repeats bounce between left and right and saturate
-    float echoDrive = 0.5f;
+    bool  echoPong = false;   // the echo's repeats bounce between left and right
+    float echoDrive = 0.0f;
     float echoTone = 0.5f;
     float echoWidth = 1.0f;          // fully left and right
     float echoLevel = 30.0f / 36.0f; // 0 dB

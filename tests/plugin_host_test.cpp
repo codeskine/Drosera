@@ -72,7 +72,7 @@ static bool checkSavedState(juce::AudioProcessor& inst, const char* fixture) {
                 std::printf("  %s: expected 0, got %.3f\n", name, p->getValue());
                 pass = false;
             }
-    for (const auto& older : {std::make_pair("Echo Pong", 0.0f), std::make_pair("Echo Drive", 0.5f), std::make_pair("Echo Tone", 0.5f),
+    for (const auto& older : {std::make_pair("Echo Pong", 0.0f), std::make_pair("Echo Drive", 0.0f), std::make_pair("Echo Tone", 0.5f),
                               std::make_pair("Echo Width", 1.0f), std::make_pair("Echo Level", 30.0f / 36.0f)})  // projects from before PONG keep the classic echo
         for (auto* p : inst.getParameters())
             if (p->getName(64) == older.first && std::abs(p->getValue() - older.second) > 0.001f) {
@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
         const struct { const char* name; float v; const char* want; } cases[] = {
             {"Echo Feedback", 0.4f, "60 %"}, {"Echo Feedback", 1.0f, "150 %"}, {"Echo Send", 0.2f, "4 %"},
             {"Volume", 0.5f, "-12.0 dB"}, {"Reverb Decay", 0.5f, "85 %"}, {"Reverb Decay", 0.1f, "42 %"}, {"Echo Warp", 1.0f, "On"},
-            {"Echo Drive", 0.5f, "+6.0 dB"}, {"Echo Drive", 0.0f, "+0.0 dB"}, {"Echo Tone", 0.5f, "3795 Hz"}, {"Echo Pong", 1.0f, "On"},
+            {"Echo Drive", 0.5f, "+6.0 dB"}, {"Echo Drive", 0.0f, "+0.0 dB"}, {"Echo Tone", 0.5f, "800 Hz"}, {"Echo Tone", 0.0f, "200 Hz"}, {"Echo Tone", 1.0f, "3200 Hz"}, {"Echo Pong", 1.0f, "On"},
             {"Echo Width", 0.5f, "50 %"}, {"Echo Level", 30.0f / 36.0f, "0.0 dB"}, {"Echo Level", 1.0f, "+6.0 dB"}, {"Echo Level", 0.5f, "-12.0 dB"}};
         for (const auto& c : cases) {
             const auto got = text(c.name, c.v);
@@ -273,7 +273,7 @@ int main(int argc, char** argv) {
         setParam(*inst, "Echo Width", 0.2f); setParam(*inst, "Echo Level", 0.6f);
         const bool on = value("Echo Pong") == 1.0f;
         inst->setCurrentProgram(0);
-        const bool off = on && value("Echo Pong") == 0.0f && std::abs(value("Echo Drive") - 0.5f) < 1e-3f && std::abs(value("Echo Tone") - 0.5f) < 1e-3f
+        const bool off = on && value("Echo Pong") == 0.0f && value("Echo Drive") == 0.0f && std::abs(value("Echo Tone") - 0.5f) < 1e-3f
                          && value("Echo Width") == 1.0f && std::abs(value("Echo Level") - 30.0f / 36.0f) < 1e-3f;
         std::printf("classicPresetTurnsPongOff: %s\n", off ? "OK" : "FAIL");
         ok &= off;
