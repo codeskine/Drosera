@@ -117,6 +117,14 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
                  drosera::pulse::echoPulse(pulseSeconds_, bridge_.echoSeconds(), pong, sending));
     setup_.refresh(bridge_.polyRunning());
 
+    std::array<int, 3> voiceBands {-1, -1, -1};
+    if (bridge_.polyRunning())
+        for (int v = 0; v < 3; ++v) {
+            const float note = polyMidi ? bridge_.voiceNote(v) : bridge_.publishedNote(v);
+            if (note >= 0.0f) voiceBands[(size_t) v] = drosera::bandOfNote(note);
+        }
+    plant_.setVoiceBands(voiceBands);
+
     // Follow what the host changes.
     header_.setProgram(processor.getCurrentProgram());
 }
@@ -159,7 +167,7 @@ void DroseraEditor::paint(juce::Graphics& g) {
 }
 
 void DroseraEditor::resized() {
-    plant_.setBounds(450 - 380, kBandY - 180, 760, 314);  // until the plant is redrawn around its own centre
+    plant_.setBounds(juce::Rectangle<int>(520, 340).withCentre({kWidth / 2, kBandY}));
     auto placeLarge = [](drosera::LabeledKnob& knob, int x) {
         const int fromTop = drosera::LabeledKnob::radius(drosera::KnobSize::large) + drosera::LabeledKnob::margin(drosera::KnobSize::large);
         knob.setBounds(x - 80, kBandY - fromTop, 160, 190);

@@ -293,6 +293,18 @@ static void plantTests() {
         check(swing < 1.0, "plantStillWithLongBlocks");
     }
 
+    {   // Every band has its tentacle, and the strings' bands are marked.
+        std::vector<int> seen;
+        for (int j = 0; j < kNumBands; ++j) seen.push_back(PlantView::tentacleBand(j));
+        std::sort(seen.begin(), seen.end());
+        bool permutation = true;
+        for (int i = 0; i < kNumBands; ++i) permutation = permutation && seen[(size_t) i] == i;
+        check(permutation, "tentaclesCoverEveryBand");
+        PlantView marked;
+        marked.setVoiceBands({10, -1, 30});
+        check(marked.isMarked(10) && marked.isMarked(30) && !marked.isMarked(20), "plantMarksVoiceBands");
+    }
+
     PlantView unprepared;
     for (int i = 0; i < 30; ++i) { pushSine(); unprepared.update(tap, 0.0, dt); }
     check(unprepared.level(30) == kFloorDb, "plantRestsWithNoSampleRate");

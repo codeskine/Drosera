@@ -17,6 +17,7 @@ DroseraLookAndFeel::DroseraLookAndFeel() {
 
 void DroseraLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w, int h, float pos,
                                           float startAngle, float endAngle, juce::Slider& s) {
+    if (s.getProperties().contains(kDrawnByOwner)) return;
     const bool main = s.getProperties().contains(kMainControl);
     const auto colour = s.getProperties()[kGroup].toString() == "loop" ? theme::loop() : theme::echo();
     const float stroke = main ? 4.0f : 2.6f;
