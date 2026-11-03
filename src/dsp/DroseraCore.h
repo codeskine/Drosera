@@ -60,6 +60,10 @@ public:
     void SetEchoDrive(float norm)      { echo_drive_norm_ = norm; }
     /// 0..1, LOG to 800..18000 Hz.
     void SetEchoTone(float norm)       { echo_tone_norm_ = norm; }
+    /// 0..1: from every repeat in the middle to fully left and right.
+    void SetEchoWidth(float norm)      { echo_width_norm_ = norm; }
+    /// 0..1, to -30..+6 dB on PongDelay's output.
+    void SetEchoLevel(float norm)      { echo_level_norm_ = norm; }
 
     /// MIDI pitch override of the Frequency knob (note number, may be fractional).
     /// While active, Body is snapped to whole string periods and the loop is forced onto
@@ -137,7 +141,7 @@ private:
     // Their own registries: registry_ iterates an unordered_map, so more entries could reorder its handlers.
     enum VoiceParam : int { Voice1Pitch, Voice2Pitch, Voice1Gain, Voice2Gain, Coupling, Voice0Receive, Voice1Receive, Voice2Receive };
 
-    enum EchoParam : int { Drive, Tone };
+    enum EchoParam : int { Drive, Tone, Width, Level };
 
     void pushControls() {
         const bool imm = first_;  // jump to initial values instead of gliding from defaults
@@ -163,6 +167,8 @@ private:
         engine_->SetPong(echo_pong_, imm);
         echo_registry_.UpdateNormalized(Drive, echo_drive_norm_, imm);
         echo_registry_.UpdateNormalized(Tone,  echo_tone_norm_, imm);
+        echo_registry_.UpdateNormalized(Width, echo_width_norm_, imm);
+        echo_registry_.UpdateNormalized(Level, echo_level_norm_, imm);
         pushVoiceControls(imm);
         first_ = false;
     }
@@ -236,6 +242,10 @@ private:
             [&e](float drive) { e.SetPongDrive(drive); });
         echo_registry_.Register(Tone, 3795.0f, kPongToneMin, kPongToneMax,
             [&e](float hz) { e.SetPongTone(hz); }, 0.05f, daisysp::Mapping::LOG);
+        echo_registry_.Register(Width, 1.0f, 0.0f, 1.0f,
+            [&e](float width) { e.SetPongWidth(width); });
+        echo_registry_.Register(Level, 0.0f, kPongLevelMinDb, kPongLevelMaxDb,
+            [&e](float db) { e.SetPongLevel(dbfs2lin(db)); });
     }
 
     // Knob mode: values go straight to the engine (firmware behaviour), with voices 1 and 2's Body following their interval.
@@ -321,6 +331,7 @@ private:
     static constexpr float kNoteMin = 16.0f, kKnobNoteMax = 72.0f, kNoteMax = 84.0f;  // above this the loop filters make the string run flat (-120 cents at 90)
     static constexpr float kEchoMin = 0.05f, kEchoMax = 5.0f;
     static constexpr float kPongToneMin = 800.0f, kPongToneMax = 18000.0f;
+    static constexpr float kPongLevelMinDb = -30.0f, kPongLevelMaxDb = 6.0f;
     static constexpr float kKnobDelayLag = 0.2f;  // same as FeedbackSynth::Engine::Init
     static constexpr float kMidiDelayLag = 0.03f;
     static constexpr float kMaxMakeup = 8.0f;
@@ -339,6 +350,7 @@ private:
     bool echo_warp_ = false;
     bool echo_pong_ = false;
     float echo_drive_norm_ = 0.5f, echo_tone_norm_ = 0.5f;
+    float echo_width_norm_ = 1.0f, echo_level_norm_ = 30.0f / 36.0f;  // full width, 0 dB
     bool midi_pitch_on_ = false;
     std::array<bool, kNumVoices> gate_enabled_ {}, gate_open_ {};
     std::array<float, kNumVoices> midi_pitch_ { 40.0f, 40.0f, 40.0f };

@@ -1340,8 +1340,39 @@ static bool pongAliasing() {
     return pass;
 }
 
+// Width 0 puts every repeat in the middle, at half the level of the side it came from.
+static bool pongWidthZeroIsMono() {
+    auto wide = makePong(0.25f, 0.7f, 0.0f), narrow = makePong(0.25f, 0.7f, 0.0f);
+    narrow->SetWidth(0.0f);
+    const auto w = renderPong(*wide, 48000, impulse(0.1f)), m = renderPong(*narrow, 48000, impulse(0.1f));
+    bool same = true;
+    for (size_t i = 0; i < m.L.size(); ++i) same &= m.L[i] == m.R[i];
+    const float half = 0.5f * peakOf(w.L, 12000 - 20, 12000 + 20), mid = peakOf(m.L, 12000 - 20, 12000 + 20);
+    const bool pass = same && std::fabs(mid - half) < 1e-6f;
+    printf("pongWidthZeroIsMono: repeat %.5f, half the side %.5f %s\n", mid, half, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Width and Level only shape what comes out: the loop, so every repeat after the first, is the same.
+static bool pongWidthAndLevelLeaveTheLoop() {
+    auto plain = makePong(0.1f, 0.6f, 1.0f), shaped = makePong(0.1f, 0.6f, 1.0f);
+    shaped->SetWidth(0.3f);
+    shaped->SetLevel(0.5f);
+    const auto a = renderPong(*plain, 48000 * 5, burst(440.0f, 0.1f, 2400)), b = renderPong(*shaped, 48000 * 5, burst(440.0f, 0.1f, 2400));
+    float worst = 0.0f;
+    for (size_t i = 0; i < a.L.size(); ++i) {
+        const float mid = 0.5f * (a.L[i] + a.R[i]), side = 0.5f * (a.L[i] - a.R[i]);
+        worst = std::max({worst, std::fabs(b.L[i] - 0.5f * (mid + 0.3f * side)), std::fabs(b.R[i] - 0.5f * (mid - 0.3f * side))});
+    }
+    const bool pass = worst < 1e-6f && rmsOf(a.L, 48000 * 4, 48000 * 5) > 0.1;  // still self-oscillating after 4 s
+    printf("pongWidthAndLevelLeaveTheLoop: largest difference %.2g %s\n", (double)worst, pass ? "OK" : "FAIL");
+    return pass;
+}
+
 static bool pongDelayTests() {
     bool ok = true;
+    ok &= pongWidthZeroIsMono();
+    ok &= pongWidthAndLevelLeaveTheLoop();
     ok &= pongBounces();
     ok &= pongTiming();
     ok &= pongKeepsLowEnd();
@@ -1436,6 +1467,8 @@ static bool pongBoundsAtMaximum() {
     setPongCore(core, kPongMax, 1.0f);
     core.SetPolyphony(true);
     core.SetCoupling(1.0f);
+    core.SetEchoWidth(0.0f);  // both sides summed in the middle
+    core.SetEchoLevel(1.0f);  // +6 dB
     static float L[64], R[64];
     Bounded b;
     for (int block = 0; block < 45000; ++block) { core.Render(nullptr, L, R, 64); b.add(L, R, 64); }  // 60 s
@@ -1465,6 +1498,34 @@ static bool pongBouncesThroughCore() {
         ok &= pass;
     }
     return ok;
+}
+
+// The first repeat's RMS on left and right, from a short burst as in pongBouncesThroughCore.
+static std::pair<double, double> firstRepeat(float widthNorm, float levelNorm) {
+    static DroseraCore core;
+    //                     freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb     vol
+    const float knobs[] = {0.43f, 1.00f, 0.30f, 0.90f, 0.20f, 0.00f, 0.50f, 1.00f, 0.44f, 0.467f, 0.70f};
+    setPongCore(core, knobs, 0.0f);
+    core.SetEchoWidth(widthNorm);
+    core.SetEchoLevel(levelNorm);
+    const double T = DroseraCore::EchoTimeSeconds(0.44f, false);
+    const size_t open = 48000 * 3, close = open + 9600, total = (size_t)((3.0 + 1.5 * T) * 48000.0);
+    std::vector<float> L(total), R(total);
+    for (size_t pos = 0; pos < total; pos += 64) {
+        core.SetGate(true, pos >= open && pos < close);
+        core.Render(nullptr, &L[pos], &R[pos], std::min<size_t>(64, total - pos));
+    }
+    const size_t a = open + (size_t)((T + 0.05) * 48000.0), b = a + 9600;
+    return { rmsOf(L, a, b), rmsOf(R, a, b) };
+}
+
+static bool pongWidthAndLevelThroughCore() {
+    const auto full = firstRepeat(1.0f, 30.0f / 36.0f), mono = firstRepeat(0.0f, 30.0f / 36.0f), quiet = firstRepeat(1.0f, 18.0f / 36.0f);
+    const double monoSides = dbOf(mono.first, mono.second), monoDrop = dbOf(mono.first, full.first), quietDrop = dbOf(quiet.first, full.first);
+    const bool pass = std::fabs(monoSides) < 0.5 && std::fabs(monoDrop + 6.0) < 0.5 && std::fabs(quietDrop + 12.0) < 0.5;
+    printf("pongWidthAndLevelThroughCore: Width 0 L over R %.2f dB and %.2f dB from full width, Level -12 dB gives %.2f dB %s\n",
+           monoSides, monoDrop, quietDrop, pass ? "OK" : "FAIL");
+    return pass;
 }
 
 // A self-sustaining tail with nothing feeding it, which only Recover can stop. A NaN on the input does not always reach
@@ -1582,6 +1643,7 @@ static bool pongEngineTests() {
     ok &= pongSwitchReverses();
     ok &= pongBoundsAtMaximum();
     ok &= pongBouncesThroughCore();
+    ok &= pongWidthAndLevelThroughCore();
     ok &= pongRecoversFromNan();
     ok &= pongSurvivesTimeSweep();
     ok &= everyPresetWithPongOn();

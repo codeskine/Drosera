@@ -60,6 +60,8 @@ class Engine {
         // 0-1
         void SetPongDrive(const float drive) { pong_delay_->SetDrive(drive); }
         void SetPongTone(const float hz) { pong_delay_->SetTone(hz); }
+        void SetPongWidth(const float width) { pong_delay_->SetWidth(width); }
+        void SetPongLevel(const float gain) { pong_delay_->SetLevel(gain); }
         // 0-1, for tests
         float PongMix() const { return pong_mix_; }
 

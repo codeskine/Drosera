@@ -79,6 +79,18 @@ class PongDelay {
             if (hz != tone_hz_) setToneNow(hz);
         }
 
+        /// 0..1: 0 puts every repeat in the middle, 1 bounces fully left and right. Shapes the output only.
+        void SetWidth(const float width)
+        {
+            width_ = width;
+        }
+
+        /// Linear gain on the output only, so it does not change how the loop sustains.
+        void SetLevel(const float level)
+        {
+            level_ = level;
+        }
+
         inline void Process(const float in, float &outL, float &outR)
         {
             // One time for both lines keeps the bounces evenly spaced
@@ -86,10 +98,14 @@ class PongDelay {
             const float delay = delay_time_current_ * sample_rate_;
             lineL_.SetDelay(delay);
             lineR_.SetDelay(delay);
-            outL = shape(lineL_.Read(), hpL_, lpL_);
-            outR = shape(lineR_.Read(), hpR_, lpR_);
-            lineL_.Write(in + feedback_ * loop_trim_ * outR);
-            lineR_.Write(feedback_ * loop_trim_ * outL);
+            const float left = shape(lineL_.Read(), hpL_, lpL_);
+            const float right = shape(lineR_.Read(), hpR_, lpR_);
+            lineL_.Write(in + feedback_ * loop_trim_ * right);
+            lineR_.Write(feedback_ * loop_trim_ * left);
+            // Between the two sides, so Width never makes a repeat louder than it was
+            const float mid = 0.5f * (left + right), side = width_ * 0.5f * (left - right);
+            outL = level_ * (mid + side);
+            outR = level_ * (mid - side);
         }
 
     private:
@@ -135,6 +151,7 @@ class PongDelay {
         float feedback_ = 0.5f;
         float drive_ = 0.5f, drive_gain_ = 2.0f, loop_trim_ = 0.70710678f;
         float tone_hz_ = kDefaultToneHz, tone_coef_ = 0.0f, hp_coef_ = 0.0f;
+        float width_ = 1.0f, level_ = 1.0f;
         float hpL_ = 0.0f, hpR_ = 0.0f, lpL_ = 0.0f, lpR_ = 0.0f;
 
         daisysp::DelayLine<float, MaxLength> lineL_, lineR_;
