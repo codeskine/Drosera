@@ -1,9 +1,17 @@
 #include "PluginEditor.h"
+#include <daisysp.h>
 #include "ui/Readouts.h"
 #include "ui/Theme.h"
 
 namespace {
-constexpr int kWidth = 760, kHeight = 500, kTabsTop = 306, kPlantHeight = 314;
+constexpr int kWidth = 900, kHeight = 560;
+// The middle band's centre, shared by Frequency, the plant and Body.
+constexpr int kBandY = 236;
+
+/// Hz of a 0..1 parameter on the engine's log curve, so the arcs draw what the filters do.
+float hz(juce::AudioProcessorValueTreeState& apvts, const char* id, float min, float max) {
+    return daisysp::fmap(apvts.getRawParameterValue(id)->load(), min, max, daisysp::Mapping::LOG);
+}
 } // namespace
 
 DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueTreeState& apvts, EditorBridge& bridge)
@@ -11,15 +19,15 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
       feedbackAttachment_(*apvts.getParameter("fbgain"), plant_.feedback(), nullptr),
       frequency_(*apvts.getParameter("freq"), "Frequency", drosera::KnobSize::large, drosera::KnobGroup::loop),
       body_(*apvts.getParameter("body"), "Body", drosera::KnobSize::large, drosera::KnobGroup::loop),
-      tabs_(apvts) {
+      row_(apvts), setup_(apvts) {
     setLookAndFeel(&lookAndFeel_);
     addAndMakeVisible(plant_);
     addAndMakeVisible(frequency_);
     addAndMakeVisible(body_);
-    addAndMakeVisible(tabs_);
-
-    tabs_.onTabClicked = [this](int index) { setTab(index); };
-    tabs_.setTab(bridge_.openTab());
+    addAndMakeVisible(row_);
+    scrim_.onClick = [this] { setSetupOpen(false); };
+    addChildComponent(scrim_);
+    addChildComponent(setup_);
 
     for (int i = 0; i < p.getNumPrograms(); ++i) presetBox_.addItem(p.getProgramName(i), i + 1);
     presetBox_.setSelectedId(p.getCurrentProgram() + 1, juce::dontSendNotification);
@@ -30,6 +38,7 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
     addAndMakeVisible(previous_);
     addAndMakeVisible(next_);
 
+    setWantsKeyboardFocus(true);
     setResizable(false, false);
     setSize(kWidth, kHeight);
 
@@ -45,16 +54,25 @@ DroseraEditor::~DroseraEditor() {
     setLookAndFeel(nullptr);
 }
 
-void DroseraEditor::setTab(int index) {
-    tabs_.setTab(index);
-    bridge_.setOpenTab(tabs_.tab());
-}
-
 void DroseraEditor::selectProgram(int index) {
     if (!juce::isPositiveAndBelow(index, processor.getNumPrograms())) return;
     processor.setCurrentProgram(index);
     processor.updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withProgramChanged(true));
     presetBox_.setSelectedId(index + 1, juce::dontSendNotification);
+}
+
+void DroseraEditor::setSetupOpen(bool open) {
+    scrim_.setVisible(open);
+    setup_.setVisible(open);
+    if (open) setup_.toFront(false);
+}
+
+bool DroseraEditor::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey && setupOpen()) {
+        setSetupOpen(false);
+        return true;
+    }
+    return false;
 }
 
 void DroseraEditor::timerCallback() {
@@ -82,43 +100,51 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
 
     const bool warp = apvts_.getRawParameterValue("echohalve")->load() > 0.5f;
     const bool pong = apvts_.getRawParameterValue("echopong")->load() > 0.5f;
-    for (const auto& [id, knob] : tabs_.knobs()) {
-        const auto text = knob->parameter().getCurrentValueAsText();
-        if (id == "interval2" || id == "interval3") {
-            const int voice = id == "interval2" ? 1 : 2;
-            const int semitones = juce::roundToInt(knob->parameter().convertFrom0to1(knob->parameter().getValue()));
-            const auto interval = polyMidi ? drosera::readouts::interval(true, bridge_.voiceNote(voice), text.toStdString())
-                                           : drosera::readouts::playedInterval(bridge_.polyRunning(), bridge_.publishedNote(0),
-                                                                               bridge_.publishedNote(voice), semitones, text.toStdString());
-            knob->show(interval.value, interval.tag);
-            continue;
+    for (const auto* knobs : { &row_.knobs(), &setup_.knobs() })
+        for (const auto& [id, knob] : *knobs) {
+            const auto text = knob->parameter().getCurrentValueAsText();
+            if (id == "interval2" || id == "interval3") {
+                const int voice = id == "interval2" ? 1 : 2;
+                const int semitones = juce::roundToInt(knob->parameter().convertFrom0to1(knob->parameter().getValue()));
+                const auto interval = polyMidi ? drosera::readouts::interval(true, bridge_.voiceNote(voice), text.toStdString())
+                                               : drosera::readouts::playedInterval(bridge_.polyRunning(), bridge_.publishedNote(0),
+                                                                                   bridge_.publishedNote(voice), semitones, text.toStdString());
+                knob->show(interval.value, interval.tag);
+                continue;
+            }
+            knob->show(id == "echotime" ? juce::String(drosera::readouts::echoTime(warp, bridge_.echoSeconds(), text.toStdString())) : text, {});
         }
-        if (id == "echodrive" || id == "echotone" || id == "echowidth" || id == "echolevel") {
-            const auto shaping = drosera::readouts::echoShaping(pong, text.toStdString());
-            knob->show(shaping.value, shaping.tag);
-            continue;
-        }
-        knob->show(id == "echotime" ? juce::String(drosera::readouts::echoTime(warp, bridge_.echoSeconds(), text.toStdString())) : text, {});
-    }
+
+    pulseSeconds_ += dtSeconds;
+    const bool sending = apvts_.getRawParameterValue("echosend")->load() > 0.0f;
+    row_.refresh(hz(apvts_, "hpf", 10.0f, 4000.0f), hz(apvts_, "lpf", 100.0f, 18000.0f), hz(apvts_, "echotone", 200.0f, 3200.0f), pong,
+                 drosera::pulse::echoPulse(pulseSeconds_, bridge_.echoSeconds(), pong, sending));
+    setup_.refresh(bridge_.polyRunning());
 
     // Follow what the host changes.
     const int program = processor.getCurrentProgram() + 1;
     if (presetBox_.getSelectedId() != program) presetBox_.setSelectedId(program, juce::dontSendNotification);
-    const int storedTab = bridge_.openTab();
-    if (storedTab != tabs_.tab() && juce::isPositiveAndBelow(storedTab, drosera::TabPanel::kNumTabs)) tabs_.setTab(storedTab);
 }
 
 const drosera::LabeledKnob* DroseraEditor::findKnob(const juce::String& paramId) const {
     if (paramId == "freq") return &frequency_;
     if (paramId == "body") return &body_;
-    const auto found = tabs_.knobs().find(paramId);
-    return found != tabs_.knobs().end() ? found->second.get() : nullptr;
+    for (const auto* knobs : { &row_.knobs(), &setup_.knobs() }) {
+        const auto found = knobs->find(paramId);
+        if (found != knobs->end()) return found->second.get();
+    }
+    return nullptr;
 }
 
 juce::Slider* DroseraEditor::slider(const juce::String& paramId) {
     if (paramId == "fbgain") return &plant_.feedback();
     auto* knob = const_cast<drosera::LabeledKnob*>(findKnob(paramId));
     return knob != nullptr ? &knob->slider() : nullptr;
+}
+
+juce::Button* DroseraEditor::toggle(const juce::String& paramId) {
+    if (auto* button = row_.toggle(paramId)) return button;
+    return setup_.toggle(paramId);
 }
 
 juce::String DroseraEditor::readout(const juce::String& paramId) const {
@@ -132,8 +158,8 @@ juce::String DroseraEditor::tag(const juce::String& paramId) const {
 }
 
 void DroseraEditor::paint(juce::Graphics& g) {
-    g.setGradientFill(juce::ColourGradient(drosera::theme::backgroundCentre(), getLocalBounds().getCentre().toFloat(),
-                                           drosera::theme::backgroundEdge(), {0.0f, 0.0f}, true));
+    g.setGradientFill(juce::ColourGradient(drosera::theme::backgroundCentre(), {450.0f, 240.0f},
+                                           drosera::theme::backgroundEdge(), {450.0f, 240.0f + 560.0f}, true));
     g.fillAll();
     g.setColour(drosera::theme::text());
     g.setFont(drosera::theme::titleFont());
@@ -141,10 +167,16 @@ void DroseraEditor::paint(juce::Graphics& g) {
 }
 
 void DroseraEditor::resized() {
-    plant_.setBounds(0, 0, kWidth, kPlantHeight);
-    frequency_.setBounds(135 - 80, 100, 160, 180);
-    body_.setBounds(625 - 80, 100, 160, 180);
-    tabs_.setBounds(0, kTabsTop, kWidth, kHeight - kTabsTop);
+    plant_.setBounds(450 - 380, kBandY - 180, 760, 314);  // until the plant is redrawn around its own centre
+    auto placeLarge = [](drosera::LabeledKnob& knob, int x) {
+        const int fromTop = drosera::LabeledKnob::radius(drosera::KnobSize::large) + drosera::LabeledKnob::margin(drosera::KnobSize::large);
+        knob.setBounds(x - 80, kBandY - fromTop, 160, 190);
+    };
+    placeLarge(frequency_, 150);
+    placeLarge(body_, 750);
+    row_.setBounds(0, drosera::ControlRow::kTop, kWidth, kHeight - drosera::ControlRow::kTop);
+    scrim_.setBounds(0, 0, kWidth, drosera::SetupPanel::kTop);
+    setup_.setBounds(0, drosera::SetupPanel::kTop, kWidth, kHeight - drosera::SetupPanel::kTop);
 
     previous_.setBounds(kWidth - 26 - 220, 20, 24, 24);
     presetBox_.setBounds(kWidth - 26 - 196, 20, 172, 24);

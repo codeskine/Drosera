@@ -1,5 +1,5 @@
-// Renders the plugin editor to a PNG: editor_snapshot <out.png> [paramId=normalizedValue | program=N | note=N | tab=N | sound=1 ...]
-// tab opens a tab. sound=1 renders a second of audio with the window open, so the plant shows real sound.
+// Renders the plugin editor to a PNG: editor_snapshot <out.png> [paramId=normalizedValue | program=N | note=N | sound=1 ...]
+// sound=1 renders a second of audio with the window open, so the plant shows real sound.
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <cstdio>
 #include "PluginEditor.h"
@@ -10,7 +10,6 @@ int main(int argc, char** argv) {
     if (argc < 2) { std::printf("usage: editor_snapshot <out.png> [id=value ...]\n"); return 2; }
     juce::ScopedJuceInitialiser_GUI init;
     std::unique_ptr<juce::AudioProcessor> proc(createPluginFilter());
-    int tab = -1;
     bool sound = false, prepared = false;
     auto prepare = [&] { if (!prepared) { proc->prepareToPlay(48000.0, 512); prepared = true; } };
     for (int i = 2; i < argc; ++i) {
@@ -18,7 +17,6 @@ int main(int argc, char** argv) {
         auto id = arg.upToFirstOccurrenceOf("=", false, false);
         auto v = arg.fromFirstOccurrenceOf("=", false, false).getFloatValue();
         if (id == "program") { proc->setCurrentProgram((int) v); continue; }
-        if (id == "tab") { tab = (int) v; continue; }
         if (id == "sound") { sound = v > 0.5f; continue; }
         if (id == "note") {  // play a note through processBlock before drawing
             prepare();
@@ -35,7 +33,6 @@ int main(int argc, char** argv) {
     std::unique_ptr<juce::AudioProcessorEditor> ed(proc->createEditor());
     auto* editor = dynamic_cast<DroseraEditor*>(ed.get());
     ed->setVisible(true);
-    if (tab >= 0) editor->setTab(tab);
     if (prepared || sound) {  // let the values settle, with the window open
         prepare();
         juce::AudioBuffer<float> buf(2, 512);
@@ -52,6 +49,6 @@ int main(int argc, char** argv) {
     out.deleteFile();
     juce::FileOutputStream fos(out);
     juce::PNGImageFormat().writeImageToStream(img, fos);
-    std::printf("editor %dx%d tab %d -> %s\n", ed->getWidth(), ed->getHeight(), editor->tab(), argv[1]);
+    std::printf("editor %dx%d -> %s\n", ed->getWidth(), ed->getHeight(), argv[1]);
     return 0;
 }

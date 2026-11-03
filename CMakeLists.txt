@@ -63,7 +63,8 @@ if(DROSERA_BUILD_PLUGIN)
         src/plugin/ui/DroseraLookAndFeel.cpp
         src/plugin/ui/LabeledKnob.cpp
         src/plugin/ui/PlantView.cpp
-        src/plugin/ui/TabPanel.cpp)
+        src/plugin/ui/ControlRow.cpp
+        src/plugin/ui/SetupPanel.cpp)
 
     juce_add_plugin(Drosera
         COMPANY_NAME "codeskine"

@@ -228,14 +228,12 @@ public:
 
     void getStateInformation(juce::MemoryBlock& dest) override {
         auto state = apvts.copyState();
-        state.setProperty(kTabProperty, uiTab.load(), nullptr);
         if (auto xml = state.createXml()) copyXmlToBinary(*xml, dest);
     }
 
     void setStateInformation(const void* data, int size) override {
         if (auto xml = getXmlFromBinary(data, size))
             if (xml->hasTagName(apvts.state.getType())) {
-                uiTab.store(xml->getIntAttribute(kTabProperty, 0));  // an atomic: hosts may call this off the message thread
                 apvts.replaceState(juce::ValueTree::fromXml(*xml));
                 currentProgram = juce::jlimit(0, getNumPrograms() - 1, (int) apvts.state.getProperty("program", 0));
                 stateJump.store(true);  // a project must load onto the same drone every time: no glide from the defaults
@@ -254,11 +252,8 @@ private:
     float echoSeconds() const override { return DroseraCore::EchoTimeSeconds(raw[DroseraCore::EchoTime]->load(), halveRaw->load() > 0.5f); }
     double hostSampleRate() const override { return hostRate.load(); }
     drosera::SpectrumTap& spectrumTap() override { return tap; }
-    int openTab() const override { return uiTab.load(); }
-    void setOpenTab(int index) override { uiTab.store(index); }
 
     static constexpr int kMaxChunk = 1024;
-    static constexpr const char* kTabProperty = "uiTab";
     static constexpr size_t kPrime = 256;
     static constexpr int kMaxHeld = 16;
 
@@ -488,7 +483,6 @@ private:
 
     drosera::SpectrumTap tap;
     std::atomic<double> hostRate { 0.0 };
-    std::atomic<int> uiTab { 0 };
 
     // Sample-rate bridging state
     double ratio = 1.0, inRatio = 1.0;

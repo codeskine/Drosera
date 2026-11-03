@@ -61,16 +61,14 @@ void DroseraLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
 }
 
 void DroseraLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b, bool highlighted, bool) {
-    const auto r = b.getLocalBounds().toFloat().reduced(1.0f);
-    const bool on = b.getToggleState();
-    if (on) {
-        g.setColour(theme::echo());
-        g.fillRoundedRectangle(r, r.getHeight() * 0.5f);
-    }
-    g.setColour(on ? theme::echo() : (highlighted ? theme::textDim() : theme::track()));
+    const auto r = b.getLocalBounds().toFloat().reduced(0.5f);
+    const bool on = b.getToggleState(), echo = b.getProperties()[kGroup].toString() == "echo";
+    g.setColour(on ? juce::Colour(echo ? 0xff5a3f1e : 0xff4a1d27) : juce::Colour(0xff1e1618));
+    g.fillRoundedRectangle(r, r.getHeight() * 0.5f);
+    g.setColour(on ? (echo ? theme::echo() : theme::loop()) : (highlighted ? theme::cartouche() : theme::hairline()));
     g.drawRoundedRectangle(r, r.getHeight() * 0.5f, 1.0f);
-    g.setColour(on ? theme::backgroundEdge() : theme::text());
-    g.setFont(theme::valueFont());
+    g.setColour(on ? (echo ? theme::echo() : theme::text()) : theme::textDim());
+    g.setFont(theme::tagFont());
     g.drawText(b.getButtonText(), b.getLocalBounds(), juce::Justification::centred);
 }
 
