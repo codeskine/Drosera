@@ -36,8 +36,8 @@ PlantView::PlantView() {
     for (int j = 0; j < kNumBands; ++j) {
         auto& t = tentacles_[(size_t) j];
         t.angle = juce::MathConstants<float>::twoPi * (float) j / (float) kNumBands - juce::MathConstants<float>::halfPi + (next() - 0.5f) * 0.09f;
-        t.base = 62.0f + 34.0f * next();
-        t.reach = 70.0f + 45.0f * next();
+        t.base = 20.0f + 8.0f * next();  // short at rest, so the sound's length stands out from the shape's
+        t.reach = 130.0f + 40.0f * next();
         t.curl = (next() < 0.5f ? -1.0f : 1.0f) * (0.45f + 0.5f * next());
         t.sway = (next() - 0.5f) * 0.25f;
         t.width = 2.1f + 0.9f * next();
@@ -118,6 +118,12 @@ float PlantView::shape(int tentacle, float amount, std::array<juce::Point<float>
                         && !inside.contains(juce::Rectangle<float>(2.0f * glow, 2.0f * glow).withCentre(points.back())); ++tries)
         grow(length *= 0.92f);
     return radius;
+}
+
+float PlantView::reach(int tentacle, float amount) const {
+    std::array<juce::Point<float>, kSegments + 1> points;
+    shape(tentacle, amount, points);
+    return points.front().getDistanceFrom(points.back());
 }
 
 juce::Rectangle<float> PlantView::reachAt(float amount) const {

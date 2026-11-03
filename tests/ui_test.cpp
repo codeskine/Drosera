@@ -294,12 +294,19 @@ static void plantTests() {
     }
 
     {   // Every band has its tentacle, and the strings' bands are marked.
-        std::vector<int> seen;
-        for (int j = 0; j < kNumBands; ++j) seen.push_back(PlantView::tentacleBand(j));
-        std::sort(seen.begin(), seen.end());
-        bool permutation = true;
-        for (int i = 0; i < kNumBands; ++i) permutation = permutation && seen[(size_t) i] == i;
-        check(permutation, "tentaclesCoverEveryBand");
+        // Bands run in order around the leaf, lowest at the top, so a change of pitch moves the light around the plant.
+        bool inOrder = true;
+        for (int j = 0; j < kNumBands; ++j) inOrder = inOrder && PlantView::tentacleBand(j) == j;
+        check(inOrder, "tentacleShowsItsOwnBand");
+
+        // A sounding tentacle must stand out from a silent one: on average at least five times as far from its root.
+        PlantView sized;
+        sized.setBounds(0, 0, 520, 340);
+        double ratio = 0.0;
+        for (int j = 0; j < kNumBands; ++j) ratio += sized.reach(j, 1.0f) / sized.reach(j, 0.0f);
+        ratio /= kNumBands;
+        std::printf("  sounding over silent tentacle reach: %.1f\n", ratio);
+        check(ratio >= 5.0, "soundStandsOutFromRest");
         PlantView loud;
         loud.setBounds(0, 0, 520, 340);
         check(loud.getLocalBounds().toFloat().contains(loud.reachAt(1.0f)), "loudTentaclesStayInside");

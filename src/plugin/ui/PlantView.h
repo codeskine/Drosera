@@ -24,12 +24,15 @@ public:
 
     float level(int band) const { return levels_[(size_t) band]; }
 
-    /// Neighbouring bands are spread around the leaf, so one partial lights tentacles on every side.
-    static constexpr int tentacleBand(int tentacle) { return (tentacle * 23) % kNumBands; }
+    /// Bands run in order around the leaf, the lowest at the top and clockwise, so a change of pitch moves the light
+    /// around the plant.
+    static constexpr int tentacleBand(int tentacle) { return tentacle; }
     /// The bands holding the sounding strings' notes get a ring on their drop. -1 is no string.
     void setVoiceBands(const std::array<int, 3>&);
     /// What the tentacles and their drops' glow cover with every band at this amount, in the component's coordinates.
     juce::Rectangle<float> reachAt(float amount) const;
+    /// How far the tentacle's tip stands from its root at this band amount.
+    float reach(int tentacle, float amount) const;
     bool isMarked(int band) const { return std::find(voiceBands_.begin(), voiceBands_.end(), band) != voiceBands_.end(); }
 
     void paint(juce::Graphics&) override;

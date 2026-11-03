@@ -68,13 +68,15 @@ embedded in the plugin as binary data.
 ## The plant
 
 A sundew leaf seen from above: a round, slightly irregular blade with faint veins and no outline, fading into the
-background. 54 tentacles grow from its rim, one per band, log-spaced from 30 Hz to 16 kHz as today. Neighbouring bands
-are spread around the leaf (band `(j * 23) mod 54` on tentacle `j`), so one partial lights tentacles on every side.
+background. 54 tentacles grow from its rim, one per band, log-spaced from 30 Hz to 16 kHz as today, in order: the lowest
+band at the top, then clockwise. A change of pitch moves the light around the plant. (An earlier version spread
+neighbouring bands around the leaf; it hid every change of pitch, so it was dropped.)
 
 Each tentacle tapers from its base to its tip and ends in a drop of dew. Its band's level, from −72 dBFS to 0 dBFS as
 today, drives it as a real sundew moves:
 
-- **At rest** the tentacle is short and curled, and its drop is small and dim.
+- **At rest** the tentacle is short and curled, and its drop is small and dim. A sounding tentacle stands on average at
+  least five times as far from its root as a silent one, so what sounds stands out from the plant's shape.
 - **With sound** it lengthens and unfurls, and its drop swells and glows.
 - The plant is wider than tall: tentacles reach about 22 % less upward and downward than sideways, so their tips stay
   clear of the header and the bottom row.
