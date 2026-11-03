@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-03
+
+Drosera comes as an installer with three formats: VST3, Audio Unit and a standalone app.
+
 ### Added
 
 - An installer, `Drosera-X.Y.Z-macos.pkg`, in place of the zip. It installs the VST3, the Audio Unit and a
@@ -47,6 +51,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 - A restored project takes its parameters at once instead of gliding from the defaults, so it settles on the
   same drone every time it loads. Presets chosen in the window still glide.
 - The manual says how far Reverb Mix detunes low MIDI notes, from measurement.
+
+### Known limits
+
+- macOS only. The installer is not notarized by Apple yet, so macOS blocks it once: open it with Open Anyway in
+  System Settings → Privacy & Security, as the README explains. Nothing it installs needs unblocking.
+- The universal binary's Intel part is built, but has not been run.
+- Not yet compared with a hardware unit.
 
 ## [0.1.1] - 2026-11-01
 
