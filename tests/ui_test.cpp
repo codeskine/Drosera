@@ -294,7 +294,10 @@ static void editorTests() {
         }
         std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
         second->setStateInformation(state.getData(), (int) state.getSize());
-        check(openEditor(*second)->tab() == 3, "tabPersists");
+        {
+            auto reopened = openEditor(*second);
+            check(reopened->tab() == 3 && reopened->slider("volume")->getParentComponent()->isVisible(), "tabPersists");  // 3 is OUTPUT, as before PONG
+        }
 
         setParameter(*first, "lpf", 0.33f);
         first->getStateInformation(state);
@@ -704,7 +707,7 @@ static void editorTests() {
         check(openEditor(*p)->slider("fbgain")->getTitle() == "Feedback", "feedbackHasATitle");
     }
 
-    {   // STRINGS is the sixth tab: it shows its controls, persists, and fits the window.
+    {   // STRINGS keeps ID 5 and PONG takes 6, though PONG is shown after ECHO: saved projects open the tab they were saved on.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         juce::MemoryBlock state;
         {
@@ -714,37 +717,41 @@ static void editorTests() {
             auto shown = [&](const char* id) { return editor->slider(id)->getParentComponent()->isVisible(); };
             check(shown("coupling") && shown("interval2") && shown("interval3") && !shown("lpf"), "stringsTabShowsItsControls");
             check(editor->tabBounds(5).getRight() <= 760 - 26, "tabsFitTheWindow");
+            check(editor->tabBounds(2).getRight() < editor->tabBounds(6).getX() && editor->tabBounds(6).getRight() < editor->tabBounds(3).getX(),
+                  "pongTabSitsAfterEcho");
             const auto knobBounds = [&](const char* id) { return editor->slider(id)->getParentComponent()->getBounds(); };
             check(knobBounds("interval2").getX() - knobBounds("coupling").getX() == 112, "otherTabsKeepTheirPlaces");
 
             editor->setTab(2);
-            check(shown("echosend") && shown("echotime") && shown("echofb") && shown("echodrive") && shown("echotone"), "echoTabShowsItsControls");
+            check(shown("echosend") && shown("echotime") && shown("echofb") && !shown("echodrive"), "echoTabShowsItsControls");
+            editor->setTab(6);
+            check(shown("echodrive") && shown("echotone") && shown("echowidth") && shown("echolevel") && !shown("echosend"), "pongTabShowsItsControls");
             std::vector<juce::Rectangle<int>> cells;
-            for (const char* id : { "echosend", "echotime", "echofb", "echodrive", "echotone" }) cells.push_back(knobBounds(id));
-            cells.push_back(editor->toggleBounds("echohalve"));
+            for (const char* id : { "echodrive", "echotone", "echowidth", "echolevel" }) cells.push_back(knobBounds(id));
             cells.push_back(editor->toggleBounds("echopong"));
             bool fit = true;
             for (size_t i = 0; i < cells.size(); ++i) {
                 fit = fit && !cells[i].isEmpty() && cells[i].getX() >= 26 && cells[i].getRight() <= 760 - 26;
                 for (size_t j = i + 1; j < cells.size(); ++j) fit = fit && !cells[i].intersects(cells[j]);
             }
-            check(fit, "echoControlsFit");
+            check(fit, "pongControlsFit");
 
             setParameter(*p, "echopong", 0.0f);
             editor->refreshDisplay(0.0f);
-            check(editor->tag("echodrive") == "PONG OFF" && editor->tag("echotone") == "PONG OFF" && editor->slider("echodrive")->getAlpha() < 1.0f
+            check(editor->tag("echodrive") == "PONG OFF" && editor->tag("echotone") == "PONG OFF" && editor->tag("echowidth") == "PONG OFF"
+                      && editor->tag("echolevel") == "PONG OFF" && editor->slider("echolevel")->getAlpha() < 1.0f
                       && editor->tag("echofb").isEmpty(), "shapingTagWithPongOff");
             editor->slider("echodrive")->setValue(0.8, juce::sendNotificationSync);
             check(std::abs(parameter(*p, "echodrive") - 0.8f) < 0.001f, "shapingStaysEditableWithPongOff");
             setParameter(*p, "echopong", 1.0f);
             editor->refreshDisplay(0.0f);
-            check(editor->tag("echodrive").isEmpty() && editor->tag("echotone").isEmpty() && editor->slider("echotone")->getAlpha() == 1.0f, "shapingTagWithPongOn");
-            editor->setTab(5);
+            check(editor->tag("echodrive").isEmpty() && editor->tag("echotone").isEmpty() && editor->tag("echowidth").isEmpty()
+                      && editor->readout("echolevel") == "0.0 dB" && editor->slider("echotone")->getAlpha() == 1.0f, "shapingTagWithPongOn");
             p->getStateInformation(state);
         }
         std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
         second->setStateInformation(state.getData(), (int) state.getSize());
-        check(openEditor(*second)->tab() == 5, "sixthTabPersists");
+        check(openEditor(*second)->tab() == 6, "pongTabPersists");
     }
 
     {   // The interval knobs show the notes the voices play when MIDI Pitch controls them.

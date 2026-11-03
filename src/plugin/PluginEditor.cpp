@@ -83,7 +83,7 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
             knob->show(interval.value, interval.tag);
             continue;
         }
-        if (id == "echodrive" || id == "echotone") {
+        if (id == "echodrive" || id == "echotone" || id == "echowidth" || id == "echolevel") {
             const auto shaping = drosera::readouts::echoShaping(pong, text.toStdString());
             knob->show(shaping.value, shaping.tag);
             continue;
