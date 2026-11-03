@@ -13,8 +13,10 @@
 #include "PluginEditor.h"
 #include "pitch_estimator.h"
 #include "SpectrumTap.h"
+#include "ui/EchoPulse.h"
 #include "ui/PlantView.h"
 #include "ui/Readouts.h"
+#include "ui/ResponseArcs.h"
 #include "ui/SpectrumBands.h"
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
@@ -196,6 +198,34 @@ static void readoutTests() {
     check(is(interval(true, 60.0f, "+7 st"), "C4", "MIDI"), "interval with a MIDI note");
     check(is(interval(true, -1.0f, "+7 st"), "-", "MIDI"), "interval with no note");
     check(noteName(40.0f) == "E2" && noteName(60.0f) == "C4" && noteName(69.0f) == "A4", "note names");
+}
+
+static void arcTests() {
+    using namespace arcs;
+    float band[kBandTicks], tone[kToneTicks];
+    bandArc(1000.0f, 18000.0f, band);
+    bool lowCut = true;
+    int nearFive = 0;
+    for (int i = 0; i < kBandTicks; ++i) {
+        if (bandTickHz(i) < 300.0f) lowCut = lowCut && band[i] < kBandStub + 0.1f * kBandSpan;
+        if (std::abs(std::log2(bandTickHz(i) / 5000.0f)) < std::abs(std::log2(bandTickHz(nearFive) / 5000.0f))) nearFive = i;
+    }
+    check(lowCut && band[nearFive] > kBandStub + 0.9f * kBandSpan, "bandArcFollowsFilters");
+
+    bandArc(4000.0f, 100.0f, band);
+    check(std::all_of(band, band + kBandTicks, [](float l) { return l >= kBandStub; }), "bandArcNeverVanishes");
+
+    auto peak = [&] { return toneTickHz((int) (std::max_element(tone, tone + kToneTicks) - tone)); };
+    toneArc(800.0f, tone);
+    const float step = std::log2(toneTickHz(1) / toneTickHz(0));
+    const float at800 = peak();
+    toneArc(3200.0f, tone);
+    check(std::abs(std::log2(at800 / 800.0f)) <= step && peak() > 2000.0f, "toneArcPeaksAtTone");
+
+    using pulse::Lit;
+    check(pulse::echoPulse(0.01, 0.5, false, true) == Lit::single && pulse::echoPulse(0.2, 0.5, false, true) == Lit::none
+              && pulse::echoPulse(0.51, 0.5, true, true) == Lit::right && pulse::echoPulse(1.01, 0.5, true, true) == Lit::left
+              && pulse::echoPulse(0.01, 0.5, false, false) == Lit::none, "pulseFollowsEchoTime");
 }
 
 static void plantTests() {
@@ -894,6 +924,7 @@ int main() {
     tapTests();
     bandTests();
     readoutTests();
+    arcTests();
     plantTests();
     editorTests();
     stateTests();
