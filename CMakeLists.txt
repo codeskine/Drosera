@@ -75,6 +75,8 @@ if(DROSERA_BUILD_PLUGIN)
         PRODUCT_NAME "Drosera"
         IS_SYNTH TRUE
         NEEDS_MIDI_INPUT TRUE
+        MICROPHONE_PERMISSION_ENABLED TRUE
+        MICROPHONE_PERMISSION_TEXT "Drosera uses audio input to feed external sound into its feedback loop."
         COPY_PLUGIN_AFTER_BUILD FALSE)
 
     target_sources(Drosera PRIVATE ${DROSERA_PLUGIN_SOURCES})

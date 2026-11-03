@@ -28,6 +28,14 @@ build/plugin_host_test_artefacts/Release/plugin_host_test build/Drosera_artefact
 tools/hardware-comparison/check_reference.sh build/render_cli
 ```
 
+```bash
+tools/package/build_pkg.sh build/Drosera_artefacts/Release 0.0.0 build/Drosera.pkg && tools/package/check_pkg.sh build/Drosera.pkg
+```
+
+```bash
+tools/package/test_package.sh build/Drosera_artefacts/Release
+```
+
 ## Code map
 
 | Path | Holds |
@@ -43,6 +51,7 @@ tools/hardware-comparison/check_reference.sh build/render_cli
 | `assets/fonts/` | The interface's fonts, embedded as binary data, with their licences |
 | `third_party/` | Vendored DaisySP |
 | `tools/hardware-comparison/` | Comparison against a real unit, and the reference checksums |
+| `tools/package/` | The installer package: building it, checking it without installing, and its screens |
 | `docs/superpowers/` | Design specs and implementation plans |
 
 ## Rules

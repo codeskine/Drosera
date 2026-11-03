@@ -7,6 +7,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ### Added
 
+- An installer, `Drosera-X.Y.Z-macos.pkg`, in place of the zip. It installs the VST3, the Audio Unit and a
+  standalone app for all users, and each can be left out.
+- The Audio Unit and the standalone app. The app asks for microphone access, to feed external sound into the loop.
 - Three-string polyphony: up to three notes at once as separate feedback loops, with Coupling between them.
 - POLY, LOCK, Coupling, Interval 2 and Interval 3. LOCK chooses between a tuned chord and the free drone.
 - Three presets: Open Fifths, Sympathetic and Chord Keys.
@@ -15,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ### Changed
 
+- The VST3 now installs to `/Library/Audio/Plug-Ins/VST3/`. If you copied 0.1.x to
+  `~/Library/Audio/Plug-Ins/VST3/`, delete that copy, or your host finds two.
 - A new window, on one page with no tabs: the plant in the centre with Frequency and Body beside it, one row of FILTER,
   REVERB, PONG and ECHO below, and a SETUP panel for Strings, Output and MIDI. Red marks the controls inside the
   feedback loop, amber those after it.

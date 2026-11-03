@@ -39,6 +39,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.check.outputs.version }}
+      SIGNED: ${{ secrets.APPLE_CERTIFICATE != '' || secrets.APPLE_CERTIFICATE_PASSWORD != '' || secrets.APPLE_ID != '' || secrets.APPLE_TEAM_ID != '' || secrets.APPLE_APP_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -47,8 +48,14 @@ jobs:
       - name: Create a draft release
         run: |
           python3 tools/release_check.py "$GITHUB_REF_NAME" > notes.md
-          sha256sum "Drosera-$VERSION-macos.zip" > SHA256SUMS.txt
+          if [ "$SIGNED" != true ]; then
+            printf '\n%s\n%s\n%s\n' \
+              '**Opening the installer.** This release is not notarized by Apple yet, so macOS blocks the installer the' \
+              'first time. Open it, close the warning, then go to System Settings → Privacy & Security and click' \
+              '**Open Anyway**. Nothing else needs unblocking.' >> notes.md
+          fi
+          sha256sum "Drosera-$VERSION-macos.pkg" > SHA256SUMS.txt
           prerelease=""
           case "$GITHUB_REF_NAME" in *-rc*) prerelease="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" --draft $prerelease --title "Drosera $VERSION" --notes-file notes.md \
-            "Drosera-$VERSION-macos.zip" SHA256SUMS.txt
+            "Drosera-$VERSION-macos.pkg" SHA256SUMS.txt
