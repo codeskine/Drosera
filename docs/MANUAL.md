@@ -55,17 +55,30 @@ Both are in the feedback path, so they shape which partials sustain, not only th
 | Echo Time | 50 ms to 5 s |
 | Echo Feedback | 100 % is unity, and up to 150 % it runs away, bounded by a soft clip |
 | Echo Warp (WARP) | The firmware's delay switch. Echo Time's readout shows the shortened time |
-| Echo Drive | 0 to +12 dB into the saturation of Echo Pong. Dimmed while PONG is off |
-| Echo Tone | 800 Hz to 18 kHz, how fast Echo Pong's repeats get darker. Dimmed while PONG is off |
-| Echo Pong (PONG) | Replaces the firmware's echo with repeats that bounce between left and right. Off by default |
+
+Echo Send, Echo Time and Echo Feedback also drive Echo Pong, in the Pong tab.
 
 **WARP** halves the Echo Time knob's position before its square-law curve. Above about a quarter of the knob's
 travel the echo gets 2.8 to 3.9 times shorter, not twice as short, so it acts as a doppler warp and not as a tempo
 halving. Lower down the difference shrinks, because Echo Time cannot go below 50 ms.
 
+## Pong tab
+
+| Control | What it does |
+|---|---|
+| Echo Drive | 0 to +12 dB into the saturation of Echo Pong |
+| Echo Tone | 800 Hz to 18 kHz, how fast Echo Pong's repeats get darker |
+| Echo Width | 0 % puts every repeat in the middle, 100 % bounces them fully left and right. 100 % by default |
+| Echo Level | -30 to +6 dB on Echo Pong's repeats. 0 dB by default |
+| Echo Pong (PONG) | Replaces the firmware's echo with repeats that bounce between left and right. Off by default |
+
+The four knobs are dimmed while PONG is off, and stay usable.
+
 **PONG** sums the input to mono and starts on the left, and Echo Time is the time between bounces. Unlike the firmware's
 echo, which passes everything through a band-pass at 800 Hz, it keeps the low end of the drone. Echo Drive also raises the
 gain of each bounce: with Drive at zero, Echo Feedback runs away above 100 %, and with Drive at maximum, above 50 %.
+Echo Width and Echo Level act on what comes out, not on the loop, so they change neither how long the repeats last nor
+where Echo Feedback runs away. At 0 %, Width plays each repeat in the middle at half the level it had on its side.
 
 ## Output tab
 
@@ -157,7 +170,7 @@ others turns POLY off. "Ember Pong" uses PONG and sustains itself, and choosing 
   on a neighbouring Body resonance.
 - Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. With POLY on,
   chords can go sour: with "Chord Keys" otherwise as it is, at Reverb Mix 35 % a C major chord read +20, -28 and -8 cents.
-- The values of "Open Fifths", "Sympathetic", "Chord Keys" and "Ember Pong", and the defaults of Echo Drive and Echo Tone,
+- The values of "Open Fifths", "Sympathetic", "Chord Keys" and "Ember Pong", and the defaults of Echo Drive, Echo Tone and Echo Level,
   were chosen by measurement and have not been judged by ear.
 - Echo Pong's saturation is not oversampled, so loud high partials alias at high Drive. At Drive 100 %, with no feedback, a
   3.1 kHz tone at half scale measured -54 dB of inharmonic power, and a 9.1 kHz tone at full scale -10.5 dB.
