@@ -20,7 +20,7 @@ static const ParamIdentity kParamIdentity[] = {
     {"echofb", "Echo Feedback"}, {"volume", "Volume"}, {"echohalve", "Echo Warp"}, {"inputgain", "Input Level"},
     {"midipitch", "MIDI Pitch"}, {"midigate", "MIDI Gate"},
     {"poly", "Polyphony"}, {"coupling", "Coupling"}, {"interval2", "Interval 2"}, {"interval3", "Interval 3"}, {"polylock", "String Lock"},
-    {"echopong", "Echo Pong"}, {"echodrive", "Echo Drive"}, {"echotone", "Echo Tone"},
+    {"echopong", "Echo Pong"}, {"echodrive", "Echo Drive"}, {"echotone", "Echo Tone"}, {"echowidth", "Echo Width"}, {"echolevel", "Echo Level"},
 };
 
 // Values stored in tests/fixtures/state-baseline.bin. It also holds the tape echo's parameters, on,
@@ -72,7 +72,8 @@ static bool checkSavedState(juce::AudioProcessor& inst, const char* fixture) {
                 std::printf("  %s: expected 0, got %.3f\n", name, p->getValue());
                 pass = false;
             }
-    for (const auto& older : {std::make_pair("Echo Pong", 0.0f), std::make_pair("Echo Drive", 0.5f), std::make_pair("Echo Tone", 0.5f)})  // projects from before PONG keep the classic echo
+    for (const auto& older : {std::make_pair("Echo Pong", 0.0f), std::make_pair("Echo Drive", 0.5f), std::make_pair("Echo Tone", 0.5f),
+                              std::make_pair("Echo Width", 1.0f), std::make_pair("Echo Level", 30.0f / 36.0f)})  // projects from before PONG keep the classic echo
         for (auto* p : inst.getParameters())
             if (p->getName(64) == older.first && std::abs(p->getValue() - older.second) > 0.001f) {
                 std::printf("  %s: expected %.3f, got %.3f\n", older.first, older.second, p->getValue());
@@ -242,7 +243,8 @@ int main(int argc, char** argv) {
         const struct { const char* name; float v; const char* want; } cases[] = {
             {"Echo Feedback", 0.4f, "60 %"}, {"Echo Feedback", 1.0f, "150 %"}, {"Echo Send", 0.2f, "4 %"},
             {"Volume", 0.5f, "-12.0 dB"}, {"Reverb Decay", 0.5f, "85 %"}, {"Reverb Decay", 0.1f, "42 %"}, {"Echo Warp", 1.0f, "On"},
-            {"Echo Drive", 0.5f, "+6.0 dB"}, {"Echo Drive", 0.0f, "+0.0 dB"}, {"Echo Tone", 0.5f, "3795 Hz"}, {"Echo Pong", 1.0f, "On"}};
+            {"Echo Drive", 0.5f, "+6.0 dB"}, {"Echo Drive", 0.0f, "+0.0 dB"}, {"Echo Tone", 0.5f, "3795 Hz"}, {"Echo Pong", 1.0f, "On"},
+            {"Echo Width", 0.5f, "50 %"}, {"Echo Level", 30.0f / 36.0f, "0.0 dB"}, {"Echo Level", 1.0f, "+6.0 dB"}, {"Echo Level", 0.5f, "-12.0 dB"}};
         for (const auto& c : cases) {
             const auto got = text(c.name, c.v);
             const bool pass = got == c.want;
@@ -257,17 +259,22 @@ int main(int argc, char** argv) {
         auto value = [&](const char* name) { for (auto* p : inst->getParameters()) if (p->getName(64) == name) return p->getValue(); return -1.0f; };
 
         setParam(*inst, "Echo Pong", 1.0f); setParam(*inst, "Echo Drive", 0.8f); setParam(*inst, "Echo Tone", 0.3f);
+        setParam(*inst, "Echo Width", 0.2f); setParam(*inst, "Echo Level", 0.6f);
         juce::MemoryBlock state; inst->getStateInformation(state);
         setParam(*inst, "Echo Pong", 0.0f); setParam(*inst, "Echo Drive", 0.1f); setParam(*inst, "Echo Tone", 0.9f);
+        setParam(*inst, "Echo Width", 0.9f); setParam(*inst, "Echo Level", 0.1f);
         inst->setStateInformation(state.getData(), (int) state.getSize());
-        const bool roundTrip = value("Echo Pong") == 1.0f && std::abs(value("Echo Drive") - 0.8f) < 1e-3f && std::abs(value("Echo Tone") - 0.3f) < 1e-3f;
+        const bool roundTrip = value("Echo Pong") == 1.0f && std::abs(value("Echo Drive") - 0.8f) < 1e-3f && std::abs(value("Echo Tone") - 0.3f) < 1e-3f
+                               && std::abs(value("Echo Width") - 0.2f) < 1e-3f && std::abs(value("Echo Level") - 0.6f) < 1e-3f;
         std::printf("pongSurvivesStateRoundTrip: %s\n", roundTrip ? "OK" : "FAIL");
         ok &= roundTrip;
 
         inst->setCurrentProgram(15);
+        setParam(*inst, "Echo Width", 0.2f); setParam(*inst, "Echo Level", 0.6f);
         const bool on = value("Echo Pong") == 1.0f;
         inst->setCurrentProgram(0);
-        const bool off = on && value("Echo Pong") == 0.0f && std::abs(value("Echo Drive") - 0.5f) < 1e-3f && std::abs(value("Echo Tone") - 0.5f) < 1e-3f;
+        const bool off = on && value("Echo Pong") == 0.0f && std::abs(value("Echo Drive") - 0.5f) < 1e-3f && std::abs(value("Echo Tone") - 0.5f) < 1e-3f
+                         && value("Echo Width") == 1.0f && std::abs(value("Echo Level") - 30.0f / 36.0f) < 1e-3f;
         std::printf("classicPresetTurnsPongOff: %s\n", off ? "OK" : "FAIL");
         ok &= off;
     }

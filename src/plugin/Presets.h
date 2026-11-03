@@ -24,6 +24,8 @@ struct Preset {
     bool  echoPong = false;   // the echo's repeats bounce between left and right and saturate
     float echoDrive = 0.5f;
     float echoTone = 0.5f;
+    float echoWidth = 1.0f;          // fully left and right
+    float echoLevel = 30.0f / 36.0f; // 0 dB
 };
 
 inline constexpr std::array<Preset, 16> kFactoryPresets {{

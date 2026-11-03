@@ -504,7 +504,7 @@ static void editorTests() {
             for (auto* parameter : p->getParameters())
                 if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter)) hints[withId->paramID] = withId->getVersionHint();
             bool ok = true;
-            for (const char* added : { "poly", "coupling", "interval2", "interval3", "polylock", "echopong", "echodrive", "echotone" })
+            for (const char* added : { "poly", "coupling", "interval2", "interval3", "polylock", "echopong", "echodrive", "echotone", "echowidth", "echolevel" })
                 ok = ok && hints.at(added) == 2;
             for (const char* released : { "freq", "fbgain", "body", "lpf", "hpf", "revmix", "revdecay", "echosend", "echotime", "echofb", "volume", "echohalve", "inputgain", "midipitch", "midigate" })
                 ok = ok && hints.at(released) == 1;

@@ -202,6 +202,8 @@ static bool presetTests(const char* outDir) {
         core.SetEchoPong(pr.echoPong);
         core.SetEchoDrive(pr.echoDrive);
         core.SetEchoTone(pr.echoTone);
+        core.SetEchoWidth(pr.echoWidth);
+        core.SetEchoLevel(pr.echoLevel);
         if (pr.midiGate) {  // as if a note were held, or a chord on a polyphonic preset
             core.SetMidiPitch(true, 48.0f);
             core.SetGate(true, true);
@@ -252,6 +254,8 @@ static void applyPreset(DroseraCore& core, const infrasonic::Preset& pr) {
     core.SetEchoPong(pr.echoPong);
     core.SetEchoDrive(pr.echoDrive);
     core.SetEchoTone(pr.echoTone);
+    core.SetEchoWidth(pr.echoWidth);
+    core.SetEchoLevel(pr.echoLevel);
 }
 
 static bool noAllocationOnRender() {
