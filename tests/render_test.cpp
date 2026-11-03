@@ -7,17 +7,21 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <limits>
 #include <memory>
 #include <new>
+#include <random>
 #include <string>
 #include <vector>
 #include "DroseraCore.h"
+#include "EchoDelay.h"
 #include "pitch_estimator.h"
 #include "PongDelay.h"
 #include "Presets.h"
 #include "SincResampler.h"
+#include "StereoEcho.h"
 
 using infrasonic::DroseraCore;
 
@@ -1656,6 +1660,56 @@ static bool pongEngineTests() {
     return ok;
 }
 
+// StereoEcho alone: the only place the wet signal is isolated.
+using Line = infrasonic::EchoDelay<48000 * 5>;
+using Stereo = infrasonic::StereoEcho<48000 * 5>;
+
+template <typename Echo>
+static void setUpEcho(Echo& echo, float seconds, float feedback) {
+    echo.Init(48000.0f);
+    echo.SetDelayTime(seconds, true);
+    echo.SetFeedback(feedback);
+    echo.SetLagTime(0.5f);
+}
+
+static std::vector<float> noise(size_t n, unsigned seed, float amount) {
+    std::minstd_rand gen(seed);
+    std::uniform_real_distribution<float> dist(-amount, amount);
+    std::vector<float> v(n);
+    for (auto& x : v) x = dist(gen);
+    return v;
+}
+
+static bool sameBits(const std::vector<float>& a, const std::vector<float>& b) {
+    return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0;
+}
+
+// The firmware's branch of StereoEcho is two EchoDelay lines, bit for bit.
+static bool stereoEchoMatchesTwoLines() {
+    auto left = std::make_unique<Line>(), right = std::make_unique<Line>();
+    auto stereo = std::make_unique<Stereo>();
+    setUpEcho(*left, 0.3f, 1.2f);
+    setUpEcho(*right, 0.3f, 1.2f);
+    setUpEcho(*stereo, 0.3f, 1.2f);
+    const size_t n = 48000 * 3;
+    const auto inL = noise(n, 1, 0.3f), inR = noise(n, 2, 0.3f);
+    std::vector<float> lineL(n), lineR(n), wetL(n), wetR(n);
+    for (size_t i = 0; i < n; ++i) {
+        lineL[i] = left->Process(inL[i]);
+        lineR[i] = right->Process(inR[i]);
+        stereo->Process(inL[i], inR[i], wetL[i], wetR[i]);
+    }
+    const bool pass = sameBits(lineL, wetL) && sameBits(lineR, wetR);
+    printf("stereoEchoMatchesTwoLines: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool stereoEchoTests() {
+    bool ok = true;
+    ok &= stereoEchoMatchesTwoLines();
+    return ok;
+}
+
 int main(int argc, char** argv) {
     const char* outDir = argc > 1 ? argv[1] : nullptr;
     //                  freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
@@ -1680,6 +1734,7 @@ int main(int argc, char** argv) {
     ok &= polyphonyTests();
     ok &= pongDelayTests();
     ok &= pongEngineTests();
+    ok &= stereoEchoTests();
     printf(ok ? "ALL OK\n" : "SOME FAILED\n");
     return ok ? 0 : 1;
 }

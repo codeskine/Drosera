@@ -11,12 +11,9 @@ static constexpr float kInvSqrt3 = 0.57735027f;
 static constexpr int kNoiseOffset[Engine::kNumVoices] = { 0, 20011, 40009 };
 
 void Engine::Init(const float sample_rate) {
-  using ED = EchoDelay<kMaxEchoDelaySamp>;
-
   // Only the first call allocates: Init also clears the state on the audio thread.
-  if (!echo_delay_[0]) {
-    echo_delay_[0] = std::make_unique<ED>();
-    echo_delay_[1] = std::make_unique<ED>();
+  if (!stereo_echo_) {
+    stereo_echo_ = std::make_unique<StereoEcho<kMaxEchoDelaySamp>>();
     pong_delay_ = std::make_unique<PongDelay<kMaxEchoDelaySamp>>();
   }
 
@@ -34,12 +31,10 @@ void Engine::Init(const float sample_rate) {
   poly_running_ = poly_on_;
   for (auto &tap : tap_) tap[0] = tap[1] = 0.0f;
 
-  for (unsigned int i = 0; i < 2; i++) {
-    echo_delay_[i]->Init(sample_rate);
-    echo_delay_[i]->SetDelayTime(5.0f, true);
-    echo_delay_[i]->SetFeedback(0.5f);
-    echo_delay_[i]->SetLagTime(0.5f);
-  }
+  stereo_echo_->Init(sample_rate);
+  stereo_echo_->SetDelayTime(5.0f, true);
+  stereo_echo_->SetFeedback(0.5f);
+  stereo_echo_->SetLagTime(0.5f);
 
   pong_delay_->Init(sample_rate);
   pong_delay_->SetDelayTime(5.0f, true);
@@ -77,14 +72,12 @@ void Engine::SetFeedbackHPFCutoff(const float cutoff_hz) {
 }
 
 void Engine::SetEchoDelayTime(const float echo_time) {
-  echo_delay_[0]->SetDelayTime(echo_time);
-  echo_delay_[1]->SetDelayTime(echo_time);
+  stereo_echo_->SetDelayTime(echo_time);
   pong_delay_->SetDelayTime(echo_time);
 }
 
 void Engine::SetEchoDelayFeedback(const float echo_fb) {
-  echo_delay_[0]->SetFeedback(echo_fb);
-  echo_delay_[1]->SetFeedback(echo_fb);
+  stereo_echo_->SetFeedback(echo_fb);
   pong_delay_->SetFeedback(echo_fb);
 }
 
@@ -124,8 +117,8 @@ void Engine::StopPoly() {
 }
 
 void Engine::ProcessEcho(float &sampL, float &sampR) {
-  float wetL = echo_delay_[0]->Process(sampL * echo_send_);
-  float wetR = echo_delay_[1]->Process(sampR * echo_send_);
+  float wetL, wetR;
+  stereo_echo_->Process(sampL * echo_send_, sampR * echo_send_, wetL, wetR);
 
   float pongL, pongR;
   pong_delay_->Process(0.5f * (sampL + sampR) * echo_send_, pongL, pongR);

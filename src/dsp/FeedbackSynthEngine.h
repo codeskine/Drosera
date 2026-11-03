@@ -7,6 +7,7 @@
 #include "EchoDelay.h"
 #include "FeedbackVoice.h"
 #include "PongDelay.h"
+#include "StereoEcho.h"
 
 namespace infrasonic {
 namespace FeedbackSynth {
@@ -88,8 +89,7 @@ class Engine {
         FeedbackVoice voices_[kNumVoices];
         daisysp::WhiteNoise noise_[kNumVoices];
 
-        using EchoDelayPtr = std::unique_ptr<EchoDelay<kMaxEchoDelaySamp>>;
-        EchoDelayPtr echo_delay_[2];
+        std::unique_ptr<StereoEcho<kMaxEchoDelaySamp>> stereo_echo_;
         std::unique_ptr<PongDelay<kMaxEchoDelaySamp>> pong_delay_;
         bool pong_on_ = false;
         float pong_mix_ = 0.0f;
