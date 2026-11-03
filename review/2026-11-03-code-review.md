@@ -499,6 +499,16 @@ Restano aperti gli opzionali 8–14 del piano e la nota sullo scarto residuo del
 
 ---
 
+## 14. Misure per il sound design
+
+Le misure automatiche su livelli dei preset, tessitura MIDI, ripetibilità del caricamento, compatibilità mono,
+durata, combinazioni estreme e sample rate sono in `review/2026-11-03-sound-design-measurements.md`. I due
+punti da portare nel piano: lo stesso progetto può assestarsi su una parziale diversa a seconda di quando
+l'host consegna lo stato (rimedio: salto immediato dei parametri al ripristino), e il riverbero nell'anello
+stona le note MIDI sotto il 48 fino a ±46 cent al 35 % di Mix.
+
+---
+
 ## Valutazione complessiva e roadmap
 
 Il progetto è solido: il thread audio è pulito, il DSP è corretto e misurato (intonazione MIDI entro

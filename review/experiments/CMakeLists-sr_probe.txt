@@ -1,0 +1,6 @@
+    juce_add_console_app(sr_probe PRODUCT_NAME "sr_probe")
+    target_sources(sr_probe PRIVATE tests/sr_probe.cpp)
+    target_include_directories(sr_probe PRIVATE tests)
+    target_compile_definitions(sr_probe PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(sr_probe PRIVATE juce::juce_audio_processors juce::juce_recommended_config_flags)
+endif()
