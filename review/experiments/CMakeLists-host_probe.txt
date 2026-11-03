@@ -1,0 +1,8 @@
+# REVIEW EXPERIMENT (sandbox only): extra host-side probe, see tests/host_probe.cpp
+if(DROSERA_BUILD_PLUGIN)
+    juce_add_console_app(host_probe PRODUCT_NAME "host_probe")
+    target_sources(host_probe PRIVATE tests/host_probe.cpp)
+    target_compile_definitions(host_probe PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(host_probe PRIVATE juce::juce_audio_processors juce::juce_recommended_config_flags)
+    add_dependencies(host_probe Drosera_VST3)
+endif()

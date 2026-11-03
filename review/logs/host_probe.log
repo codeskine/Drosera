@@ -1,0 +1,31 @@
+build exit 0
+sr=22050   block=1     peak=0.293 rms=0.1241 finite=1 latency=188 OK
+sr=22050   block=7     peak=0.293 rms=0.1241 finite=1 latency=188 OK
+sr=22050   block=2048  peak=0.293 rms=0.1244 finite=1 latency=188 OK
+sr=22050   block=8192  peak=0.293 rms=0.1249 finite=1 latency=188 OK
+sr=44100   block=1     peak=0.318 rms=0.1457 finite=1 latency=327 OK
+sr=44100   block=7     peak=0.318 rms=0.1457 finite=1 latency=327 OK
+sr=44100   block=2048  peak=0.318 rms=0.1458 finite=1 latency=327 OK
+sr=44100   block=8192  peak=0.318 rms=0.1457 finite=1 latency=327 OK
+sr=88200   block=1     peak=0.313 rms=0.1463 finite=1 latency=607 OK
+sr=88200   block=7     peak=0.313 rms=0.1463 finite=1 latency=607 OK
+sr=88200   block=2048  peak=0.313 rms=0.1464 finite=1 latency=607 OK
+sr=88200   block=8192  peak=0.313 rms=0.1460 finite=1 latency=607 OK
+sr=176400  block=1     peak=0.306 rms=0.1449 finite=1 latency=1165 OK
+sr=176400  block=7     peak=0.306 rms=0.1449 finite=1 latency=1165 OK
+sr=176400  block=2048  peak=0.306 rms=0.1450 finite=1 latency=1165 OK
+sr=176400  block=8192  peak=0.306 rms=0.1450 finite=1 latency=1165 OK
+sr=192000  block=1     peak=0.306 rms=0.1437 finite=1 latency=1264 OK
+sr=192000  block=7     peak=0.306 rms=0.1437 finite=1 latency=1264 OK
+sr=192000  block=2048  peak=0.306 rms=0.1436 finite=1 latency=1264 OK
+sr=192000  block=8192  peak=0.306 rms=0.1438 finite=1 latency=1264 OK
+sr=22050   latency: declared 188, measured 188 OK
+sr=88200   latency: declared 607, measured 609 OK
+sr=192000  latency: declared 1264, measured 1269 OK
+60 s at 44.1k, mixed block sizes: finite=1 quiet blocks=0 OK
+empty block and bypass: finite=1 peak=0.000 OK
+garbage and truncated state: still processing, finite=1 OK
+note-on velocity 0 releases the gate: rms after 0.00050 OK
+HOST PROBE ALL OK
+
+[exited with code 0]

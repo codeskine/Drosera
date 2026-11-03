@@ -31,7 +31,8 @@ class Engine {
         void SetFeedbackLPFCutoff(const float cutoff_hz);
         void SetFeedbackHPFCutoff(const float cutoff_hz);
 
-        void SetEchoDelayTime(const float echo_time);
+        // Immediate skips the echo's own 0.5 s lag, which otherwise glides from Init's 5 s
+        void SetEchoDelayTime(const float echo_time, const bool immediately = false);
         void SetEchoDelayFeedback(const float echo_fb);
         void SetEchoDelaySendAmount(const float echo_send);
 

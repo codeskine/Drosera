@@ -42,7 +42,7 @@ jobs:
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
 
       - name: Build
-        run: cmake --build build --target voice_allocator_test render_test render_cli ui_test plugin_host_test Drosera_VST3
+        run: cmake --build build --target voice_allocator_test render_test render_cli ui_test plugin_host_test Drosera_VST3 Drosera_AU
 
       - name: Test the release check
         run: python3 tools/test_release_check.py
@@ -64,6 +64,15 @@ jobs:
           curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_macOS.zip"
           unzip -q pluginval.zip -d pluginval-bin
           pluginval-bin/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --validate "$VST3"
+
+      # Audio Units are found only in the plugin folders, so install the built one for the runner's user.
+      - name: auval and pluginval on the AU
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          ditto build/Drosera_artefacts/Release/AU/Drosera.component ~/Library/Audio/Plug-Ins/Components/Drosera.component
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aumu Dros Cdsk
+          pluginval-bin/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --validate ~/Library/Audio/Plug-Ins/Components/Drosera.component
 
       - name: Check reference renders
         run: tools/hardware-comparison/check_reference.sh build/render_cli

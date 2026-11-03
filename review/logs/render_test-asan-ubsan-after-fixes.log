@@ -1,0 +1,474 @@
+default_drone    block=4    peak=0.333 rms=0.1371 finite=1 sound=1 OK
+default_drone    block=64   peak=0.333 rms=0.1371 finite=1 sound=1 OK
+default_drone    block=512  peak=0.333 rms=0.1371 finite=1 sound=1 OK
+default_drone    block=480  peak=0.333 rms=0.1371 finite=1 sound=1 OK
+low_dark_verb    block=4    peak=0.727 rms=0.2838 finite=1 sound=1 OK
+low_dark_verb    block=64   peak=0.727 rms=0.2838 finite=1 sound=1 OK
+low_dark_verb    block=512  peak=0.727 rms=0.2838 finite=1 sound=1 OK
+low_dark_verb    block=480  peak=0.727 rms=0.2838 finite=1 sound=1 OK
+echo_runaway     block=4    peak=0.726 rms=0.2691 finite=1 sound=1 OK
+echo_runaway     block=64   peak=0.726 rms=0.2691 finite=1 sound=1 OK
+echo_runaway     block=512  peak=0.726 rms=0.2691 finite=1 sound=1 OK
+echo_runaway     block=480  peak=0.726 rms=0.2691 finite=1 sound=1 OK
+everything_max   block=4    peak=0.750 rms=0.2610 finite=1 sound=1 OK
+everything_max   block=64   peak=0.750 rms=0.2610 finite=1 sound=1 OK
+everything_max   block=512  peak=0.750 rms=0.2610 finite=1 sound=1 OK
+everything_max   block=480  peak=0.750 rms=0.2610 finite=1 sound=1 OK
+gain_zero        block=4    peak=0.000 rms=0.0000 finite=1 sound=0 OK
+gain_zero        block=64   peak=0.000 rms=0.0000 finite=1 sound=0 OK
+gain_zero        block=512  peak=0.000 rms=0.0000 finite=1 sound=0 OK
+gain_zero        block=480  peak=0.000 rms=0.0000 finite=1 sound=0 OK
+input passthrough      rms=0.0786 OK
+midi pitch dry            on note (<25c) 68/69, worst of those 2.2 c OK
+midi pitch Body min       on note (<25c) 68/69, worst of those 2.2 c OK
+midi pitch Body max       on note (<25c) 67/69, worst of those 24.4 c OK
+midi pitch Default preset on note (<25c) 66/69, worst of those 24.2 c OK
+gate open rms=0.1176 closed rms=0.00001 (-84.0 dB) OK
+resampler 48k->44.1k 1 kHz passes            -0.00 dB OK
+resampler 48k->44.1k 15 kHz passes           -0.00 dB OK
+resampler 48k->44.1k 23 kHz folded image    -94.34 dB OK
+resampler 48k->96k 1 kHz passes              -0.00 dB OK
+resampler 48k->96k 10 kHz image at 38 kHz  -124.13 dB OK
+resampler 96k->48k 30 kHz folded image      -94.98 dB OK
+resampler 44.1k->48k 1 kHz passes            -0.00 dB OK
+preset Default                  rms=0.1273 ( -17.9 dBFS) peak=0.333 OK
+preset Sub Cellar               rms=0.1548 ( -16.2 dBFS) peak=0.475 OK
+preset Glass Wind               rms=0.2116 ( -13.5 dBFS) peak=0.558 OK
+preset Cathedral Bloom          rms=0.2673 ( -11.5 dBFS) peak=0.786 OK
+preset Echo Drift               rms=0.0834 ( -21.6 dBFS) peak=0.250 OK
+preset Doppler Void             rms=0.1120 ( -19.0 dBFS) peak=0.361 OK
+preset Dark Tide                rms=0.1933 ( -14.3 dBFS) peak=0.672 OK
+preset Razor Feedback           rms=0.1446 ( -16.8 dBFS) peak=0.290 OK
+preset Quiet Room               rms=0.0818 ( -21.7 dBFS) peak=0.225 OK
+preset Keys (play notes)        rms=0.1321 ( -17.6 dBFS) peak=0.330 OK
+preset Resonator (needs input)  rms=0.0000 (-104.7 dBFS) peak=0.000 OK
+preset Init (silent)            rms=0.0000 (-102.5 dBFS) peak=0.000 OK
+preset Open Fifths              rms=0.1734 ( -15.2 dBFS) peak=0.462 OK
+threeStringsSound Open Fifths        strongest partial 151.2 Hz holds 53% of the power OK
+preset Sympathetic              rms=0.1366 ( -17.3 dBFS) peak=0.523 OK
+threeStringsSound Sympathetic        strongest partial 354.1 Hz holds 18% of the power OK
+preset Chord Keys               rms=0.1094 ( -19.2 dBFS) peak=0.281 OK
+preset Ember Pong               rms=0.0897 ( -20.9 dBFS) peak=0.231 OK
+allocations while rendering, NaN recovery included: 0 OK
+recovery from NaN: finite=1 rms of last second=0.0936 OK
+echo first repeat at 0.248 s, knob 0.248 s: OK
+filter state cleared by Init: OK
+published Body, knob: 0.00991 s (knob 0.00991) OK
+published note 60.000, Body 0.01170 s (3 periods 0.01147) OK
+Echo Time with WARP: 0.359 s (expected 0.359) OK
+engine, voice 0 independent at Coupling 0: same=1 others differ=1 OK
+engine, unison voices differ: 1/0=1 2/1=1 OK
+engine, Coupling rings a closed voice: 0.000067 -> 0.987463 (+83.4 dB) OK
+engine, LPF 18000 Hz, ramp at 2 s: largest jump 0.31237, before 0.41388 OK
+engine, LPF 18000 Hz, ramp at 2 s: largest jump 0.29941, before 0.36154 OK
+engine, LPF 18000 Hz, ramp at 4 s: largest jump 0.36308, before 0.50708 OK
+engine, LPF 18000 Hz, ramp at 4 s: largest jump 0.35730, before 0.48575 OK
+engine, LPF   800 Hz, ramp at 2 s: largest jump 0.03125, before 0.03164 OK
+engine, LPF   800 Hz, ramp at 2 s: largest jump 0.03141, before 0.03165 OK
+engine, LPF   800 Hz, ramp at 4 s: largest jump 0.03301, before 0.05445 OK
+engine, LPF   800 Hz, ramp at 4 s: largest jump 0.04374, before 0.05448 OK
+engine, ramp end: default off=1 on=1 during=1 at 959=1 off at 961=1 off after Init=1 OK
+engine, ramp settles on the sum: largest error 0.0000000 OK
+engine, restart from silence: peak 0.000077 (was 1.956) OK
+engine, ramp reversing from on: finite=1 largest jump 0.51978, before 0.50241 OK
+engine, ramp reversing from off: finite=1 largest jump 0.31447, before 0.41388 OK
+poly chord 36 43 52, Coupling 0%, voice 0: -0.6 c OK
+poly chord 36 43 52, Coupling 0%, voice 1: -0.1 c OK
+poly chord 36 43 52, Coupling 0%, voice 2: +0.1 c OK
+poly chord 45 52 57, Coupling 0%, voice 0: +0.2 c OK
+poly chord 45 52 57, Coupling 0%, voice 1: +0.1 c OK
+poly chord 45 52 57, Coupling 0%, voice 2: +0.2 c OK
+poly chord 48 55 64, Coupling 0%, voice 0: +0.2 c OK
+poly chord 48 55 64, Coupling 0%, voice 1: +0.2 c OK
+poly chord 48 55 64, Coupling 0%, voice 2: +0.3 c OK
+poly chord 60 64 67, Coupling 0%, voice 0: +0.2 c OK
+poly chord 60 64 67, Coupling 0%, voice 1: +0.3 c OK
+poly chord 60 64 67, Coupling 0%, voice 2: +0.2 c OK
+poly chord 64 69 76, Coupling 0%, voice 0: +0.3 c OK
+poly chord 64 69 76, Coupling 0%, voice 1: +0.2 c OK
+poly chord 64 69 76, Coupling 0%, voice 2: +0.2 c OK
+poly chord 36 43 52, Coupling 100%, voice 0: -1.0 c OK
+poly chord 36 43 52, Coupling 100%, voice 1: -0.0 c OK
+poly chord 36 43 52, Coupling 100%, voice 2: -0.0 c OK
+poly chord 45 52 57, Coupling 100%, voice 0: +0.1 c OK
+poly chord 45 52 57, Coupling 100%, voice 1: +0.0 c OK
+poly chord 45 52 57, Coupling 100%, voice 2: -0.3 c OK
+poly chord 48 55 64, Coupling 100%, voice 0: +0.0 c OK
+poly chord 48 55 64, Coupling 100%, voice 1: +0.0 c OK
+poly chord 48 55 64, Coupling 100%, voice 2: +0.0 c OK
+poly chord 60 64 67, Coupling 100%, voice 0: +0.5 c OK
+poly chord 60 64 67, Coupling 100%, voice 1: +0.5 c OK
+poly chord 60 64 67, Coupling 100%, voice 2: -0.6 c OK
+poly chord 64 69 76, Coupling 100%, voice 0: +0.4 c OK
+poly chord 64 69 76, Coupling 100%, voice 1: +0.1 c OK
+poly chord 64 69 76, Coupling 100%, voice 2: +0.1 c OK
+poly chord 24 28 31 holds at Coupling 100%, voice 0: +0.8 c OK
+poly chord 24 28 31 holds at Coupling 100%, voice 1: -0.9 c OK
+poly chord 24 28 31 holds at Coupling 100%, voice 2: +0.7 c OK
+poly chord 24 27 31 holds at Coupling 100%, voice 0: +0.6 c OK
+poly chord 24 27 31 holds at Coupling 100%, voice 1: -0.4 c OK
+poly chord 24 27 31 holds at Coupling 100%, voice 2: +1.6 c OK
+poly chord 24 31 36 holds at Coupling 100%, voice 0: +0.4 c OK
+poly chord 24 31 36 holds at Coupling 100%, voice 1: +0.0 c OK
+poly chord 24 31 36 holds at Coupling 100%, voice 2: -0.4 c OK
+poly chord 24 29 31 holds at Coupling 100%, voice 0: +0.9 c OK
+poly chord 24 29 31 holds at Coupling 100%, voice 1: -0.2 c OK
+poly chord 24 29 31 holds at Coupling 100%, voice 2: +0.8 c OK
+poly chord 24 26 31 holds at Coupling 100%, voice 0: +0.8 c OK
+poly chord 24 26 31 holds at Coupling 100%, voice 1: -0.3 c OK
+poly chord 24 26 31 holds at Coupling 100%, voice 2: +1.3 c OK
+poly chord 24 25 26 holds at Coupling 100%, voice 0: +1.7 c OK
+poly chord 24 25 26 holds at Coupling 100%, voice 1: -1.7 c OK
+poly chord 24 25 26 holds at Coupling 100%, voice 2: -2.6 c OK
+poly chord 24 31 40 holds at Coupling 100%, voice 0: +0.7 c OK
+poly chord 24 31 40 holds at Coupling 100%, voice 1: +0.4 c OK
+poly chord 24 31 40 holds at Coupling 100%, voice 2: +0.9 c OK
+poly chord 24 36 48 holds at Coupling 100%, voice 0: +0.6 c OK
+poly chord 24 36 48 holds at Coupling 100%, voice 1: -1.0 c OK
+poly chord 24 36 48 holds at Coupling 100%, voice 2: +0.2 c OK
+poly chord 30 34 37 holds at Coupling 100%, voice 0: -0.4 c OK
+poly chord 30 34 37 holds at Coupling 100%, voice 1: -0.4 c OK
+poly chord 30 34 37 holds at Coupling 100%, voice 2: +2.0 c OK
+poly chord 30 33 37 holds at Coupling 100%, voice 0: -0.8 c OK
+poly chord 30 33 37 holds at Coupling 100%, voice 1: -0.7 c OK
+poly chord 30 33 37 holds at Coupling 100%, voice 2: +1.9 c OK
+poly chord 30 37 42 holds at Coupling 100%, voice 0: -0.3 c OK
+poly chord 30 37 42 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 30 37 42 holds at Coupling 100%, voice 2: -0.3 c OK
+poly chord 30 35 37 holds at Coupling 100%, voice 0: -0.4 c OK
+poly chord 30 35 37 holds at Coupling 100%, voice 1: -0.7 c OK
+poly chord 30 35 37 holds at Coupling 100%, voice 2: +1.9 c OK
+poly chord 30 32 37 holds at Coupling 100%, voice 0: -0.9 c OK
+poly chord 30 32 37 holds at Coupling 100%, voice 1: -0.2 c OK
+poly chord 30 32 37 holds at Coupling 100%, voice 2: +1.4 c OK
+poly chord 30 31 32 holds at Coupling 100%, voice 0: -2.7 c OK
+poly chord 30 31 32 holds at Coupling 100%, voice 1: +1.6 c OK
+poly chord 30 31 32 holds at Coupling 100%, voice 2: +2.3 c OK
+poly chord 30 37 46 holds at Coupling 100%, voice 0: +0.0 c OK
+poly chord 30 37 46 holds at Coupling 100%, voice 1: +0.4 c OK
+poly chord 30 37 46 holds at Coupling 100%, voice 2: +0.4 c OK
+poly chord 30 42 54 holds at Coupling 100%, voice 0: +0.1 c OK
+poly chord 30 42 54 holds at Coupling 100%, voice 1: -0.1 c OK
+poly chord 30 42 54 holds at Coupling 100%, voice 2: -0.5 c OK
+poly chord 36 40 43 holds at Coupling 100%, voice 0: -1.6 c OK
+poly chord 36 40 43 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 36 40 43 holds at Coupling 100%, voice 2: +1.0 c OK
+poly chord 36 39 43 holds at Coupling 100%, voice 0: -1.7 c OK
+poly chord 36 39 43 holds at Coupling 100%, voice 1: +0.6 c OK
+poly chord 36 39 43 holds at Coupling 100%, voice 2: +0.7 c OK
+poly chord 36 43 48 holds at Coupling 100%, voice 0: -1.3 c OK
+poly chord 36 43 48 holds at Coupling 100%, voice 1: -0.1 c OK
+poly chord 36 43 48 holds at Coupling 100%, voice 2: -0.9 c OK
+poly chord 36 41 43 holds at Coupling 100%, voice 0: -1.5 c OK
+poly chord 36 41 43 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 36 41 43 holds at Coupling 100%, voice 2: +1.0 c OK
+poly chord 36 38 43 holds at Coupling 100%, voice 0: -1.9 c OK
+poly chord 36 38 43 holds at Coupling 100%, voice 1: +0.6 c OK
+poly chord 36 38 43 holds at Coupling 100%, voice 2: +0.4 c OK
+poly chord 36 37 38 holds at Coupling 100%, voice 0: -2.8 c OK
+poly chord 36 37 38 holds at Coupling 100%, voice 1: +2.9 c OK
+poly chord 36 37 38 holds at Coupling 100%, voice 2: +2.7 c OK
+poly chord 36 43 52 holds at Coupling 100%, voice 0: -1.0 c OK
+poly chord 36 43 52 holds at Coupling 100%, voice 1: -0.0 c OK
+poly chord 36 43 52 holds at Coupling 100%, voice 2: -0.0 c OK
+poly chord 36 48 60 holds at Coupling 100%, voice 0: -0.7 c OK
+poly chord 36 48 60 holds at Coupling 100%, voice 1: -0.5 c OK
+poly chord 36 48 60 holds at Coupling 100%, voice 2: +0.2 c OK
+poly chord 42 46 49 holds at Coupling 100%, voice 0: -0.7 c OK
+poly chord 42 46 49 holds at Coupling 100%, voice 1: +0.2 c OK
+poly chord 42 46 49 holds at Coupling 100%, voice 2: +0.1 c OK
+poly chord 42 45 49 holds at Coupling 100%, voice 0: -0.7 c OK
+poly chord 42 45 49 holds at Coupling 100%, voice 1: +0.5 c OK
+poly chord 42 45 49 holds at Coupling 100%, voice 2: -0.0 c OK
+poly chord 42 49 54 holds at Coupling 100%, voice 0: -0.1 c OK
+poly chord 42 49 54 holds at Coupling 100%, voice 1: +0.0 c OK
+poly chord 42 49 54 holds at Coupling 100%, voice 2: -0.2 c OK
+poly chord 42 47 49 holds at Coupling 100%, voice 0: -0.7 c OK
+poly chord 42 47 49 holds at Coupling 100%, voice 1: +0.2 c OK
+poly chord 42 47 49 holds at Coupling 100%, voice 2: +0.1 c OK
+poly chord 42 44 49 holds at Coupling 100%, voice 0: -0.7 c OK
+poly chord 42 44 49 holds at Coupling 100%, voice 1: +0.3 c OK
+poly chord 42 44 49 holds at Coupling 100%, voice 2: -0.1 c OK
+poly chord 42 43 44 holds at Coupling 100%, voice 0: -0.6 c OK
+poly chord 42 43 44 holds at Coupling 100%, voice 1: +2.9 c OK
+poly chord 42 43 44 holds at Coupling 100%, voice 2: +0.5 c OK
+poly chord 42 49 58 holds at Coupling 100%, voice 0: -0.3 c OK
+poly chord 42 49 58 holds at Coupling 100%, voice 1: -0.0 c OK
+poly chord 42 49 58 holds at Coupling 100%, voice 2: -0.0 c OK
+poly chord 42 54 66 holds at Coupling 100%, voice 0: -0.2 c OK
+poly chord 42 54 66 holds at Coupling 100%, voice 1: -0.0 c OK
+poly chord 42 54 66 holds at Coupling 100%, voice 2: +0.0 c OK
+poly chord 48 52 55 holds at Coupling 100%, voice 0: -0.1 c OK
+poly chord 48 52 55 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 48 52 55 holds at Coupling 100%, voice 2: -0.4 c OK
+poly chord 48 51 55 holds at Coupling 100%, voice 0: -0.0 c OK
+poly chord 48 51 55 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 48 51 55 holds at Coupling 100%, voice 2: -0.4 c OK
+poly chord 48 55 60 holds at Coupling 100%, voice 0: -0.4 c OK
+poly chord 48 55 60 holds at Coupling 100%, voice 1: +0.0 c OK
+poly chord 48 55 60 holds at Coupling 100%, voice 2: -0.5 c OK
+poly chord 48 53 55 holds at Coupling 100%, voice 0: -0.1 c OK
+poly chord 48 53 55 holds at Coupling 100%, voice 1: +0.3 c OK
+poly chord 48 53 55 holds at Coupling 100%, voice 2: -0.6 c OK
+poly chord 48 50 55 holds at Coupling 100%, voice 0: +0.1 c OK
+poly chord 48 50 55 holds at Coupling 100%, voice 1: +0.0 c OK
+poly chord 48 50 55 holds at Coupling 100%, voice 2: -0.4 c OK
+poly chord 48 49 50 holds at Coupling 100%, voice 0: +2.3 c OK
+poly chord 48 49 50 holds at Coupling 100%, voice 1: +2.7 c OK
+poly chord 48 49 50 holds at Coupling 100%, voice 2: -2.5 c OK
+poly chord 48 55 64 holds at Coupling 100%, voice 0: +0.0 c OK
+poly chord 48 55 64 holds at Coupling 100%, voice 1: +0.0 c OK
+poly chord 48 55 64 holds at Coupling 100%, voice 2: +0.0 c OK
+poly chord 48 60 72 holds at Coupling 100%, voice 0: +0.1 c OK
+poly chord 48 60 72 holds at Coupling 100%, voice 1: -0.1 c OK
+poly chord 48 60 72 holds at Coupling 100%, voice 2: +0.5 c OK
+poly chord 54 58 61 holds at Coupling 100%, voice 0: +0.4 c OK
+poly chord 54 58 61 holds at Coupling 100%, voice 1: +0.4 c OK
+poly chord 54 58 61 holds at Coupling 100%, voice 2: -0.6 c OK
+poly chord 54 57 61 holds at Coupling 100%, voice 0: +0.5 c OK
+poly chord 54 57 61 holds at Coupling 100%, voice 1: -0.0 c OK
+poly chord 54 57 61 holds at Coupling 100%, voice 2: -0.5 c OK
+poly chord 54 61 66 holds at Coupling 100%, voice 0: +0.2 c OK
+poly chord 54 61 66 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 54 61 66 holds at Coupling 100%, voice 2: -0.0 c OK
+poly chord 54 59 61 holds at Coupling 100%, voice 0: +0.2 c OK
+poly chord 54 59 61 holds at Coupling 100%, voice 1: +0.7 c OK
+poly chord 54 59 61 holds at Coupling 100%, voice 2: -0.7 c OK
+poly chord 54 56 61 holds at Coupling 100%, voice 0: +0.7 c OK
+poly chord 54 56 61 holds at Coupling 100%, voice 1: -0.3 c OK
+poly chord 54 56 61 holds at Coupling 100%, voice 2: -0.4 c OK
+poly chord 54 55 56 holds at Coupling 100%, voice 0: +4.2 c OK
+poly chord 54 55 56 holds at Coupling 100%, voice 1: +2.6 c OK
+poly chord 54 55 56 holds at Coupling 100%, voice 2: -4.4 c OK
+poly chord 54 61 70 holds at Coupling 100%, voice 0: +0.2 c OK
+poly chord 54 61 70 holds at Coupling 100%, voice 1: +0.0 c OK
+poly chord 54 61 70 holds at Coupling 100%, voice 2: -0.0 c OK
+poly chord 54 66 78 holds at Coupling 100%, voice 0: +0.1 c OK
+poly chord 54 66 78 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 54 66 78 holds at Coupling 100%, voice 2: +0.0 c OK
+poly chord 60 64 67 holds at Coupling 100%, voice 0: +0.5 c OK
+poly chord 60 64 67 holds at Coupling 100%, voice 1: +0.5 c OK
+poly chord 60 64 67 holds at Coupling 100%, voice 2: -0.6 c OK
+poly chord 60 63 67 holds at Coupling 100%, voice 0: +0.8 c OK
+poly chord 60 63 67 holds at Coupling 100%, voice 1: -0.1 c OK
+poly chord 60 63 67 holds at Coupling 100%, voice 2: -0.4 c OK
+poly chord 60 67 72 holds at Coupling 100%, voice 0: +0.2 c OK
+poly chord 60 67 72 holds at Coupling 100%, voice 1: +0.2 c OK
+poly chord 60 67 72 holds at Coupling 100%, voice 2: +0.2 c OK
+poly chord 60 65 67 holds at Coupling 100%, voice 0: +0.3 c OK
+poly chord 60 65 67 holds at Coupling 100%, voice 1: +0.9 c OK
+poly chord 60 65 67 holds at Coupling 100%, voice 2: -0.7 c OK
+poly chord 60 62 67 holds at Coupling 100%, voice 0: +1.0 c OK
+poly chord 60 62 67 holds at Coupling 100%, voice 1: -0.3 c OK
+poly chord 60 62 67 holds at Coupling 100%, voice 2: -0.2 c OK
+poly chord 60 61 62 holds at Coupling 100%, voice 0: +3.5 c OK
+poly chord 60 61 62 holds at Coupling 100%, voice 1: +1.6 c OK
+poly chord 60 61 62 holds at Coupling 100%, voice 2: -3.2 c OK
+poly chord 60 67 76 holds at Coupling 100%, voice 0: +0.3 c OK
+poly chord 60 67 76 holds at Coupling 100%, voice 1: +0.1 c OK
+poly chord 60 67 76 holds at Coupling 100%, voice 2: +0.0 c OK
+poly chord 60 72 84 holds at Coupling 100%, voice 0: +0.1 c OK
+poly chord 60 72 84 holds at Coupling 100%, voice 1: +0.2 c OK
+poly chord 60 72 84 holds at Coupling 100%, voice 2: +0.2 c OK
+preset Chord Keys, chord 36 40 43, voice 0: -11.8 c OK
+preset Chord Keys, chord 36 40 43, voice 1: -1.5 c OK
+preset Chord Keys, chord 36 40 43, voice 2: +1.3 c OK
+preset Chord Keys, chord 36 39 43, voice 0: -12.1 c OK
+preset Chord Keys, chord 36 39 43, voice 1: -8.0 c OK
+preset Chord Keys, chord 36 39 43, voice 2: +1.2 c OK
+preset Chord Keys, chord 36 43 48, voice 0: -7.9 c OK
+preset Chord Keys, chord 36 43 48, voice 1: +0.9 c OK
+preset Chord Keys, chord 36 43 48, voice 2: +5.6 c OK
+preset Chord Keys, chord 36 41 43, voice 0: -11.3 c OK
+preset Chord Keys, chord 36 41 43, voice 1: +3.6 c OK
+preset Chord Keys, chord 36 41 43, voice 2: +1.3 c OK
+preset Chord Keys, chord 36 38 43, voice 0: -11.3 c OK
+preset Chord Keys, chord 36 38 43, voice 1: +0.7 c OK
+preset Chord Keys, chord 36 38 43, voice 2: +1.1 c OK
+preset Chord Keys, chord 42 46 49, voice 0: +2.2 c OK
+preset Chord Keys, chord 42 46 49, voice 1: -6.6 c OK
+preset Chord Keys, chord 42 46 49, voice 2: -6.4 c OK
+preset Chord Keys, chord 42 45 49, voice 0: +3.1 c OK
+preset Chord Keys, chord 42 45 49, voice 1: -1.8 c OK
+preset Chord Keys, chord 42 45 49, voice 2: -6.5 c OK
+preset Chord Keys, chord 42 49 54, voice 0: +2.6 c OK
+preset Chord Keys, chord 42 49 54, voice 1: -6.4 c OK
+preset Chord Keys, chord 42 49 54, voice 2: +0.8 c OK
+preset Chord Keys, chord 42 47 49, voice 0: +2.5 c OK
+preset Chord Keys, chord 42 47 49, voice 1: +0.2 c OK
+preset Chord Keys, chord 42 47 49, voice 2: -6.5 c OK
+preset Chord Keys, chord 42 44 49, voice 0: +3.1 c OK
+preset Chord Keys, chord 42 44 49, voice 1: -1.8 c OK
+preset Chord Keys, chord 42 44 49, voice 2: -6.5 c OK
+preset Chord Keys, chord 48 52 55, voice 0: +5.6 c OK
+preset Chord Keys, chord 48 52 55, voice 1: +0.9 c OK
+preset Chord Keys, chord 48 52 55, voice 2: +1.1 c OK
+preset Chord Keys, chord 48 51 55, voice 0: +5.7 c OK
+preset Chord Keys, chord 48 51 55, voice 1: +3.8 c OK
+preset Chord Keys, chord 48 51 55, voice 2: +1.3 c OK
+preset Chord Keys, chord 48 55 60, voice 0: +6.7 c OK
+preset Chord Keys, chord 48 55 60, voice 1: +1.3 c OK
+preset Chord Keys, chord 48 55 60, voice 2: +0.2 c OK
+preset Chord Keys, chord 48 53 55, voice 0: +6.2 c OK
+preset Chord Keys, chord 48 53 55, voice 1: +5.8 c OK
+preset Chord Keys, chord 48 53 55, voice 2: +1.2 c OK
+preset Chord Keys, chord 48 50 55, voice 0: +5.2 c OK
+preset Chord Keys, chord 48 50 55, voice 1: +2.7 c OK
+preset Chord Keys, chord 48 50 55, voice 2: +1.4 c OK
+preset Chord Keys, chord 54 58 61, voice 0: +2.5 c OK
+preset Chord Keys, chord 54 58 61, voice 1: +0.0 c OK
+preset Chord Keys, chord 54 58 61, voice 2: -0.9 c OK
+preset Chord Keys, chord 54 57 61, voice 0: +2.3 c OK
+preset Chord Keys, chord 54 57 61, voice 1: +1.5 c OK
+preset Chord Keys, chord 54 57 61, voice 2: -1.1 c OK
+preset Chord Keys, chord 54 61 66, voice 0: +2.1 c OK
+preset Chord Keys, chord 54 61 66, voice 1: -0.7 c OK
+preset Chord Keys, chord 54 61 66, voice 2: -2.0 c OK
+preset Chord Keys, chord 54 59 61, voice 0: +2.2 c OK
+preset Chord Keys, chord 54 59 61, voice 1: -0.2 c OK
+preset Chord Keys, chord 54 59 61, voice 2: -1.1 c OK
+preset Chord Keys, chord 54 56 61, voice 0: +2.6 c OK
+preset Chord Keys, chord 54 56 61, voice 1: +0.9 c OK
+preset Chord Keys, chord 54 56 61, voice 2: -1.0 c OK
+preset Chord Keys, chord 60 64 67, voice 0: +0.4 c OK
+preset Chord Keys, chord 60 64 67, voice 1: -0.2 c OK
+preset Chord Keys, chord 60 64 67, voice 2: +1.3 c OK
+preset Chord Keys, chord 60 63 67, voice 0: +0.7 c OK
+preset Chord Keys, chord 60 63 67, voice 1: +0.5 c OK
+preset Chord Keys, chord 60 63 67, voice 2: +1.3 c OK
+preset Chord Keys, chord 60 67 72, voice 0: +0.3 c OK
+preset Chord Keys, chord 60 67 72, voice 1: +1.5 c OK
+preset Chord Keys, chord 60 67 72, voice 2: -0.7 c OK
+preset Chord Keys, chord 60 65 67, voice 0: +0.7 c OK
+preset Chord Keys, chord 60 65 67, voice 1: -2.7 c OK
+preset Chord Keys, chord 60 65 67, voice 2: +1.3 c OK
+preset Chord Keys, chord 60 62 67, voice 0: +0.5 c OK
+preset Chord Keys, chord 60 62 67, voice 1: +0.9 c OK
+preset Chord Keys, chord 60 62 67, voice 2: +1.4 c OK
+poly restart starts on the new notes: 52.00 57.00 OK
+poly restart with a new chord, voice 0: +0.4 c OK
+poly restart with a new chord, voice 1: +0.2 c OK
+poly restart with a new chord, voice 2: +0.2 c OK
+poly restart builds as fast, voice 1: 0.35 s, fresh 0.35 s OK
+poly restart builds as fast, voice 2: 0.40 s, fresh 0.35 s OK
+poly restart keeps the filters: voice 1 slope rms 0.03231, fresh 0.03231 OK
+poly knob intervals: +7.000 +12.000 OK
+poly interval +24 at Frequency 1.0: voice 1 note 84.00 finite=1 in range=1 OK
+poly interval -24 at Frequency 0.0: voice 1 note 16.00 finite=1 in range=1 OK
+poly never assigned voice stays closed: -84.1 dB below voice 0 OK
+poly gate per voice: closed voice -83.9 dB, open voice -0.0 dB OK
+poly chord audible at once: rms 0.9846 0.9809 0.9798, voice 1 early=1, no ramp (error 0.00000) OK
+poly stability at maximum, chord 16 50 84: finite=1 peak=0.655 recoveries=0 OK
+poly stability at maximum, chord 48 48 48: finite=1 peak=0.694 recoveries=0 OK
+poly stability at maximum, LOCK from the knobs: finite=1 peak=0.554 recoveries=0 OK
+poly stability at maximum, knobs, Body 0: finite=1 peak=0.714 recoveries=0 OK
+poly stability at maximum, knobs, Body 1: finite=1 peak=0.683 recoveries=0 OK
+poly closed voice at Coupling 100%, reverb 0.0, voice 0 open, interval 0: -83.9 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voice 0 open, interval 7: -84.0 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voice 0 open, interval 6: -83.9 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voices 0 and 1 open, interval 0: -83.9 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voices 0 and 1 open, interval 7: -84.0 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voices 0 and 1 open, interval 6: -83.9 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voices 1 and 2 open, interval 0: -83.9 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voices 1 and 2 open, interval 7: -84.0 dB OK
+poly closed voice at Coupling 100%, reverb 0.0, voices 1 and 2 open, interval 6: -83.9 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voice 0 open, interval 0: -87.8 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voice 0 open, interval 7: -88.0 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voice 0 open, interval 6: -87.8 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voices 0 and 1 open, interval 0: -87.8 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voices 0 and 1 open, interval 7: -88.1 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voices 0 and 1 open, interval 6: -87.8 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voices 1 and 2 open, interval 0: -87.8 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voices 1 and 2 open, interval 7: -87.8 dB OK
+poly closed voice at Coupling 100%, reverb 0.5, voices 1 and 2 open, interval 6: -87.8 dB OK
+poly voice restarting closed at Coupling 100%: -84.1 dB OK
+poly LOCK from the knobs, Frequency 0.30 Body 0.3: worst voice 0.8 c OK
+poly LOCK from the knobs, Frequency 0.30 Body 0.6: worst voice 0.8 c OK
+poly LOCK from the knobs, Frequency 0.30 Body 0.9: worst voice 0.5 c OK
+poly LOCK from the knobs, Frequency 0.43 Body 0.3: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.43 Body 0.6: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.43 Body 0.9: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.55 Body 0.3: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.55 Body 0.6: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.55 Body 0.9: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.70 Body 0.3: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.70 Body 0.6: worst voice 0.2 c OK
+poly LOCK from the knobs, Frequency 0.70 Body 0.9: worst voice 0.2 c OK
+poly free voices on one pitch: 6 of 42 settings OK
+poly LOCK at Highpass 0.8: rms 0.00003, free 0.120 OK
+poly LOCK off at Coupling 0%, Frequency 0.30 Body 0.3: largest kink 0.00109, before 0.00092 OK
+poly LOCK off at Coupling 0%, Frequency 0.30 Body 0.7: largest kink 0.00108, before 0.00087 OK
+poly LOCK off at Coupling 0%, Frequency 0.43 Body 0.3: largest kink 0.00266, before 0.00351 OK
+poly LOCK off at Coupling 0%, Frequency 0.43 Body 0.7: largest kink 0.00260, before 0.00348 OK
+poly LOCK off at Coupling 100%, Frequency 0.30 Body 0.3: largest kink 0.00081, before 0.00095 OK
+poly LOCK off at Coupling 100%, Frequency 0.30 Body 0.7: largest kink 0.00170, before 0.00090 OK
+poly LOCK off at Coupling 100%, Frequency 0.43 Body 0.3: largest kink 0.00288, before 0.00365 OK
+poly LOCK off at Coupling 100%, Frequency 0.43 Body 0.7: largest kink 0.00512, before 0.00343 OK
+poly Coupling 100% changes the spectrum, chord 48 55 64: 0.167 OK
+poly Coupling 100% changes the spectrum, chord 60 64 67: 0.445 OK
+poly Coupling 100% changes the spectrum, knobs +7 +12: 0.547 OK
+poly Coupling 100% changes the spectrum, LOCK, knobs +7 +12: 0.190 OK
+poly Body 0.7, Coupling 80%: 0 of 84 voices moved off their notes, worst 0.6 c OK
+poly Body 0.7, Coupling 100%: 0 of 84 voices moved off their notes, worst 0.6 c OK
+poly Body 0.8, Coupling 80%: 0 of 84 voices moved off their notes, worst 0.5 c OK
+poly Body 0.8, Coupling 100%: 0 of 84 voices moved off their notes, worst 0.5 c OK
+poly Body 0.9, Coupling 80%: 0 of 83 voices moved off their notes, worst 0.5 c OK
+poly Body 0.9, Coupling 100%: 0 of 83 voices moved off their notes, worst 0.5 c OK
+poly Body 1.0, Coupling 80%: 0 of 84 voices moved off their notes, worst 0.5 c OK
+poly Body 1.0, Coupling 100%: 0 of 84 voices moved off their notes, worst 0.5 c OK
+poly Coupling 100% changes the spectrum at Body 0.5: 0.286 OK
+poly ramp on at Coupling 100%, L: largest jump 0.01056, before 0.01099, finite=1 OK
+poly ramp on at Coupling 100%, R: largest jump 0.01063, before 0.01099, finite=1 OK
+poly ramp off, reversing at Coupling 100%, L: largest jump 0.01459, before 0.02057, finite=1 OK
+poly ramp off, reversing at Coupling 100%, R: largest jump 0.01058, before 0.02072, finite=1 OK
+poly Recover restores all voices: rms 0.9852 0.9809 0.9798 OK
+CPU, polyphony off: 0.1717 s per second of audio
+CPU, polyphony on: 0.4314 s per second of audio
+pongMonoSum: L + R with PONG on is 4.72 dB from PONG off OK
+pongSameColorThroughCore: spectral difference 0.065 OK
+pongBackToFirmware: OK
+pongToneSweepWhileRunningAway: peak 0.286, recoveries 0 OK
+pongToneSurvivesRecover: peak at 271 Hz after Init OK
+pongSwitchDuringRunaway at 4.00 s: largest jump 0.10246, limit 0.21063 OK
+pongSwitchDuringRunaway at 4.00 s: largest jump 0.11989, limit 0.18387 OK
+pongSwitchDuringRunaway at 6.00 s: largest jump 0.09754, limit 0.18993 OK
+pongSwitchDuringRunaway at 6.00 s: largest jump 0.09551, limit 0.13366 OK
+pongOnFromFirstBlock: OK
+pongSwitchClickFree at 2.00 s: largest jump 0.33666, limit 0.50092 OK
+pongSwitchClickFree at 2.00 s: largest jump 0.33835, limit 0.42447 OK
+pongSwitchClickFree at 4.00 s: largest jump 0.33256, limit 0.40118 OK
+pongSwitchClickFree at 4.00 s: largest jump 0.31472, limit 0.38138 OK
+pongSwitchClickFree at 2.00 s: largest jump 0.05727, limit 0.07253 OK
+pongSwitchClickFree at 2.00 s: largest jump 0.05562, limit 0.07392 OK
+pongSwitchClickFree at 4.00 s: largest jump 0.03375, limit 0.06055 OK
+pongSwitchClickFree at 4.00 s: largest jump 0.03673, limit 0.06286 OK
+pongSwitchReverses: mix 0.000 20 ms after switching back OK
+pongSwitchReverses at 2.00 s: largest jump 0.05727, limit 0.07253 OK
+pongSwitchReverses at 2.00 s: largest jump 0.05631, limit 0.07392 OK
+pongBoundsAtMaximum: peak 0.477, recoveries 0, mean 0.00006, 0.00006 OK
+pongBouncesThroughCore, repeat 1: L over R 73.8 dB OK
+pongBouncesThroughCore, repeat 2: L over R -68.7 dB OK
+pongWidthAndLevelThroughCore: Width 0 L over R -0.00 dB and -6.01 dB from full width, Level -12 dB gives -11.99 dB OK
+pongRecoversFromNan: tail RMS 0.10852 before, 0.000008 after, mix 1.00 OK
+pongSurvivesTimeSweep: peak 0.299, recoveries 0 OK
+everyPresetWithPongOn: OK
+pongIndependentOfBlockSize: OK
+emberPongSelfSustains: Ember Pong, RMS 0.0245 with nothing feeding it OK
+stereoBounces: OK
+stereoTiming, T 12000 samples: OK
+stereoTiming, T 17250 samples: OK
+stereoSameColor: largest difference 0.000 dB OK
+stereoToneMovesCenter, Tone 300 Hz: peak at 271 Hz OK
+stereoToneMovesCenter, Tone 3000 Hz: peak at 2936 Hz OK
+stereoRunaway, Drive 1, Feedback 0.6: RMS 0.48065 after 20 s OK
+stereoRunaway, Drive 1, Feedback 0.4: RMS 0.00000 after 20 s OK
+stereoRunaway, Drive 0, Feedback 0.9: RMS 0.00000 after 20 s OK
+stereoFeedbackZeroIsOneRepeat: OK
+stereoWidthZeroIsMono: repeat 0.046821, half the side 0.046821 OK
+stereoWidthAndLevelLeaveTheLoop: largest difference 1.5e-08 OK
+stereoAliasing at 3100 Hz, Drive 1, Tone 3200 Hz: -54.0 dB at Feedback 0, -31.4 dB at Feedback 0.9 OK
+stereoRampSettles: 1.0000000 after switching on, 0.0000000 after switching off OK
+echoCenterReturnsBitForBit: OK
+echoShapedAtUnityIsProcess: OK
+stereoEchoMatchesTwoLines: OK
+ALL OK

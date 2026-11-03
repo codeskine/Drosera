@@ -313,6 +313,24 @@ static bool recoversFromNan() {
     return pass;
 }
 
+// The echo's own delay line starts at 5 s (Engine::Init). The first repeat must still come at the knob's time.
+static bool echoStartsAtKnobTime() {
+    //               freq   gain   body   lpf    hpf    rvMix  rvDec  eSend  eTime  eFb    vol
+    const float p[] = {0.43f, 0.00f, 0.30f, 0.90f, 0.20f, 0.00f, 0.50f, 1.00f, 0.20f, 0.00f, 0.70f};
+    const float expect = DroseraCore::EchoTimeSeconds(p[DroseraCore::EchoTime], false);
+    const size_t N = 48000 * 2;
+    std::vector<float> in(N, 0.0f), L(N), R(N);
+    in[0] = 0.5f;
+    DroseraCore core; makeCore(core, p);
+    for (size_t pos = 0; pos < N; pos += 64) core.Render(&in[pos], &L[pos], &R[pos], 64);
+    size_t at = 4800;  // past the string's own ring
+    for (size_t i = 4800; i < N; ++i) if (std::fabs(L[i]) > std::fabs(L[at])) at = i;
+    const double seconds = (double) at / 48000.0;
+    const bool pass = std::fabs(seconds - expect) < 0.01;
+    printf("echo first repeat at %.3f s, knob %.3f s: %s\n", seconds, expect, pass ? "OK" : "FAIL");
+    return pass;
+}
+
 static bool filtersClearOnInit() {
     infrasonic::LPF12 lpf;
     lpf.Init(48000.0f);
@@ -1919,6 +1937,7 @@ int main(int argc, char** argv) {
     ok &= presetTests(outDir);
     ok &= noAllocationOnRender();
     ok &= recoversFromNan();
+    ok &= echoStartsAtKnobTime();
     ok &= filtersClearOnInit();
     ok &= publishedValues();
     ok &= engineVoiceTests();

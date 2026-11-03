@@ -847,6 +847,29 @@ static void stateTests() {
     check(std::abs(param("lpf")->getValue() - 0.37f) < 0.001f, "old state: Lowpass loads");
 }
 
+// Bypassed, the input must come out delayed by the declared latency, and untouched when there is none.
+static void bypassTests() {
+    for (double sr : {44100.0, 48000.0}) {
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->enableAllBuses();
+        p->prepareToPlay(sr, 512);
+        const int declared = p->getLatencySamples();
+        juce::AudioBuffer<float> buffer(2, 512);
+        juce::MidiBuffer none;
+        long peakAt = -1; float peak = 0.0f;
+        for (int b = 0; b < 4; ++b) {
+            buffer.clear();
+            if (b == 1) buffer.setSample(0, 100, 0.9f);
+            p->processBlockBypassed(buffer, none);
+            for (int i = 0; i < 512; ++i)
+                if (std::abs(buffer.getSample(0, i)) > peak) { peak = std::abs(buffer.getSample(0, i)); peakAt = b * 512 + i; }
+        }
+        const long measured = peakAt - (512 + 100);
+        std::printf("  bypass at %.0f Hz: declared %d, measured %ld, peak %.2f\n", sr, declared, measured, peak);
+        check(peak > 0.89f && measured == declared && (sr != 48000.0 || declared == 0), sr == 44100.0 ? "bypassKeepsLatency" : "bypassPassesThrough");
+    }
+}
+
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     tapTests();
@@ -855,6 +878,7 @@ int main() {
     plantTests();
     editorTests();
     stateTests();
+    bypassTests();
     std::printf(failures == 0 ? "ALL OK\n" : "SOME FAILED\n");
     return failures == 0 ? 0 : 1;
 }

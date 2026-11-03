@@ -1,0 +1,11 @@
+--- /private/tmp/claude-501/-Users-sveloccia-Workspace-codeskine-Drosera--claude-worktrees-audio-plugin-vst3-au-review-9b137d/cf63893b-a926-47b7-aaf4-baf9028bbf08/scratchpad/sandbox/experiments/whitenoise.h.orig	2026-11-03 13:45:07
++++ /private/tmp/claude-501/-Users-sveloccia-Workspace-codeskine-Drosera--claude-worktrees-audio-plugin-vst3-au-review-9b137d/cf63893b-a926-47b7-aaf4-baf9028bbf08/scratchpad/sandbox/src/third_party/DaisySP/Source/Noise/whitenoise.h	2026-11-03 13:45:07
+@@ -31,7 +31,7 @@
+     */
+     inline float Process()
+     {
+-        randseed_ *= 16807;
++        randseed_ = (int32_t) ((uint32_t) randseed_ * 16807u);  // REVIEW EXPERIMENT: same bits, no signed overflow
+         return (randseed_ * coeff_) * amp_;
+     }
+ 

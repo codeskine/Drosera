@@ -1,0 +1,13 @@
+A) impulse at 0 s: first repeat after 0.954 s (knob says 0.248 s), level 0.007
+A) impulse at 2 s: first repeat after 0.296 s (knob says 0.248 s), level 0.014
+A) impulse at 6 s: first repeat after 0.248 s (knob says 0.248 s), level 0.015
+C) 48k->44.1k   1000 Hz: amplitude 1.0001 (0.00 dB), output rms 0.7071
+C) 48k->44.1k  10000 Hz: amplitude 1.0000 (-0.00 dB), output rms 0.7071
+C) 48k->44.1k  18000 Hz: amplitude 1.0000 (-0.00 dB), output rms 0.7071
+C) 48k->44.1k  21000 Hz: amplitude 0.1505 (-16.45 dB), output rms 0.1064
+C) 48k->44.1k  23000 Hz: amplitude 0.0000 (-94.34 dB), output rms 0.0000
+D) knob note 72 with +24 st: voice 1 publishes note 84.0 (voice 0 72.0), voice 2 (+12) 84.0
+B) everything max, reverb 1.0   3 min: peak 0.767, samples > 1.0: 0, rms(2nd half) 0.407, recoveries 0
+B) max + pong drive max         3 min: peak 0.767, samples > 1.0: 0, rms(2nd half) 0.407, recoveries 0
+B) max + poly + coupling max    3 min: peak 0.771, samples > 1.0: 0, rms(2nd half) 0.271, recoveries 0
+B) low + poly + coupling max    3 min: peak 0.824, samples > 1.0: 0, rms(2nd half) 0.281, recoveries 0

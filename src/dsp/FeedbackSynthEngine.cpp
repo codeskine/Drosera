@@ -64,8 +64,8 @@ void Engine::SetFeedbackHPFCutoff(const float cutoff_hz) {
   for (auto &voice : voices_) voice.SetFeedbackHPFCutoff(cutoff_hz);
 }
 
-void Engine::SetEchoDelayTime(const float echo_time) {
-  stereo_echo_->SetDelayTime(echo_time);
+void Engine::SetEchoDelayTime(const float echo_time, const bool immediately) {
+  stereo_echo_->SetDelayTime(echo_time, immediately);
 }
 
 void Engine::SetEchoDelayFeedback(const float echo_fb) {

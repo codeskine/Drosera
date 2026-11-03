@@ -1,0 +1,22 @@
+patched
+build exit 0
+=== host_probe (long run + latency drift)
+60 s at 44.1k, mixed block sizes: finite=1 quiet blocks=0, latency after: declared 327 measured 329 OK
+HOST PROBE ALL OK
+=== check_reference with the whitenoise patch
+p01_mid_drone.wav: OK
+p02_low_dark.wav: OK
+p03_high_bright.wav: OK
+p04_reverb_wash.wav: OK
+p05_echo_swell.wav: OK
+p06_echo_halved.wav: OK
+p07_long_body.wav: OK
+p08_max_feedback.wav: OK
+p09_dark_filtered.wav: OK
+p10_everything_mid.wav: OK
+exit 0
+=== render_test with the patch
+exit 0
+ALL OK
+
+[exited with code 0]
