@@ -7,8 +7,10 @@ namespace drosera {
 
 class DroseraLookAndFeel final : public juce::LookAndFeel_V4 {
 public:
-    /// A slider with this property set is drawn as a main control, larger and in the dew colour.
+    /// A slider with this property set is drawn as a main control, larger and with a scale.
     static constexpr const char* kMainControl = "mainControl";
+    /// "loop" or "echo": the colour of the knob's arc.
+    static constexpr const char* kGroup = "group";
 
     DroseraLookAndFeel();
 

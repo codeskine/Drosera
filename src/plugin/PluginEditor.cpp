@@ -9,8 +9,8 @@ constexpr int kWidth = 760, kHeight = 500, kTabsTop = 306, kPlantHeight = 314;
 DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueTreeState& apvts, EditorBridge& bridge)
     : AudioProcessorEditor(p), apvts_(apvts), bridge_(bridge),
       feedbackAttachment_(*apvts.getParameter("fbgain"), plant_.feedback(), nullptr),
-      frequency_(*apvts.getParameter("freq"), "Frequency", true),
-      body_(*apvts.getParameter("body"), "Body", true),
+      frequency_(*apvts.getParameter("freq"), "Frequency", drosera::KnobSize::large, drosera::KnobGroup::loop),
+      body_(*apvts.getParameter("body"), "Body", drosera::KnobSize::large, drosera::KnobGroup::loop),
       tabs_(apvts) {
     setLookAndFeel(&lookAndFeel_);
     addAndMakeVisible(plant_);
@@ -132,7 +132,9 @@ juce::String DroseraEditor::tag(const juce::String& paramId) const {
 }
 
 void DroseraEditor::paint(juce::Graphics& g) {
-    g.fillAll(drosera::theme::background());
+    g.setGradientFill(juce::ColourGradient(drosera::theme::backgroundCentre(), getLocalBounds().getCentre().toFloat(),
+                                           drosera::theme::backgroundEdge(), {0.0f, 0.0f}, true));
+    g.fillAll();
     g.setColour(drosera::theme::text());
     g.setFont(drosera::theme::titleFont());
     g.drawText("DROSERA", 26, 18, 260, 28, juce::Justification::centredLeft);
@@ -140,8 +142,8 @@ void DroseraEditor::paint(juce::Graphics& g) {
 
 void DroseraEditor::resized() {
     plant_.setBounds(0, 0, kWidth, kPlantHeight);
-    frequency_.setBounds(135 - 60, 132, 120, 138);
-    body_.setBounds(625 - 60, 132, 120, 138);
+    frequency_.setBounds(135 - 80, 100, 160, 180);
+    body_.setBounds(625 - 80, 100, 160, 180);
     tabs_.setBounds(0, kTabsTop, kWidth, kHeight - kTabsTop);
 
     previous_.setBounds(kWidth - 26 - 220, 20, 24, 24);

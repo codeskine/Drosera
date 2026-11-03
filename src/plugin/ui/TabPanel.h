@@ -1,32 +1,13 @@
 #pragma once
-// A knob with its name and readout, and the tab strip with the visible tab's controls.
+// The tab strip with the visible tab's controls.
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
 #include <map>
+#include "LabeledKnob.h"
 
 namespace drosera {
-
-class LabeledKnob final : public juce::Component {
-public:
-    LabeledKnob(juce::RangedAudioParameter&, const juce::String& caption, bool mainControl);
-
-    juce::Slider& slider() { return slider_; }
-    juce::RangedAudioParameter& parameter() { return parameter_; }
-    /// Dims the knob while what sounds is not its position. It stays usable: moving it can take control back.
-    void show(const juce::String& value, const juce::String& tag);
-    juce::String readout() const { return value_.getText(); }
-    juce::String tag() const { return tag_.getText(); }
-
-    void resized() override;
-
-private:
-    juce::RangedAudioParameter& parameter_;
-    juce::Slider slider_;
-    juce::Label caption_, value_, tag_;
-    juce::SliderParameterAttachment attachment_;
-};
 
 /// Tabs are named by an ID that projects save, not by their place in the strip: PONG has ID 6 though it follows ECHO,
 /// so a project saved on OUTPUT, ID 3, still opens it.

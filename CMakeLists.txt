@@ -51,10 +51,17 @@ if(DROSERA_BUILD_PLUGIN)
         GIT_SHALLOW ON)
     FetchContent_MakeAvailable(JUCE)
 
+    # The interface's fonts, both under the SIL Open Font License (assets/fonts/OFL-*.txt)
+    juce_add_binary_data(DroseraFonts SOURCES
+        assets/fonts/CormorantGaramond-Medium.otf
+        assets/fonts/Inter-Regular.ttf
+        assets/fonts/Inter-Medium.ttf)
+
     set(DROSERA_PLUGIN_SOURCES
         src/plugin/PluginProcessor.cpp
         src/plugin/PluginEditor.cpp
         src/plugin/ui/DroseraLookAndFeel.cpp
+        src/plugin/ui/LabeledKnob.cpp
         src/plugin/ui/PlantView.cpp
         src/plugin/ui/TabPanel.cpp)
 
@@ -74,6 +81,7 @@ if(DROSERA_BUILD_PLUGIN)
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
     target_link_libraries(Drosera PRIVATE
         DroseraDSP
+        DroseraFonts
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_recommended_config_flags
@@ -105,7 +113,7 @@ if(DROSERA_BUILD_PLUGIN)
         tests/editor_snapshot.cpp ${DROSERA_PLUGIN_SOURCES})
     target_compile_definitions(editor_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_include_directories(editor_snapshot PRIVATE src/plugin)
-    target_link_libraries(editor_snapshot PRIVATE DroseraDSP
+    target_link_libraries(editor_snapshot PRIVATE DroseraDSP DroseraFonts
         juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 
     # The interface's logic and the editor's behaviour (see tests/ui_test.cpp)
@@ -114,6 +122,6 @@ if(DROSERA_BUILD_PLUGIN)
     target_include_directories(ui_test PRIVATE tests src/plugin)
     target_compile_definitions(ui_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
         DROSERA_STATE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/state-baseline.bin")
-    target_link_libraries(ui_test PRIVATE DroseraDSP
+    target_link_libraries(ui_test PRIVATE DroseraDSP DroseraFonts
         juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 endif()

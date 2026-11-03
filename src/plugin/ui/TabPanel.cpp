@@ -11,15 +11,6 @@ constexpr int kTabStep = 101, kTabWidth = 91, kMargin = 26;
 constexpr int kCellTop = 48, kCellWidth = 92, kCellHeight = 92, kCellStep = 112;
 constexpr int kToggleWidth = 78, kToggleHeight = 22;
 
-juce::Label& style(juce::Label& label, const juce::Font& font, juce::Colour colour) {
-    label.setFont(font);
-    label.setColour(juce::Label::textColourId, colour);
-    label.setJustificationType(juce::Justification::centred);
-    label.setInterceptsMouseClicks(false, false);
-    label.setBorderSize({});
-    return label;
-}
-
 const std::map<juce::String, juce::String>& captions() {
     static const std::map<juce::String, juce::String> names {
         {"lpf", "Lowpass"}, {"hpf", "Highpass"}, {"revmix", "Mix"}, {"revdecay", "Decay"}, {"echosend", "Send"},
@@ -31,35 +22,6 @@ const std::map<juce::String, juce::String>& captions() {
     return names;
 }
 } // namespace
-
-LabeledKnob::LabeledKnob(juce::RangedAudioParameter& parameter, const juce::String& caption, bool mainControl)
-    : parameter_(parameter), attachment_(parameter, slider_, nullptr) {
-    slider_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider_.setRotaryParameters(juce::degreesToRadians(225.0f), juce::degreesToRadians(495.0f), true);
-    slider_.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    slider_.setTitle(caption);
-    if (mainControl) slider_.getProperties().set(DroseraLookAndFeel::kMainControl, true);
-    addAndMakeVisible(slider_);
-
-    caption_.setText(caption, juce::dontSendNotification);
-    addAndMakeVisible(style(caption_, theme::labelFont(), theme::text()));
-    addAndMakeVisible(style(value_, theme::valueFont(), theme::text().withAlpha(0.8f)));
-    addAndMakeVisible(style(tag_, theme::tagFont(), theme::dew()));
-}
-
-void LabeledKnob::show(const juce::String& value, const juce::String& tag) {
-    value_.setText(value, juce::dontSendNotification);
-    tag_.setText(tag, juce::dontSendNotification);
-    slider_.setAlpha(tag.isEmpty() ? 1.0f : 0.45f);
-}
-
-void LabeledKnob::resized() {
-    auto r = getLocalBounds();
-    tag_.setBounds(r.removeFromBottom(13));
-    value_.setBounds(r.removeFromBottom(14));
-    caption_.setBounds(r.removeFromBottom(16));
-    slider_.setBounds(r.withSizeKeepingCentre(juce::jmin(r.getWidth(), r.getHeight()), juce::jmin(r.getWidth(), r.getHeight())));
-}
 
 TabPanel::TabPanel(juce::AudioProcessorValueTreeState& apvts)
     : pages_ {{0, "FILTERS", {"lpf", "hpf"}, {}},
@@ -79,7 +41,8 @@ TabPanel::TabPanel(juce::AudioProcessorValueTreeState& apvts)
         for (const auto& id : page.knobs) {
             auto* parameter = apvts.getParameter(id);
             jassert(parameter != nullptr);
-            knobs_[id] = std::make_unique<LabeledKnob>(*parameter, captions().at(id), false);
+            const bool loop = id == "lpf" || id == "hpf" || id == "revmix" || id == "revdecay" || id == "coupling" || id.startsWith("interval");
+            knobs_[id] = std::make_unique<LabeledKnob>(*parameter, captions().at(id), KnobSize::small, loop ? KnobGroup::loop : KnobGroup::echo);
             addChildComponent(*knobs_[id]);
         }
         for (const auto& id : page.toggles) {
@@ -116,7 +79,7 @@ void TabPanel::setTab(int id) {
 void TabPanel::paint(juce::Graphics& g) {
     g.setColour(theme::track());
     g.fillRect(kMargin, kLineY, getWidth() - 2 * kMargin, 1);
-    g.setColour(theme::dew());
+    g.setColour(theme::echo());
     g.fillRect(kMargin + place(tab_) * kTabStep, kLineY - 2, kTabWidth, 3);
 }
 

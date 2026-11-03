@@ -16,6 +16,7 @@
 #include "ui/EchoPulse.h"
 #include "ui/PlantView.h"
 #include "ui/Readouts.h"
+#include "ui/Theme.h"
 #include "ui/ResponseArcs.h"
 #include "ui/SpectrumBands.h"
 
@@ -208,6 +209,12 @@ static void readoutTests() {
     for (int i = 0; i < kNumBands; ++i)
         if (std::abs(std::log2(bandCentreHz(i) / 440.0f)) < std::abs(std::log2(bandCentreHz(nearest440) / 440.0f))) nearest440 = i;
     check(bandOfNote(69.0f) == nearest440 && bandOfNote(16.0f) == -1, "bandOfNote");
+}
+
+static void themeTests() {
+    check(theme::fontsEmbedded(), "fontsAreEmbedded");
+    check(theme::titleFont().getTypefaceName() == "Cormorant Garamond", "titleUsesCormorant");
+    check(theme::labelFont().getTypefaceName() == "Inter", "labelsUseInter");
 }
 
 static void arcTests() {
@@ -948,6 +955,7 @@ static void stateJumpTests() {
 
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
+    themeTests();
     tapTests();
     bandTests();
     readoutTests();

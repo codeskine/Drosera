@@ -73,8 +73,8 @@ void PlantView::resized() {
 
 void PlantView::paint(juce::Graphics& g) {
     const float glow = kInner + kReach + 22.0f;
-    g.setGradientFill(juce::ColourGradient(theme::heart().withAlpha(0.75f), kCentre,
-                                           theme::background().withAlpha(0.0f), kCentre.translated(glow, 0.0f), true));
+    g.setGradientFill(juce::ColourGradient(theme::loopDeep().withAlpha(0.75f), kCentre,
+                                           theme::backgroundEdge().withAlpha(0.0f), kCentre.translated(glow, 0.0f), true));
     g.fillEllipse(juce::Rectangle<float>(2.0f * glow, 2.0f * glow).withCentre(kCentre));
 
     for (int i = 0; i < kNumBands; ++i) {
@@ -83,10 +83,10 @@ void PlantView::paint(juce::Graphics& g) {
         const float angle = juce::MathConstants<float>::twoPi * (float) i / (float) kNumBands;  // lowest band at the top
         const auto root = kCentre.getPointOnCircumference(kInner + 3.0f, angle);
         const auto tip = kCentre.getPointOnCircumference(kInner + 8.0f + kReach * amount, angle);
-        g.setColour(theme::stalk());
+        g.setColour(theme::loopDeep());
         g.drawLine({root, tip}, 1.4f);
         const float radius = 1.8f + 3.4f * amount;
-        g.setColour(theme::dew().withAlpha(0.35f + 0.65f * amount));
+        g.setColour(theme::echo().withAlpha(0.35f + 0.65f * amount));
         g.fillEllipse(juce::Rectangle<float>(2.0f * radius, 2.0f * radius).withCentre(tip));
     }
 
@@ -99,7 +99,7 @@ void PlantView::paint(juce::Graphics& g) {
     g.setColour(theme::text());
     g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
     g.drawText("FEEDBACK", juce::Rectangle<float>(80.0f, 12.0f).withCentre(kCentre.translated(0.0f, -9.0f)), juce::Justification::centred);
-    g.setColour(theme::dew());
+    g.setColour(theme::echo());
     g.setFont(juce::FontOptions(13.0f));
     g.drawText(feedbackText_, juce::Rectangle<float>(70.0f, 18.0f).withCentre(kCentre.translated(0.0f, 5.0f)), juce::Justification::centred);
 }
