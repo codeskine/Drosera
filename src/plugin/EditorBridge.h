@@ -7,7 +7,10 @@ class EditorBridge {
 public:
     virtual ~EditorBridge() = default;
     virtual bool midiPitchActive() const = 0;
+    virtual bool bodySnapped() const = 0;          // Body picks a multiple of the note's period
     virtual float soundingNote() const = 0;
+    virtual bool polyMidiActive() const = 0;       // polyphony on and MIDI Pitch in control
+    virtual float voiceNote(int voice) const = 0;  // negative when the voice has no note
     virtual float bodySeconds() const = 0;
     virtual float echoSeconds() const = 0;
     virtual double hostSampleRate() const = 0;  // 0 until prepared

@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ## [Unreleased]
 
+### Added
+
+- Three-string polyphony: up to three notes at once as separate feedback loops, with Coupling between them.
+- The STRINGS tab, with POLY, LOCK, Coupling, Interval 2 and Interval 3. LOCK chooses between a tuned chord and the free drone.
+- Three presets: Open Fifths, Sympathetic and Chord Keys.
+
 ## [0.1.1] - 2026-11-01
 
 ### Fixed

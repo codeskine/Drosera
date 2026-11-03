@@ -9,6 +9,10 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```
 
 ```bash
+build/voice_allocator_test
+```
+
+```bash
 build/render_test
 ```
 
@@ -28,14 +32,14 @@ tools/hardware-comparison/check_reference.sh build/render_cli
 
 | Path | Holds |
 |---|---|
-| `src/dsp/` | Engine, no JUCE. `DroseraCore.h` is its host-independent front end, fixed at 48 kHz |
+| `src/dsp/` | Engine, no JUCE. `DroseraCore.h` is its host-independent front end, fixed at 48 kHz. `FeedbackVoice` is one feedback loop and `VoiceAllocator` assigns MIDI notes to voices |
 | `src/plugin/PluginProcessor.cpp` | Parameters, MIDI, resampling to and from 48 kHz |
 | `src/plugin/PluginEditor.*` | The window: assembles the interface and runs its timer |
 | `src/plugin/EditorBridge.h` | What the editor reads from the processor, beyond parameters |
 | `src/plugin/SpectrumTap.h` | Lock-free FIFO from the audio thread to the display |
 | `src/plugin/ui/` | Theme, knob drawing, plant, tabs. `SpectrumBands.h` and `Readouts.h` have no JUCE, so tests use them alone |
 | `src/plugin/Presets.h` | Factory presets, plain C++ so tests can use them |
-| `tests/` | `render_test`, `ui_test`, `plugin_host_test`, `editor_snapshot` (draws the window to a PNG), measuring tools |
+| `tests/` | `render_test`, `voice_allocator_test`, `ui_test`, `plugin_host_test`, `editor_snapshot` (draws the window to a PNG), measuring tools |
 | `third_party/` | Vendored DaisySP |
 | `tools/hardware-comparison/` | Comparison against a real unit, and the reference checksums |
 | `docs/superpowers/` | Design specs and implementation plans |

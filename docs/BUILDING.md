@@ -34,6 +34,12 @@ Renders the engine offline. It covers finiteness and bounds at several block siz
 the resampler, every preset, and that rendering never allocates.
 
 ```bash
+build/voice_allocator_test
+```
+
+Checks how MIDI notes are assigned to the three voices, with no JUCE.
+
+```bash
 build/ui_test_artefacts/Release/ui_test
 ```
 

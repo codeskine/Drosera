@@ -27,6 +27,12 @@ inline Text frequency(bool midi, float note, const std::string& knobText) {
     return {noteName(note) + " " + format("%.1f Hz", 440.0 * std::pow(2.0, (note - 69.0) / 12.0)), "MIDI"};
 }
 
+/// A negative note is a voice with nothing to play.
+inline Text interval(bool polyMidi, float note, const std::string& knobText) {
+    if (!polyMidi) return {knobText, ""};
+    return {note < 0.0f ? "-" : noteName(note), "MIDI"};
+}
+
 inline Text body(bool midi, float seconds, const std::string& knobText) {
     if (!midi) return {knobText, ""};
     return {format("%.1f ms", seconds * 1000.0), "SNAP"};

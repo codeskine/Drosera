@@ -6,7 +6,7 @@ A feedback drone synth, as a VST3 plugin for macOS 11 or newer, on Apple silicon
 
 Drosera makes sound on its own: a noise floor feeds two string resonators inside a saturating loop, and you steer
 what the loop settles on. Play it with its knobs, excite it with audio, or put it on a note with MIDI. It comes with
-12 presets.
+15 presets.
 
 ## Install
 

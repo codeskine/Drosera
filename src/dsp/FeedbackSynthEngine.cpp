@@ -5,91 +5,68 @@ using namespace infrasonic;
 using namespace infrasonic::FeedbackSynth;
 using namespace daisysp;
 
-static constexpr float kFeedbackTrackingQ = 1.5f;
+static constexpr float kRampStep = 1.0f / 960.0f;  // 20 ms at 48 kHz
+static constexpr float kInvSqrt3 = 0.57735027f;
+// WhiteNoise always seeds with 1: each voice starts further along the sequence, or unisons are identical.
+static constexpr int kNoiseOffset[Engine::kNumVoices] = { 0, 20011, 40009 };
 
 void Engine::Init(const float sample_rate) {
   using ED = EchoDelay<kMaxEchoDelaySamp>;
 
   // Only the first call allocates: Init also clears the state on the audio thread.
-  if (!verb_) {
+  if (!echo_delay_[0]) {
     echo_delay_[0] = std::make_unique<ED>();
     echo_delay_[1] = std::make_unique<ED>();
-    verb_ = std::make_unique<ReverbSc>();
   }
 
   sample_rate_ = sample_rate;
-  fb_delay_smooth_coef_ = onepole_coef(0.2f, sample_rate);
 
-  noise_.Init();
-  noise_.SetAmp(dbfs2lin(-90.0f));
+  for (size_t v = 0; v < kNumVoices; v++) {
+    noise_[v].Init();
+    noise_[v].SetAmp(dbfs2lin(-90.0f));
+    for (int i = 0; i < kNoiseOffset[v]; i++) noise_[v].Process();
+  }
+
+  for (auto &voice : voices_) voice.Init(sample_rate);
+
+  ramp_ = poly_on_ ? 1.0f : 0.0f;
+  poly_running_ = poly_on_;
+  for (auto &tap : tap_) tap[0] = tap[1] = 0.0f;
 
   for (unsigned int i = 0; i < 2; i++) {
-
-    strings_[i].Init(sample_rate);
-    strings_[i].SetBrightness(0.98f);
-    strings_[i].SetFreq(mtof(40.0f));
-    strings_[i].SetDamping(0.4f);
-
-    fb_delayline_[i].Init();
-
     echo_delay_[i]->Init(sample_rate);
     echo_delay_[i]->SetDelayTime(5.0f, true);
     echo_delay_[i]->SetFeedback(0.5f);
     echo_delay_[i]->SetLagTime(0.5f);
-
-    overdrive_[i].Init();
-    overdrive_[i].SetDrive(0.4);
   }
-
-  verb_->Init(sample_rate);
-  verb_->SetFeedback(0.85f);
-  verb_->SetLpFreq(12000.0f);
-
-  fb_lpf_.Init(sample_rate);
-  fb_lpf_.SetQ(0.9f);
-  fb_lpf_.SetCutoff(18000.0f);
-
-  fb_hpf_.Init(sample_rate);
-  fb_hpf_.SetQ(0.9f);
-  fb_hpf_.SetCutoff(60.f);
-
-  fb_track_.Init(sample_rate);
-  fb_track_.SetParams(440.0f, kFeedbackTrackingQ);
-  fb_track_enabled_ = false;
 }
 
-void Engine::SetFeedbackTracking(const bool enabled, const float center_hz, const float makeup_gain) {
-  fb_track_enabled_ = enabled;
-  fb_track_makeup_ = makeup_gain;
-  if (enabled) fb_track_.SetParams(center_hz, kFeedbackTrackingQ);
+void Engine::SetFeedbackTracking(const size_t voice, const bool enabled, const float center_hz, const float makeup_gain, const float coupling_makeup) {
+  voices_[voice].SetFeedbackTracking(enabled, center_hz, makeup_gain, coupling_makeup);
 }
 
-void Engine::SetFeedbackDelayLag(const float time_s) {
-  fb_delay_smooth_coef_ = onepole_coef(time_s, sample_rate_);
+void Engine::SetFeedbackDelayLag(const size_t voice, const float time_s) {
+  voices_[voice].SetFeedbackDelayLag(time_s);
 }
 
-void Engine::SetStringPitch(const float nn) {
-  const auto freq = mtof(nn);
-  strings_[0].SetFreq(freq);
-  strings_[1].SetFreq(freq);
+void Engine::SetStringPitch(const size_t voice, const float nn) {
+  voices_[voice].SetStringPitch(nn);
 }
 
-void Engine::SetFeedbackGain(const float gain_db) {
-  fb_gain_ = dbfs2lin(gain_db);
+void Engine::SetFeedbackGain(const size_t voice, const float gain_db) {
+  voices_[voice].SetFeedbackGain(gain_db);
 }
 
-void Engine::SetFeedbackDelay(const float delay_s) {
-  fb_delay_samp_target_ =
-      DSY_CLAMP(delay_s * sample_rate_, 1.0f,
-                static_cast<float>(kMaxFeedbackDelaySamp - 1));
+void Engine::SetFeedbackDelay(const size_t voice, const float delay_s) {
+  voices_[voice].SetFeedbackDelay(delay_s);
 }
 
 void Engine::SetFeedbackLPFCutoff(const float cutoff_hz) {
-  fb_lpf_.SetCutoff(cutoff_hz);
+  for (auto &voice : voices_) voice.SetFeedbackLPFCutoff(cutoff_hz);
 }
 
 void Engine::SetFeedbackHPFCutoff(const float cutoff_hz) {
-  fb_hpf_.SetCutoff(cutoff_hz);
+  for (auto &voice : voices_) voice.SetFeedbackHPFCutoff(cutoff_hz);
 }
 
 void Engine::SetEchoDelayTime(const float echo_time) {
@@ -107,63 +84,92 @@ void Engine::SetEchoDelaySendAmount(const float echo_send) {
 }
 
 void Engine::SetReverbMix(const float mix) {
-  verb_mix_ = fclamp(mix, 0.0f, 1.0f);
+  for (auto &voice : voices_) voice.SetReverbMix(mix);
 }
 
-void Engine::SetReverbFeedback(const float time) { verb_->SetFeedback(time); }
+void Engine::SetReverbFeedback(const float time) {
+  for (auto &voice : voices_) voice.SetReverbFeedback(time);
+}
 
 void Engine::SetOutputLevel(const float level) { output_level_ = level; }
 
-void Engine::Process(float in, float &outL, float &outR) {
-  // --- Update audio-rate-smoothed control params ---
+void Engine::SetPolyphony(bool on, bool immediate) {
+  poly_on_ = on;
+  if (on) poly_running_ = true;
+  if (!immediate) return;
+  ramp_ = on ? 1.0f : 0.0f;
+  if (!on && poly_running_ && sample_rate_ > 0.0f) StopPoly();
+}
 
-  fonepole(fb_delay_samp_, fb_delay_samp_target_, fb_delay_smooth_coef_);
+void Engine::StopPoly() {
+  poly_running_ = false;
+  voices_[1].Init(sample_rate_);
+  voices_[2].Init(sample_rate_);
+  voices_[0].ClearCouplingFilter();
+  for (auto &tap : tap_) tap[0] = tap[1] = 0.0f;
+}
 
-  // --- Process Samples ---
+void Engine::ProcessPoly(float in, float &outL, float &outR) {
+  float sampL, sampR, echoL, echoR;
 
-  float inL, inR, sampL, sampR, echoL, echoR, verbL, verbR;
-  const float noise_samp = noise_.Process();
-
-  // ---> Feedback Loop
-
-  // Get noise + feedback output
-  inL = fb_delayline_[0].Read(fb_delay_samp_) + noise_samp + in;
-  inR = fb_delayline_[1].Read(daisysp::fmax(1.0f, fb_delay_samp_ - 4.f)) +
-        noise_samp + in;
-
-  // Process through KS resonator
-  sampL = strings_[0].Process(inL);
-  sampR = strings_[1].Process(inR);
-
-  // Distort + Clip
-  sampL = overdrive_[0].Process(sampL);
-  sampR = overdrive_[1].Process(sampR);
-
-  // Filter in feedback loop
-  fb_lpf_.ProcessStereo(sampL, sampR);
-  fb_hpf_.ProcessStereo(sampL, sampR);
-
-  // ---> Reverb
-
-  verb_->Process(sampL, sampR, &verbL, &verbR);
-
-  //       (sampL * (1.0f - verb_mix_)) + verbL * verb_mix_;
-  //       sampL - sampL * verb_mix + verbL * verb_mix_;
-  sampL -= (sampL - verbL) * verb_mix_;
-  sampR -= (sampR - verbR) * verb_mix_;
-
-  // ---> Resonator feedback
-
-  // Write back into delay with attenuation
-  float fbL = sampL * fb_gain_;
-  float fbR = sampR * fb_gain_;
-  if (fb_track_enabled_) {
-    fb_track_.ProcessStereo(fbL, fbR);
-    fbL *= fb_track_makeup_;
-    fbR *= fb_track_makeup_;
+  const float target = poly_on_ ? 1.0f : 0.0f;
+  if (ramp_ != target) {
+    ramp_ += ramp_ < target ? kRampStep : -kRampStep;
+    if (fabsf(ramp_ - target) < 0.5f * kRampStep) ramp_ = target;
   }
-  fb_delayline_[0].Write(fbL);
-  fb_delayline_[1].Write(fbR);
+
+  // ---> Feedback Loops, coupled through the previous sample's taps
+
+  // Voice 0 counts in full, so the fading voices keep hearing it
+  const float weight[kNumVoices] = { 1.0f, ramp_, ramp_ };
+  float next[kNumVoices][2];
+
+  for (size_t v = 0; v < kNumVoices; v++) {
+    const size_t a = (v + 1) % kNumVoices;
+    const size_t b = (v + 2) % kNumVoices;
+    const float receive = coupling_ * coupling_receive_[v];
+    float couplingL = receive * (weight[a] * tap_[a][0] + weight[b] * tap_[b][0]);
+    float couplingR = receive * (weight[a] * tap_[a][1] + weight[b] * tap_[b][1]);
+    voices_[v].FilterCoupling(couplingL, couplingR);
+    voices_[v].Process(noise_[v].Process(), in, couplingL, couplingR, next[v][0], next[v][1]);
+  }
+
+  for (size_t v = 0; v < kNumVoices; v++) {
+    tap_[v][0] = next[v][0];
+    tap_[v][1] = next[v][1];
+  }
+
+  const float scale = 1.0f + ramp_ * (kInvSqrt3 - 1.0f);
+  sampL = (next[0][0] + ramp_ * (next[1][0] + next[2][0])) * scale;
+  sampR = (next[0][1] + ramp_ * (next[1][1] + next[2][1])) * scale;
+
+  // ---> Echo Delay
+
+  echoL = echo_delay_[0]->Process(sampL * echo_send_);
+  echoR = echo_delay_[1]->Process(sampR * echo_send_);
+
+  sampL = 0.5f * (sampL + echoL);
+  sampR = 0.5f * (sampR + echoR);
+
+  // ---> Output
+  outL = sampL * output_level_;
+  outR = sampR * output_level_;
+
+  if (ramp_ == 0.0f && !poly_on_) StopPoly();
+}
+
+void Engine::Process(float in, float &outL, float &outR) {
+  if (poly_running_) {
+    ProcessPoly(in, outL, outR);
+    return;
+  }
+
+  float sampL, sampR, echoL, echoR;
+  const float noise_samp = noise_[0].Process();
+
+  // ---> Feedback Loop, reverb and resonator feedback
+
+  voices_[0].Process(noise_samp, in, 0.0f, 0.0f, sampL, sampR);
 
   // ---> Echo Delay
 

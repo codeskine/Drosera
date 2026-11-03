@@ -20,6 +20,7 @@ target_compile_options(DaisySP PRIVATE -w)
 add_library(DroseraDSP STATIC
     src/dsp/BiquadFilters.cpp
     src/dsp/FeedbackSynthEngine.cpp
+    src/dsp/FeedbackVoice.cpp
     src/dsp/KarplusString.cpp)
 target_include_directories(DroseraDSP PUBLIC src/dsp)
 target_link_libraries(DroseraDSP PUBLIC DaisySP)
@@ -28,6 +29,10 @@ target_link_libraries(DroseraDSP PUBLIC DaisySP)
 add_executable(render_test tests/render_test.cpp)
 target_include_directories(render_test PRIVATE tests src/plugin)
 target_link_libraries(render_test PRIVATE DroseraDSP)
+
+# MIDI note allocator for the three-voice mode (header only, no JUCE)
+add_executable(voice_allocator_test tests/voice_allocator_test.cpp)
+target_include_directories(voice_allocator_test PRIVATE src/dsp)
 
 # Measures the pitch produced for MIDI notes (see tests/pitch_probe.cpp)
 add_executable(pitch_probe tests/pitch_probe.cpp)
@@ -107,7 +112,8 @@ if(DROSERA_BUILD_PLUGIN)
     juce_add_console_app(ui_test PRODUCT_NAME "ui_test")
     target_sources(ui_test PRIVATE tests/ui_test.cpp ${DROSERA_PLUGIN_SOURCES})
     target_include_directories(ui_test PRIVATE tests src/plugin)
-    target_compile_definitions(ui_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_compile_definitions(ui_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+        DROSERA_STATE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/state-baseline.bin")
     target_link_libraries(ui_test PRIVATE DroseraDSP
         juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 endif()

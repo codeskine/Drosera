@@ -88,15 +88,70 @@ pitch back after release: move it again.
 **MIDI Gate (GATE)** closes the feedback unless a key is down, so the drone swells on note-on and dies away on
 note-off.
 
+## STRINGS tab
+
+Three-string polyphony lets Drosera sound up to three notes at once, as three feedback loops. It is off by default,
+and with it off Drosera sounds exactly as before.
+
+| Control | Range | What it does |
+|---|---|---|
+| POLY | on/off | Runs three loops instead of one |
+| LOCK | on/off | From the knobs: on, the strings sound the notes they show; off, they roam. On by default |
+| Coupling | 0 to 100 % | How much each loop hears the other two |
+| Interval 2 | −24 to +24 semitones | Pitch of the second string relative to Frequency. Default +7 |
+| Interval 3 | −24 to +24 semitones | Pitch of the third string relative to Frequency. Default +12 |
+
+**Coupling.** At 0 the three loops do not affect each other. Raising it feeds each loop a share of the other two,
+so they ring on harmonically related intervals, like sympathetic strings. The knob is on a square law. Under MIDI its
+effect sits mostly at the top of the knob and fades as Body goes past the middle, to almost nothing from about 0.7,
+which keeps long Bodies in tune. LOCK behaves the same way. From the knobs with LOCK off it is usually strong from
+about 40 %, at any Body. A voice whose gate is closed hears no Coupling, at any setting.
+
+**LOCK and the intervals.** Without MIDI the strings sit at Frequency, Frequency + Interval 2 and Frequency +
+Interval 3, limited to notes 16 to 84.
+
+- **LOCK on** tunes them as MIDI does. The chord is the one the knobs show, full and dark, and it follows Frequency
+  down to notes too low for small speakers. Body picks a multiple of the note's period and reads **SNAP**. Reverb Mix
+  detunes these notes, as it does under MIDI.
+- **LOCK off** keeps the free drone. Each loop settles where string and Body resonances coincide, and each voice's Body
+  follows its interval, so the voices rarely land on one pitch. The sound is bright and moves, and the intervals are
+  only a starting point.
+
+LOCK does nothing with POLY off or while a MIDI note is in control. Under MIDI the intervals dim and show each voice's real note,
+tagged **MIDI**. Frequency and Body show the first voice.
+
+**Voice assignment** (MIDI Pitch and POLY on). Each new note takes a voice that has never played, then the voice
+released longest ago, then the voice held longest. A taken voice glides to the new note without being cleared. When a
+voice is released while a held note has no voice, it takes that note, most recent first. Pitch bend moves all voices.
+Turning POLY on with keys down assigns the last three held notes. A voice that has never had a note stays closed,
+so one note sounds one string.
+
+**MIDI Gate per voice.** With MIDI Pitch on, each voice is open only while its own note is held. With MIDI Gate off, a
+released note keeps sounding until its voice is taken. With MIDI Pitch off, the gate opens all three voices together.
+
 ## Presets
 
-12 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
-"Init" is silent by design.
+15 factory presets, also exposed to the host as programs. "Resonator" needs an audio input. "Keys" expects notes.
+"Init" is silent by design. The last three use three strings: "Open Fifths" (knobs only, LOCK on, Coupling 0), "Sympathetic"
+(knobs only, LOCK off, Coupling at 40 %) and "Chord Keys" (MIDI Pitch and MIDI Gate on, Coupling at 80 %). Choosing any of the
+other 12 turns POLY off.
 
 ## Known limits
 
-- With MIDI Pitch on, notes 16 to 18 and note 80 may stay silent in some settings, because the loop does not have
+- With MIDI Pitch or LOCK on, notes 16 to 18 and note 80 may stay silent in some settings, because the loop does not have
   the gain to oscillate there. Note 16 can also sound on the wrong partial, about 11 semitones sharp.
+- With POLY on and Coupling above 0, the notes can move each other's pitch. From the knobs with LOCK off the voices can
+  leave their intervals. Under MIDI, with no reverb, the chords tested with roots 24 to 60 stayed within 5 cents of their notes at
+  100 %, which is not promised for every chord or setting.
+- With MIDI Pitch or LOCK on, a note far below Highpass or far above Lowpass cannot sustain, so that string goes quiet or
+  silent. At Frequency 0.43 this starts with Highpass at about 0.6. Lower Highpass, raise Lowpass, or turn LOCK off:
+  the free drone finds another resonance instead.
+- With MIDI Pitch or LOCK on and Body at about 0.7 or more, a few chord notes sit up to about 60 cents off, at any Coupling,
+  on a neighbouring Body resonance.
+- Reverb Mix detunes MIDI notes, because the reverb sits in the loop and its phase is not compensated. With POLY on,
+  chords can go sour: with "Chord Keys" otherwise as it is, at Reverb Mix 35 % a C major chord read +20, -28 and -8 cents.
+- The values of "Open Fifths", "Sympathetic" and "Chord Keys" were chosen by measurement and have not been judged by
+  ear.
 - The engine always runs at 48 kHz. At other host rates, windowed-sinc resampling adds latency, which is declared
   to the host only when the input bus is connected.
 - The drone is chaotic. A small change to a knob, or to when it moves, can lead the loop somewhere else, so automation

@@ -190,6 +190,9 @@ static void readoutTests() {
     check(is(body(false, 0.0971f, "30.0 ms"), "30.0 ms", ""), "body from the knob");
     check(echoTime(true, 0.359f, "x") == "0.36 s", "echo time with WARP");
     check(echoTime(false, 0.359f, "1.29 s") == "1.29 s", "echo time from the knob");
+    check(is(interval(false, 60.0f, "+7 st"), "+7 st", ""), "interval from the knob");
+    check(is(interval(true, 60.0f, "+7 st"), "C4", "MIDI"), "interval with a MIDI note");
+    check(is(interval(true, -1.0f, "+7 st"), "-", "MIDI"), "interval with no note");
     check(noteName(40.0f) == "E2" && noteName(60.0f) == "C4" && noteName(69.0f) == "A4", "note names");
 }
 
@@ -360,6 +363,34 @@ static void editorTests() {
         check(editor->tag("freq").isEmpty() && editor->slider("freq")->getAlpha() == 1.0f, "knobTakesPitchBack");
     }
 
+    {   // LOCK: from the knobs Body is snapped, and the readout says so. It means nothing with POLY off.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        check(parameter(*p, "polylock") == 1.0f, "lockOnByDefault");
+        render(*p, 0.1);
+        editor->refreshDisplay(dt);
+        check(editor->tag("body").isEmpty(), "lockMeansNothingWithPolyOff");
+        setParameter(*p, "poly", 1.0f);
+        render(*p, 0.1);
+        editor->refreshDisplay(dt);
+        check(editor->tag("body") == "SNAP" && editor->tag("freq").isEmpty() && editor->slider("body")->getAlpha() < 1.0f, "lockSnapsBody");
+        setParameter(*p, "polylock", 0.0f);  // with no audio running, as a host may be stopped
+        editor->refreshDisplay(dt);
+        check(editor->tag("body").isEmpty(), "freeBodyHasNoTag");
+
+        juce::MemoryBlock state;
+        p->getStateInformation(state);
+        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
+        second->setStateInformation(state.getData(), (int) state.getSize());
+        check(parameter(*second, "polylock") == 0.0f, "lockStateRoundTrip");
+
+        p->setCurrentProgram(12);
+        const float openFifths = parameter(*p, "polylock");
+        p->setCurrentProgram(13);
+        check(openFifths == 1.0f && parameter(*p, "polylock") == 0.0f, "presetsSetLock");
+    }
+
     {   // WARP: Echo Time shows the shortened time.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         p->prepareToPlay(48000.0, 512);
@@ -409,9 +440,300 @@ static void editorTests() {
         check(gAllocations.load() == 0, "audioPathDoesNotAllocate");
     }
 
+    {   // Polyphony: parameters, presets and the voices MIDI reaches.
+        auto text = [](juce::AudioProcessor& p, const char* id) {
+            for (auto* prm : p.getParameters())
+                if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(prm))
+                    if (withId->paramID == id) return prm->getText(prm->getValue(), 32);
+            return juce::String("?");
+        };
+        auto notes = [](std::initializer_list<int> on, std::initializer_list<int> off = {}) {
+            juce::MidiBuffer m;
+            for (int n : on) m.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8) 100), 0);
+            for (int n : off) m.addEvent(juce::MidiMessage::noteOff(1, n), 0);
+            return m;
+        };
+        // Renders and returns the RMS of the last `tail` seconds, whatever the sample rate.
+        auto renderRms = [](juce::AudioProcessor& p, double rate, double seconds, double tail, juce::MidiBuffer* midi = nullptr) {
+            juce::AudioBuffer<float> buffer(2, 512);
+            juce::MidiBuffer none;
+            const int blocks = (int) (seconds * rate / 512.0);
+            double sumSq = 0; long n = 0; bool finite = true;
+            for (int b = 0; b < blocks; ++b) {
+                buffer.clear();
+                p.processBlock(buffer, midi != nullptr && b == 0 ? *midi : none);
+                if (b * 512 < (seconds - tail) * rate) continue;
+                for (int c = 0; c < 2; ++c)
+                    for (int i = 0; i < 512; ++i) {
+                        const float v = buffer.getSample(c, i);
+                        finite &= std::isfinite(v);
+                        sumSq += (double) v * v; ++n;
+                    }
+            }
+            return finite && n > 0 ? std::sqrt(sumSq / (double) n) : -1.0;
+        };
+        auto fresh = [](double rate = 48000.0) {
+            std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+            p->prepareToPlay(rate, 512);
+            return p;
+        };
+        auto setPolyMidi = [](juce::AudioProcessor& p) { setParameter(p, "midipitch", 1.0f); setParameter(p, "poly", 1.0f); };
+
+        {
+            auto p = fresh();
+            check(parameter(*p, "poly") == 0.0f && parameter(*p, "coupling") == 0.0f
+                  && text(*p, "interval2") == "+7 st" && text(*p, "interval3") == "+12 st", "defaultsOff");
+        }
+        {
+            auto first = fresh();
+            setParameter(*first, "poly", 1.0f);
+            setParameter(*first, "coupling", 0.4f);
+            setParameter(*first, "interval2", (-5.0f + 24.0f) / 48.0f);
+            juce::MemoryBlock state;
+            first->getStateInformation(state);
+            auto second = fresh();
+            second->setStateInformation(state.getData(), (int) state.getSize());
+            check(parameter(*second, "poly") == 1.0f && std::abs(parameter(*second, "coupling") - 0.4f) < 0.001f
+                  && text(*second, "interval2") == "-5 st" && text(*second, "interval3") == "+12 st", "polyStateRoundTrip");
+        }
+        {   // Audio Units order parameters by this hint, and hosts like Logic store automation by index: what is new since 0.1.1 needs a higher one.
+            auto p = fresh();
+            std::map<juce::String, int> hints;
+            for (auto* parameter : p->getParameters())
+                if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter)) hints[withId->paramID] = withId->getVersionHint();
+            bool ok = true;
+            for (const char* added : { "poly", "coupling", "interval2", "interval3", "polylock" })
+                ok = ok && hints.at(added) == 2;
+            for (const char* released : { "freq", "fbgain", "body", "lpf", "hpf", "revmix", "revdecay", "echosend", "echotime", "echofb", "volume", "echohalve", "inputgain", "midipitch", "midigate" })
+                ok = ok && hints.at(released) == 1;
+            check(ok, "polyphonyParametersKeepAudioUnitOrder");
+        }
+        {
+            auto p = fresh();
+            p->setCurrentProgram(13);
+            const float on = parameter(*p, "poly");
+            p->setCurrentProgram(2);
+            check(on == 1.0f && parameter(*p, "poly") == 0.0f, "oldPresetsTurnPolyOff");
+        }
+        {
+            auto p = fresh();
+            const juce::String old[] = { "Default", "Sub Cellar", "Glass Wind", "Cathedral Bloom", "Echo Drift", "Doppler Void", "Dark Tide",
+                                         "Razor Feedback", "Quiet Room", "Keys (play notes)", "Resonator (needs input)", "Init (silent)" };
+            bool names = p->getNumPrograms() == 15;
+            for (int i = 0; i < 12 && names; ++i) names = p->getProgramName(i) == old[i];
+            names = names && p->getProgramName(12) == "Open Fifths" && p->getProgramName(13) == "Sympathetic" && p->getProgramName(14) == "Chord Keys";
+            check(names, "presetCountAndOrder");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            render(*p, 0.1, &chord);
+            check(bridge->polyMidiActive() && bridge->voiceNote(0) == 48 && bridge->voiceNote(1) == 55 && bridge->voiceNote(2) == 64, "threeNotesThreeVoices");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto one = notes({ 48 });
+            render(*p, 0.1, &one);
+            check(bridge->voiceNote(0) == 48 && bridge->voiceNote(1) < 0 && bridge->voiceNote(2) < 0, "singleNoteLeavesOthersClosed");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto four = notes({ 48, 55, 64, 71 });
+            render(*p, 0.1, &four);
+            const bool stole = bridge->voiceNote(0) == 71;
+            auto off = notes({}, { 71 });
+            render(*p, 0.1, &off);
+            check(stole && bridge->voiceNote(0) == 48, "fourthNoteSteals");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto on = notes({ 48 }), off = notes({}, { 48 });
+            render(*p, 0.1, &on);
+            render(*p, 0.1, &off);
+            check(bridge->voiceNote(0) == 48 && bridge->polyMidiActive(), "releaseKeepsDroneWithoutGate");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 }), off = notes({}, { 48, 55, 64 });
+            render(*p, 0.1, &chord);
+            render(*p, 0.1, &off);
+            setParameter(*p, "freq", 0.2f);
+            render(*p, 0.1);
+            const bool taken = !bridge->polyMidiActive() && bridge->voiceNote(0) < 0 && bridge->voiceNote(1) < 0;
+            auto again = notes({ 60 });
+            render(*p, 0.1, &again);
+            check(taken && bridge->polyMidiActive() && bridge->voiceNote(0) == 60 && bridge->voiceNote(1) < 0, "knobTakesAllVoicesBack");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setParameter(*p, "midipitch", 1.0f);
+            auto on = notes({ 48 }), off = notes({}, { 48 });
+            render(*p, 0.1, &on);
+            render(*p, 0.1, &off);
+            setParameter(*p, "poly", 1.0f);
+            const double rms = renderRms(*p, 48000.0, 3.0, 1.0);
+            std::printf("  latched note, polyphony on: rms %.4f\n", rms);
+            check(bridge->voiceNote(0) == 48 && rms > 1e-3, "polyOnWithLatchedNote");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setParameter(*p, "midipitch", 1.0f);
+            auto four = notes({ 48, 55, 64, 71 });
+            render(*p, 0.1, &four);
+            setParameter(*p, "poly", 1.0f);
+            render(*p, 0.1);
+            check(bridge->voiceNote(0) == 71 && bridge->voiceNote(1) == 55 && bridge->voiceNote(2) == 64, "polyOnWithHeldKeys");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            render(*p, 0.1, &chord);
+            setParameter(*p, "poly", 0.0f);
+            render(*p, 1.0);
+            check(!bridge->polyMidiActive() && bridge->midiPitchActive() && std::abs(bridge->soundingNote() - 64.0f) < 0.5f, "polyOffAfterChord");
+        }
+        {
+            auto p = fresh(44100.0);
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            const double rms = renderRms(*p, 44100.0, 3.0, 1.0, &chord);
+            std::printf("  chord at 44.1 kHz: rms %.4f\n", rms);
+            check(rms > 1e-3, "chordAt44100");
+        }
+        {
+            auto p = fresh();
+            auto* bridge = dynamic_cast<EditorBridge*>(p.get());
+            setPolyMidi(*p);
+            auto chord = notes({ 48, 55, 64 });
+            chord.addEvent(juce::MidiMessage::pitchWheel(1, 16383), 0);  // +2 semitones, less one step of 16384
+            render(*p, 0.1, &chord);
+            const float bend = 2.0f * 8191.0f / 8192.0f;
+            check(std::abs(bridge->voiceNote(0) - (48.0f + bend)) < 0.01f && std::abs(bridge->voiceNote(1) - (55.0f + bend)) < 0.01f
+                  && std::abs(bridge->voiceNote(2) - (64.0f + bend)) < 0.01f, "voiceNoteIncludesBend");
+        }
+        {   // What sounds, judged at each note's fundamental: a released voice closes, and the bend moves every voice.
+            // 2 s of output, as the strongest Hann-windowed bin within 40 cents of the note: the drone's pitch wanders a little
+            auto level = [](juce::AudioProcessor& p, double note) {
+                juce::AudioBuffer<float> buffer(2, 512);
+                juce::MidiBuffer none;
+                const int blocks = (int) (2.0 * 48000.0 / 512.0);
+                const int n = blocks * 512;
+                std::vector<float> x((size_t) n);
+                for (int b = 0; b < blocks; ++b) {
+                    buffer.clear();
+                    p.processBlock(buffer, none);
+                    for (int i = 0; i < 512; ++i) x[(size_t) (b * 512 + i)] = buffer.getSample(0, i);
+                }
+                double best = 0;
+                for (int cents = -40; cents <= 40; cents += 10) {
+                    const double hz = 440.0 * std::pow(2.0, (note + cents / 100.0 - 69.0) / 12.0);
+                    double re = 0, im = 0;
+                    for (int k = 0; k < n; ++k) {
+                        const double w = 0.5 - 0.5 * std::cos(2.0 * M_PI * k / n), a = 2.0 * M_PI * hz * k / 48000.0;
+                        re += w * x[(size_t) k] * std::cos(a);
+                        im += w * x[(size_t) k] * std::sin(a);
+                    }
+                    best = std::max(best, re * re + im * im);
+                }
+                return 10.0 * std::log10(best + 1e-20);
+            };
+            auto keys = [&] {
+                auto p = fresh();
+                setPolyMidi(*p);
+                setParameter(*p, "midigate", 1.0f);
+                return p;
+            };
+            {
+                auto p = keys();
+                auto chord = notes({ 48, 55, 64 }), off = notes({}, { 55 });
+                render(*p, 2.0, &chord);
+                const double before55 = level(*p, 55), before48 = level(*p, 48);
+                render(*p, 0.1, &off);
+                const double after55 = level(*p, 55), after48 = level(*p, 48);
+                std::printf("  released 55: its level %+.1f dB, 48's %+.1f dB\n", after55 - before55, after48 - before48);
+                check(after55 < before55 - 20.0 && after48 > before48 - 6.0, "releasedNoteCloses");
+            }
+            {   // Voices 1 and 2 sound at their bent notes about as strongly as voice 0 does at its own, and no longer at the unbent ones
+                auto p = keys();
+                auto chord = notes({ 48, 55, 64 });
+                chord.addEvent(juce::MidiMessage::pitchWheel(1, 16383), 0);
+                render(*p, 3.0, &chord);
+                const double v0 = level(*p, 50), v1 = level(*p, 57), v2 = level(*p, 66), old1 = level(*p, 55), old2 = level(*p, 64);
+                std::printf("  bend +2: voice 0 at 50 %+.1f dB, voice 1 at 57 %+.1f dB (55: %+.1f), voice 2 at 66 %+.1f dB (64: %+.1f)\n",
+                            v0, v1, old1, v2, old2);
+                check(v1 > v0 - 15.0 && v2 > v0 - 15.0 && v1 > old1 + 10.0 && v2 > old2 + 10.0, "bendMovesAllVoices");
+            }
+        }
+        {   // Nothing allocates with polyphony on and notes arriving past the three voices.
+            auto p = fresh();
+            setPolyMidi(*p);
+            juce::AudioBuffer<float> buffer(2, 512);
+            juce::MidiBuffer midi;
+            for (int i = 0; i < 6; ++i) midi.addEvent(juce::MidiMessage::noteOn(1, 40 + 7 * i, (juce::uint8) 100), 10 + i);
+            midi.addEvent(juce::MidiMessage::noteOff(1, 47), 200);
+            midi.addEvent(juce::MidiMessage::allNotesOff(1), 300);
+            gAllocations = 0;
+            malloc_logger = countAllocation;
+            tCountAllocations = true;
+            for (int b = 0; b < 100; ++b) p->processBlock(buffer, midi);
+            tCountAllocations = false;
+            malloc_logger = nullptr;
+            std::printf("  allocations in 100 polyphonic blocks: %d\n", gAllocations.load());
+            check(gAllocations.load() == 0, "polyAudioPathDoesNotAllocate");
+        }
+    }
+
     {   // Screen readers can name every knob.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         check(openEditor(*p)->slider("fbgain")->getTitle() == "Feedback", "feedbackHasATitle");
+    }
+
+    {   // STRINGS is the sixth tab: it shows its controls, persists, and fits the window.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        juce::MemoryBlock state;
+        {
+            auto editor = openEditor(*p);
+            editor->setVisible(true);
+            editor->setTab(5);
+            auto shown = [&](const char* id) { return editor->slider(id)->getParentComponent()->isVisible(); };
+            check(shown("coupling") && shown("interval2") && shown("interval3") && !shown("lpf"), "stringsTabShowsItsControls");
+            check(editor->tabBounds(5).getRight() <= 760 - 26, "tabsFitTheWindow");
+            p->getStateInformation(state);
+        }
+        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
+        second->setStateInformation(state.getData(), (int) state.getSize());
+        check(openEditor(*second)->tab() == 5, "sixthTabPersists");
+    }
+
+    {   // The interval knobs show the notes the voices play when MIDI Pitch controls them.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        editor->refreshDisplay(dt);
+        check(editor->readout("interval2") == "+7 st" && editor->tag("interval2").isEmpty(), "intervalFromKnobWithoutMidi");
+        setParameter(*p, "midipitch", 1.0f);
+        setParameter(*p, "poly", 1.0f);
+        juce::MidiBuffer chord;
+        for (int n : { 48, 55 }) chord.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8) 100), 0);
+        render(*p, 0.1, &chord);
+        editor->refreshDisplay(dt);
+        check(editor->readout("interval2") == "G3" && editor->tag("interval2") == "MIDI"
+              && editor->slider("interval2")->isEnabled() && editor->slider("interval2")->getAlpha() < 1.0f, "intervalReadoutFollowsMidi");
+        check(editor->readout("interval3") == "-" && editor->tag("interval3") == "MIDI", "intervalWithoutANote");
     }
 
     {   // A preset chosen in the window reaches the host's own display.
@@ -449,6 +771,47 @@ static void editorTests() {
     }
 }
 
+// A project from before polyphony, opened over an instance already in use: what it does not hold returns to its default.
+static void stateTests() {
+    // The fixture was saved by JUCE's VST3 host, which wraps the plugin's own state. Calling the plugin with the
+    // wrapper is ignored, as its root tag is not the plugin's, so unwrap it.
+    juce::MemoryBlock file, state;
+    const bool read = juce::File(DROSERA_STATE_FIXTURE).loadFileAsData(file);
+    const auto wrapper = read ? juce::AudioProcessor::getXmlFromBinary(file.getData(), (int) file.getSize()) : nullptr;
+    const auto* component = wrapper != nullptr ? wrapper->getChildByName("IComponent") : nullptr;
+    const bool unwrapped = component != nullptr && state.fromBase64Encoding(component->getAllSubText());
+    const auto plugin = unwrapped ? juce::AudioProcessor::getXmlFromBinary(state.getData(), (int) state.getSize()) : nullptr;
+    check(plugin != nullptr, "old state: fixture holds the plugin's");
+    if (plugin == nullptr) return;
+    std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+    const auto param = [&](const char* id) -> juce::RangedAudioParameter* {
+        for (auto* candidate : p->getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(candidate))
+                if (ranged->paramID == id) return ranged;
+        return nullptr;
+    };
+    const auto isDefault = [&](const char* id) { return std::abs(param(id)->getValue() - param(id)->getDefaultValue()) < 0.001f; };
+    param("poly")->setValueNotifyingHost(1.0f);
+    param("coupling")->setValueNotifyingHost(0.4f);
+    param("interval2")->setValueNotifyingHost(param("interval2")->convertTo0to1(3.0f));
+    param("interval3")->setValueNotifyingHost(param("interval3")->convertTo0to1(-12.0f));
+    param("polylock")->setValueNotifyingHost(0.0f);
+    param("freq")->setValueNotifyingHost(0.1f);
+    param("fbgain")->setValueNotifyingHost(0.1f);
+    param("lpf")->setValueNotifyingHost(0.1f);
+    check(! isDefault("poly") && ! isDefault("coupling"), "old state: instance modified first");
+    p->setStateInformation(state.getData(), (int) state.getSize());
+    check(isDefault("poly"), "old state: POLY returns to its default");
+    check(isDefault("coupling"), "old state: Coupling returns to its default");
+    check(isDefault("interval2"), "old state: Interval 2 returns to default");
+    check(isDefault("interval3"), "old state: Interval 3 returns to default");
+    check(isDefault("polylock"), "old state: LOCK returns to default");
+    // kSavedValues in plugin_host_test
+    check(std::abs(param("freq")->getValue() - 0.61f) < 0.001f, "old state: Frequency loads");
+    check(std::abs(param("fbgain")->getValue() - 0.83f) < 0.001f, "old state: Feedback loads");
+    check(std::abs(param("lpf")->getValue() - 0.37f) < 0.001f, "old state: Lowpass loads");
+}
+
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
     tapTests();
@@ -456,6 +819,7 @@ int main() {
     readoutTests();
     plantTests();
     editorTests();
+    stateTests();
     std::printf(failures == 0 ? "ALL OK\n" : "SOME FAILED\n");
     return failures == 0 ? 0 : 1;
 }

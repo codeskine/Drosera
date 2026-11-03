@@ -69,13 +69,19 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
 
     const bool midi = bridge_.midiPitchActive();
     const auto frequency = drosera::readouts::frequency(midi, bridge_.soundingNote(), frequency_.parameter().getCurrentValueAsText().toStdString());
-    const auto body = drosera::readouts::body(midi, bridge_.bodySeconds(), body_.parameter().getCurrentValueAsText().toStdString());
+    const auto body = drosera::readouts::body(bridge_.bodySnapped(), bridge_.bodySeconds(), body_.parameter().getCurrentValueAsText().toStdString());
     frequency_.show(frequency.value, frequency.tag);
     body_.show(body.value, body.tag);
 
     const bool warp = apvts_.getRawParameterValue("echohalve")->load() > 0.5f;
+    const bool polyMidi = bridge_.polyMidiActive();
     for (const auto& [id, knob] : tabs_.knobs()) {
         const auto text = knob->parameter().getCurrentValueAsText();
+        if (id == "interval2" || id == "interval3") {
+            const auto interval = drosera::readouts::interval(polyMidi, bridge_.voiceNote(id == "interval2" ? 1 : 2), text.toStdString());
+            knob->show(interval.value, interval.tag);
+            continue;
+        }
         knob->show(id == "echotime" ? juce::String(drosera::readouts::echoTime(warp, bridge_.echoSeconds(), text.toStdString())) : text, {});
     }
 

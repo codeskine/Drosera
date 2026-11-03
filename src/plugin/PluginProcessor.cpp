@@ -8,6 +8,7 @@
 #include <cstring>
 #include "DroseraCore.h"
 #include "SincResampler.h"
+#include "VoiceAllocator.h"
 #include "EditorBridge.h"
 #include "PluginEditor.h"
 #include "Presets.h"
@@ -16,6 +17,7 @@ namespace {
 
 using infrasonic::DroseraCore;
 using infrasonic::SincResampler;
+using infrasonic::VoiceAllocator;
 
 enum class Show { Percent, ValuePercent, LevelDb, ReverbFeedback, NoteHz, Db, Millis, Hz, Seconds };
 
@@ -75,6 +77,11 @@ public:
         inGainRaw = apvts.getRawParameterValue("inputgain");
         midiPitchRaw = apvts.getRawParameterValue("midipitch");
         midiGateRaw = apvts.getRawParameterValue("midigate");
+        polyRaw = apvts.getRawParameterValue("poly");
+        couplingRaw = apvts.getRawParameterValue("coupling");
+        interval2Raw = apvts.getRawParameterValue("interval2");
+        interval3Raw = apvts.getRawParameterValue("interval3");
+        stringLockRaw = apvts.getRawParameterValue("polylock");
     }
 
     const juce::String getName() const override { return "Drosera"; }
@@ -105,6 +112,11 @@ public:
         set("inputgain", pr.inputLevel);
         set("midipitch", pr.midiPitch ? 1.0f : 0.0f);
         set("midigate", pr.midiGate ? 1.0f : 0.0f);
+        set("poly", pr.poly ? 1.0f : 0.0f);
+        set("coupling", pr.coupling);
+        set("interval2", apvts.getParameter("interval2")->convertTo0to1((float) pr.interval2));
+        set("interval3", apvts.getParameter("interval3")->convertTo0to1((float) pr.interval3));
+        set("polylock", pr.stringLock ? 1.0f : 0.0f);
     }
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return new DroseraEditor(*this, apvts, *this); }
@@ -134,6 +146,8 @@ public:
         tap.requestFlush();
 
         heldCount = 0; haveNote = false; bendSemis = 0.0f;
+        allocator.Reset();
+        lastPoly = polyRaw->load() > 0.5f;
         lastFreqKnob = raw[DroseraCore::Frequency]->load();
         updateParams();
         if (useResampler) {  // prime the output FIFO: absorbs jitter between input-driven and output-driven rates
@@ -196,7 +210,10 @@ public:
 
 private:
     bool midiPitchActive() const override { return midiPitchActive_.load(); }
+    bool bodySnapped() const override { return midiPitchActive_.load() || (polyLocked_.load() && polyRaw->load() > 0.5f && stringLockRaw->load() > 0.5f); }
     float soundingNote() const override { return core->PublishedNote(); }
+    bool polyMidiActive() const override { return polyMidiActive_.load(); }
+    float voiceNote(int voice) const override { return voiceNotes_[voice].load(); }
     float bodySeconds() const override { return core->PublishedBodySeconds(); }
     float echoSeconds() const override { return DroseraCore::EchoTimeSeconds(raw[DroseraCore::EchoTime]->load(), halveRaw->load() > 0.5f); }
     double hostSampleRate() const override { return hostRate.load(); }
@@ -215,33 +232,67 @@ private:
         const float freqKnob = raw[DroseraCore::Frequency]->load();
         if (freqKnob != lastFreqKnob) {
             lastFreqKnob = freqKnob;
-            if (heldCount == 0) haveNote = false;
+            if (heldCount == 0) { haveNote = false; allocator.Reset(); }
+        }
+        const bool poly = polyRaw->load() > 0.5f;
+        if (poly != lastPoly) {
+            lastPoly = poly;
+            allocator.Assign(held, heldCount);
+            if (heldCount == 0 && haveNote) { allocator.NoteOn(lastNote); allocator.NoteOff(lastNote); }  // a latched drone keeps sounding
         }
         for (int i = 0; i < DroseraCore::NumParams; ++i)
             core->SetParam((DroseraCore::Param) i, raw[i]->load());
         core->SetEchoWarp(halveRaw->load() > 0.5f);
+        core->SetPolyphony(poly);
+        core->SetCoupling(couplingRaw->load());
+        core->SetIntervals((int) interval2Raw->load(), (int) interval3Raw->load());
+        const bool lock = stringLockRaw->load() > 0.5f;
+        core->SetStringLock(lock);
+        polyLocked_.store(poly && lock);
         inGain = inGainRaw->load() * 2.0f;
         applyMidiState();
     }
 
     void applyMidiState() {
         const bool pitchOn = midiPitchRaw->load() > 0.5f && haveNote;
-        core->SetMidiPitch(pitchOn, (float) lastNote + bendSemis);
+        const bool gateOn = midiGateRaw->load() > 0.5f;
+        const bool polyMidi = lastPoly && pitchOn;
         midiPitchActive_.store(pitchOn);
-        core->SetGate(midiGateRaw->load() > 0.5f, heldCount > 0);
+        polyMidiActive_.store(polyMidi);
+        for (int v = 0; v < VoiceAllocator::kVoices; ++v)
+            voiceNotes_[v].store(polyMidi && allocator.Note(v) != VoiceAllocator::kNoNote
+                                     ? juce::jlimit(16.0f, 84.0f, (float) allocator.Note(v) + bendSemis) : -1.0f);
+
+        if (!polyMidi) {
+            core->SetMidiPitch(pitchOn, (float) lastNote + bendSemis);
+            core->SetGate(gateOn, heldCount > 0);
+            for (int v = 1; v < VoiceAllocator::kVoices; ++v) core->SetVoiceGate((size_t) v, gateOn, heldCount > 0);
+            return;
+        }
+        const int first = allocator.Note(0);
+        const float firstNote = (first != VoiceAllocator::kNoNote ? (float) first : (float) lastNote) + bendSemis;
+        core->SetMidiPitch(true, firstNote);
+        for (int v = 0; v < VoiceAllocator::kVoices; ++v) {
+            const bool assigned = allocator.Note(v) != VoiceAllocator::kNoNote;
+            if (v > 0) core->SetVoiceNote((size_t) v, assigned ? (float) allocator.Note(v) + bendSemis : firstNote);  // a closed voice's pitch does not matter
+            core->SetVoiceGate((size_t) v, true, gateOn ? assigned && allocator.Held(v) : assigned);
+        }
     }
 
     void handleMidi(const juce::MidiMessage& m) {
         if (m.isNoteOn()) {
             removeNote(m.getNoteNumber());
+            allocator.NoteOn(m.getNoteNumber());
             if (heldCount < kMaxHeld) held[heldCount++] = m.getNoteNumber();
             lastNote = m.getNoteNumber();
             haveNote = true;
         } else if (m.isNoteOff()) {
             removeNote(m.getNoteNumber());
+            allocator.NoteOff(m.getNoteNumber());
             if (heldCount > 0) lastNote = held[heldCount - 1];  // fall back to the previous held note
         } else if (m.isAllNotesOff() || m.isAllSoundOff()) {
             heldCount = 0;
+            allocator.AllNotesOff();
         } else if (m.isPitchWheel()) {
             bendSemis = (float) (m.getPitchWheelValue() - 8192) / 8192.0f * 2.0f;
         } else {
@@ -323,6 +374,21 @@ private:
             juce::ParameterID{"midipitch", 1}, "MIDI Pitch", false));
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{"midigate", 1}, "MIDI Gate", false));
+        // Version hint 2: new since 0.1.1. Audio Units order parameters by this hint and hosts store automation by index,
+        // so a hint of 1 here would move the released parameters.
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{"poly", 2}, "Polyphony", false));
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{"coupling", 2}, "Coupling", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(juce::roundToInt(v * 100.0f)) + " %"; })));
+        // Semitones above voice 0 when MIDI is not in control.
+        auto semitones = juce::AudioParameterIntAttributes().withStringFromValueFunction([](int v, int) {
+            return juce::String(v > 0 ? "+" : "") + juce::String(v) + " st";
+        });
+        layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval2", 2}, "Interval 2", -24, 24, 7, semitones));
+        layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"interval3", 2}, "Interval 3", -24, 24, 12, semitones));
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{"polylock", 2}, "String Lock", true));
         return layout;
     }
 
@@ -333,14 +399,23 @@ private:
     std::atomic<float>* inGainRaw = nullptr;
     std::atomic<float>* midiPitchRaw = nullptr;
     std::atomic<float>* midiGateRaw = nullptr;
+    std::atomic<float>* polyRaw = nullptr;
+    std::atomic<float>* couplingRaw = nullptr;
+    std::atomic<float>* interval2Raw = nullptr;
+    std::atomic<float>* interval3Raw = nullptr;
+    std::atomic<float>* stringLockRaw = nullptr;
 
     // MIDI state (audio thread only)
     int held[kMaxHeld] {};
     int heldCount = 0, lastNote = 40;
     std::atomic<int> currentProgram { 0 };  // read by the editor's timer
-    bool haveNote = false;
+    bool haveNote = false, lastPoly = false;
+    infrasonic::VoiceAllocator allocator;
     float bendSemis = 0.0f, inGain = 1.0f, lastFreqKnob = 0.0f;
     std::atomic<bool> midiPitchActive_ { false };  // read by the editor
+    std::atomic<bool> polyMidiActive_ { false };
+    std::atomic<bool> polyLocked_ { false };
+    std::atomic<float> voiceNotes_[VoiceAllocator::kVoices] { -1.0f, -1.0f, -1.0f };
 
     drosera::SpectrumTap tap;
     std::atomic<double> hostRate { 0.0 };
