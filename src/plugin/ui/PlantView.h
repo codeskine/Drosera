@@ -1,9 +1,11 @@
 #pragma once
-// The sundew seen from above. Each tentacle is a frequency band, and its drop of dew swells with the real sound: there is
-// no invented motion, so a silent plugin shows a still plant at rest. Holds the Feedback knob at its heart.
+// The sundew seen from above. Each tentacle is a frequency band: at rest it is short and curled, and the real sound
+// unfurls it and swells its drop of dew. There is no invented motion, so a silent plugin shows a still, closed plant.
+// Holds the Feedback knob at its heart.
 
 #include <juce_dsp/juce_dsp.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <algorithm>
 #include <array>
 #include "SpectrumBands.h"
 #include "SpectrumTap.h"
@@ -22,6 +24,17 @@ public:
 
     float level(int band) const { return levels_[(size_t) band]; }
 
+    /// Bands run in order around the leaf, the lowest at the top and clockwise, so a change of pitch moves the light
+    /// around the plant.
+    static constexpr int tentacleBand(int tentacle) { return tentacle; }
+    /// The bands holding the sounding strings' notes get a ring on their drop. -1 is no string.
+    void setVoiceBands(const std::array<int, 3>&);
+    /// What the tentacles and their drops' glow cover with every band at this amount, in the component's coordinates.
+    juce::Rectangle<float> reachAt(float amount) const;
+    /// How far the tentacle's tip stands from its root at this band amount.
+    float reach(int tentacle, float amount) const;
+    bool isMarked(int band) const { return std::find(voiceBands_.begin(), voiceBands_.end(), band) != voiceBands_.end(); }
+
     void paint(juce::Graphics&) override;
     void resized() override;
 
@@ -37,6 +50,15 @@ private:
     std::array<float, kNumBands> levels_ {}, targets_ {};
     std::array<float, kNumBands> drawn_ {};
     float pendingSeconds_ = 0.0f;  // time since the levels last moved
+
+    /// Each tentacle's shape, fixed so the plant is the same every time.
+    struct Tentacle { float angle, base, reach, curl, sway, width, drop; };
+    std::array<Tentacle, kNumBands> tentacles_ {};
+    std::array<int, 3> voiceBands_ {-1, -1, -1};
+
+    static constexpr int kSegments = 10;
+    /// The tentacle's points from root to tip at this amount, and its drop's radius.
+    float shape(int tentacle, float amount, std::array<juce::Point<float>, kSegments + 1>& points) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlantView)
 };

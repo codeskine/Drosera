@@ -13,8 +13,11 @@
 #include "PluginEditor.h"
 #include "pitch_estimator.h"
 #include "SpectrumTap.h"
+#include "ui/EchoPulse.h"
 #include "ui/PlantView.h"
 #include "ui/Readouts.h"
+#include "ui/Theme.h"
+#include "ui/ResponseArcs.h"
 #include "ui/SpectrumBands.h"
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
@@ -190,12 +193,54 @@ static void readoutTests() {
     check(is(body(false, 0.0971f, "30.0 ms"), "30.0 ms", ""), "body from the knob");
     check(echoTime(true, 0.359f, "x") == "0.36 s", "echo time with WARP");
     check(echoTime(false, 0.359f, "1.29 s") == "1.29 s", "echo time from the knob");
-    check(is(echoShaping(true, "+6.0 dB"), "+6.0 dB", ""), "echo shaping with PONG on");
-    check(is(echoShaping(false, "+6.0 dB"), "+6.0 dB", "PONG OFF"), "echo shaping with PONG off");
     check(is(interval(false, 60.0f, "+7 st"), "+7 st", ""), "interval from the knob");
     check(is(interval(true, 60.0f, "+7 st"), "C4", "MIDI"), "interval with a MIDI note");
     check(is(interval(true, -1.0f, "+7 st"), "-", "MIDI"), "interval with no note");
     check(noteName(40.0f) == "E2" && noteName(60.0f) == "C4" && noteName(69.0f) == "A4", "note names");
+    check(is(playedInterval(true, 72.0f, 84.0f, 24, "+24 st"), "+12 st", "LIMIT"), "interval held at the note limit");
+    check(is(playedInterval(true, 60.0f, 67.0f, 7, "+7 st"), "+7 st", ""), "interval played as set");
+    check(is(playedInterval(false, 72.0f, 84.0f, 24, "+24 st"), "+24 st", ""), "interval with POLY off");
+    check(is(playedInterval(true, 72.0f, -1.0f, 24, "+24 st"), "+24 st", ""), "interval of a silent voice");
+    const float triad[] = {48.0f, 55.0f, 60.0f}, gap[] = {48.0f, -1.0f, 60.0f};
+    check(chord(triad, 3) == "C3 \xc2\xb7 G3 \xc2\xb7 C4" && chord(gap, 3) == "C3 \xc2\xb7 C4", "chord names the sounding voices");
+    int nearest440 = 0;
+    for (int i = 0; i < kNumBands; ++i)
+        if (std::abs(std::log2(bandCentreHz(i) / 440.0f)) < std::abs(std::log2(bandCentreHz(nearest440) / 440.0f))) nearest440 = i;
+    check(bandOfNote(69.0f) == nearest440 && bandOfNote(16.0f) == -1, "bandOfNote");
+}
+
+static void themeTests() {
+    check(theme::fontsEmbedded(), "fontsAreEmbedded");
+    check(theme::titleFont().getTypefaceName() == "Cormorant Garamond", "titleUsesCormorant");
+    check(theme::labelFont().getTypefaceName() == "Inter", "labelsUseInter");
+}
+
+static void arcTests() {
+    using namespace arcs;
+    float band[kBandTicks], tone[kToneTicks];
+    bandArc(1000.0f, 18000.0f, band);
+    bool lowCut = true;
+    int nearFive = 0;
+    for (int i = 0; i < kBandTicks; ++i) {
+        if (bandTickHz(i) < 300.0f) lowCut = lowCut && band[i] < kBandStub + 0.1f * kBandSpan;
+        if (std::abs(std::log2(bandTickHz(i) / 5000.0f)) < std::abs(std::log2(bandTickHz(nearFive) / 5000.0f))) nearFive = i;
+    }
+    check(lowCut && band[nearFive] > kBandStub + 0.9f * kBandSpan, "bandArcFollowsFilters");
+
+    bandArc(4000.0f, 100.0f, band);
+    check(std::all_of(band, band + kBandTicks, [](float l) { return l >= kBandStub; }), "bandArcNeverVanishes");
+
+    auto peak = [&] { return toneTickHz((int) (std::max_element(tone, tone + kToneTicks) - tone)); };
+    toneArc(800.0f, tone);
+    const float step = std::log2(toneTickHz(1) / toneTickHz(0));
+    const float at800 = peak();
+    toneArc(3200.0f, tone);
+    check(std::abs(std::log2(at800 / 800.0f)) <= step && peak() > 2000.0f, "toneArcPeaksAtTone");
+
+    using pulse::Lit;
+    check(pulse::echoPulse(0.01, 0.5, false, true) == Lit::single && pulse::echoPulse(0.2, 0.5, false, true) == Lit::none
+              && pulse::echoPulse(0.51, 0.5, true, true) == Lit::right && pulse::echoPulse(1.01, 0.5, true, true) == Lit::left
+              && pulse::echoPulse(0.01, 0.5, false, false) == Lit::none, "pulseFollowsEchoTime");
 }
 
 static void plantTests() {
@@ -248,6 +293,28 @@ static void plantTests() {
         check(swing < 1.0, "plantStillWithLongBlocks");
     }
 
+    {   // Every band has its tentacle, and the strings' bands are marked.
+        // Bands run in order around the leaf, lowest at the top, so a change of pitch moves the light around the plant.
+        bool inOrder = true;
+        for (int j = 0; j < kNumBands; ++j) inOrder = inOrder && PlantView::tentacleBand(j) == j;
+        check(inOrder, "tentacleShowsItsOwnBand");
+
+        // A sounding tentacle must stand out from a silent one: on average at least five times as far from its root.
+        PlantView sized;
+        sized.setBounds(0, 0, 520, 340);
+        double ratio = 0.0;
+        for (int j = 0; j < kNumBands; ++j) ratio += sized.reach(j, 1.0f) / sized.reach(j, 0.0f);
+        ratio /= kNumBands;
+        std::printf("  sounding over silent tentacle reach: %.1f\n", ratio);
+        check(ratio >= 5.0, "soundStandsOutFromRest");
+        PlantView loud;
+        loud.setBounds(0, 0, 520, 340);
+        check(loud.getLocalBounds().toFloat().contains(loud.reachAt(1.0f)), "loudTentaclesStayInside");
+        PlantView marked;
+        marked.setVoiceBands({10, -1, 30});
+        check(marked.isMarked(10) && marked.isMarked(30) && !marked.isMarked(20), "plantMarksVoiceBands");
+    }
+
     PlantView unprepared;
     for (int i = 0; i < 30; ++i) { pushSine(); unprepared.update(tap, 0.0, dt); }
     check(unprepared.level(30) == kFloorDb, "plantRestsWithNoSampleRate");
@@ -268,6 +335,13 @@ static float parameter(juce::AudioProcessor& p, const char* id) {
     return -1.0f;
 }
 
+// Visible all the way up to the editor: isShowing() also needs a window on the desktop, which tests do not have.
+static bool shownIn(const juce::Component& editor, const juce::Component* c) {
+    for (; c != nullptr && c != &editor; c = c->getParentComponent())
+        if (!c->isVisible()) return false;
+    return c == &editor;
+}
+
 static std::unique_ptr<DroseraEditor> openEditor(juce::AudioProcessor& p) {
     return std::unique_ptr<DroseraEditor>(dynamic_cast<DroseraEditor*>(p.createEditor()));
 }
@@ -284,35 +358,78 @@ static void render(juce::AudioProcessor& p, double seconds, juce::MidiBuffer* mi
 static void editorTests() {
     constexpr float dt = 1.0f / 30.0f;
 
-    {   // The open tab lives in the plugin's state, and a bad or missing value opens Filters.
+    {   // Projects saved with tabs still load: the open tab they saved is ignored.
         std::unique_ptr<juce::AudioProcessor> first(createPluginFilter());
+        setParameter(*first, "lpf", 0.33f);
+        juce::MemoryBlock state;
+        first->getStateInformation(state);
+        auto xml = juce::AudioProcessor::getXmlFromBinary(state.getData(), (int) state.getSize());
+        xml->setAttribute("uiTab", 3);
+        juce::MemoryBlock withTab;
+        juce::AudioProcessor::copyXmlToBinary(*xml, withTab);
+        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
+        second->setStateInformation(withTab.getData(), (int) withTab.getSize());
+        auto editor = openEditor(*second);
+        check(editor->getWidth() == 900 && std::abs(parameter(*second, "lpf") - 0.33f) < 0.001f, "savedTabIsIgnored");
+    }
+
+    {   // The window scales from 75 % to 150 % with its proportions, and the scale lives in the plugin's state.
+        std::unique_ptr<juce::AudioProcessor> first(createPluginFilter());
+        setParameter(*first, "lpf", 0.33f);
         juce::MemoryBlock state;
         {
             auto editor = openEditor(*first);
-            editor->setTab(3);
+            editor->setSize(1350, 840);
             first->getStateInformation(state);
         }
         std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
         second->setStateInformation(state.getData(), (int) state.getSize());
         {
             auto reopened = openEditor(*second);
-            check(reopened->tab() == 3 && reopened->slider("volume")->getParentComponent()->isVisible(), "tabPersists");  // 3 is OUTPUT, as before PONG
+            check(reopened->getWidth() == 1350 && reopened->getHeight() == 840 && std::abs(reopened->scale() - 1.5f) < 0.001f, "scalePersists");
         }
 
-        setParameter(*first, "lpf", 0.33f);
-        first->getStateInformation(state);
         auto xml = juce::AudioProcessor::getXmlFromBinary(state.getData(), (int) state.getSize());
-        xml->setAttribute("uiTab", 99);
+        xml->setAttribute("uiScale", 9.0);
         juce::MemoryBlock bad;
         juce::AudioProcessor::copyXmlToBinary(*xml, bad);
-        xml->removeAttribute("uiTab");
+        xml->removeAttribute("uiScale");
         juce::MemoryBlock missing;
         juce::AudioProcessor::copyXmlToBinary(*xml, missing);
         std::unique_ptr<juce::AudioProcessor> third(createPluginFilter()), fourth(createPluginFilter());
         third->setStateInformation(bad.getData(), (int) bad.getSize());
         fourth->setStateInformation(missing.getData(), (int) missing.getSize());
-        check(openEditor(*third)->tab() == 0 && std::abs(parameter(*third, "lpf") - 0.33f) < 0.001f, "tabSurvivesBadState");
-        check(openEditor(*fourth)->tab() == 0 && std::abs(parameter(*fourth, "lpf") - 0.33f) < 0.001f, "tabSurvivesMissingState");
+        check(openEditor(*third)->getWidth() == 900 && std::abs(parameter(*third, "lpf") - 0.33f) < 0.001f, "scaleSurvivesBadState");
+        check(openEditor(*fourth)->getWidth() == 900 && std::abs(parameter(*fourth, "lpf") - 0.33f) < 0.001f, "scaleSurvivesMissingState");
+
+        auto editor = openEditor(*fourth);
+        editor->setBoundsConstrained({0, 0, 1000, 1000});
+        const bool proportional = std::abs(editor->getHeight() - editor->getWidth() * 560.0 / 900.0) <= 1.0;
+        editor->setBoundsConstrained({0, 0, 200, 100});
+        check(proportional && editor->getWidth() == 675 && editor->getHeight() == 420, "windowKeepsItsProportions");
+
+        // A host that sets a wider size directly, past the constrainer, must not cut the row off.
+        editor->setSize(1000, 560);
+        auto* echoCell = editor->slider("echofb")->getParentComponent();
+        const auto inWindow = editor->getLocalArea(echoCell, echoCell->getLocalBounds());
+        const float saved = dynamic_cast<EditorBridge*>(fourth.get())->uiScale();
+        check(inWindow.getBottom() <= 560 && inWindow.getRight() <= 1000 && saved >= 0.75f && saved <= 1.5f, "widerHostSizeKeepsTheRow");
+    }
+
+    {   // A host may restore state off the message thread while the window is resized.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        juce::MemoryBlock state;
+        p->getStateInformation(state);
+        auto editor = openEditor(*p);
+        std::atomic<bool> done { false };
+        std::thread host([&] { for (int i = 0; i < 2000 && !done; ++i) p->setStateInformation(state.getData(), (int) state.getSize()); });
+        for (int i = 0; i < 4000; ++i) {
+            editor->setSize(675 + (i % 8) * 96, juce::roundToInt((675 + (i % 8) * 96) * 560.0 / 900.0));
+            editor->refreshDisplay(0.0f);
+        }
+        done = true;
+        host.join();
+        check(true, "scaleSafeOffThread");
     }
 
     {   // A host may restore state off the message thread while the window reads the open tab.
@@ -328,23 +445,42 @@ static void editorTests() {
         check(true, "stateRestoredOffThreadWithWindowOpen");
     }
 
-    {   // Only the open tab's controls show; the main ones always do.
+    {   // One page: everything played live always shows, the rest is one click away in the setup panel.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         auto editor = openEditor(*p);
-        check(editor->getWidth() == 760 && editor->getHeight() == 500, "windowSize");
+        check(editor->getWidth() == 900 && editor->getHeight() == 560, "windowSize");
         editor->setVisible(true);
-        editor->setTab(2);
-        auto shown = [&](const char* id) { return editor->slider(id)->getParentComponent()->isVisible(); };
-        check(shown("echosend") && !shown("lpf") && shown("freq") && shown("body") && shown("fbgain"), "tabsShowTheirControls");
+
+        bool all = true;
+        for (const char* id : { "freq", "body", "fbgain", "hpf", "lpf", "revmix", "revdecay", "echodrive", "echotone", "echowidth",
+                                "echolevel", "echosend", "echotime", "echofb", "echopong", "echohalve", "poly", "polylock", "coupling",
+                                "interval2", "interval3", "volume", "inputgain", "midipitch", "midigate" })
+            all = all && (editor->slider(id) != nullptr || editor->toggle(id) != nullptr);
+        check(all, "everyControlHasAWidget");
         check(editor->slider("tapewow") == nullptr, "noTapeControls");
 
-        // Changes made while a control is hidden show when it returns.
-        editor->setTab(1);
-        setParameter(*p, "lpf", 0.8f);
-        editor->setTab(0);
-        check(std::abs((float) editor->slider("lpf")->getValue() - 0.8f) < 0.001f, "hiddenValuesFollow");
-        p->setCurrentProgram(2);
-        check(std::abs((float) editor->slider("lpf")->getValue() - parameter(*p, "lpf")) < 0.001f, "presetReachesHiddenControls");
+        auto showing = [&](const char* id) { return shownIn(*editor, editor->slider(id)); };
+        bool play = true;
+        for (const char* id : { "freq", "body", "fbgain", "hpf", "lpf", "revmix", "revdecay", "echosend", "echotime", "echofb",
+                                "echodrive", "echotone", "echowidth", "echolevel" })
+            play = play && showing(id);
+        setParameter(*p, "echopong", 1.0f);
+        editor->refreshDisplay(0.0f);
+        play = play && showing("echodrive") && showing("echolevel");
+        check(play && !editor->setupOpen(), "playControlsAlwaysShow");
+
+        check(!showing("coupling") && !showing("volume"), "setupPanelStartsClosed");
+        editor->setSetupOpen(true);
+        const bool opened = showing("coupling") && showing("volume") && shownIn(*editor, editor->toggle("midipitch"));
+        editor->setSetupOpen(false);
+        check(opened && !showing("coupling") && !shownIn(*editor, editor->toggle("midipitch")), "setupPanelOpensAndCloses");
+
+        // Changes made while the panel is closed show when it opens.
+        setParameter(*p, "coupling", 0.7f);
+        p->setCurrentProgram(10);
+        editor->setSetupOpen(true);
+        check(std::abs((float) editor->slider("coupling")->getValue() - parameter(*p, "coupling")) < 0.001f, "changesReachTheClosedPanel");
+        check(std::abs((float) editor->slider("lpf")->getValue() - parameter(*p, "lpf")) < 0.001f, "presetReachesEveryControl");
     }
 
     {   // MIDI: the readouts say what sounds, and the dimmed knobs stay usable.
@@ -707,51 +843,43 @@ static void editorTests() {
         check(openEditor(*p)->slider("fbgain")->getTitle() == "Feedback", "feedbackHasATitle");
     }
 
-    {   // STRINGS keeps ID 5 and PONG takes 6, though PONG is shown after ECHO: saved projects open the tab they were saved on.
+    {   // PONG's knobs stay in place in CLASSIC, dimmed and still usable; the strings' knobs dim with POLY off.
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
-        juce::MemoryBlock state;
-        {
-            auto editor = openEditor(*p);
-            editor->setVisible(true);
-            editor->setTab(5);
-            auto shown = [&](const char* id) { return editor->slider(id)->getParentComponent()->isVisible(); };
-            check(shown("coupling") && shown("interval2") && shown("interval3") && !shown("lpf"), "stringsTabShowsItsControls");
-            check(editor->tabBounds(5).getRight() <= 760 - 26, "tabsFitTheWindow");
-            check(editor->tabBounds(2).getRight() < editor->tabBounds(6).getX() && editor->tabBounds(6).getRight() < editor->tabBounds(3).getX(),
-                  "pongTabSitsAfterEcho");
-            const auto knobBounds = [&](const char* id) { return editor->slider(id)->getParentComponent()->getBounds(); };
-            check(knobBounds("interval2").getX() - knobBounds("coupling").getX() == 112, "otherTabsKeepTheirPlaces");
+        auto editor = openEditor(*p);
+        editor->setVisible(true);
+        auto cell = [&](const char* id) { return editor->slider(id)->getParentComponent(); };
+        setParameter(*p, "echopong", 0.0f);
+        editor->refreshDisplay(0.0f);
+        const bool dimmed = cell("echodrive")->getAlpha() < 1.0f && cell("echolevel")->getAlpha() < 1.0f && shownIn(*editor, cell("echodrive"))
+                            && cell("echosend")->getAlpha() == 1.0f;
+        editor->slider("echodrive")->setValue(0.8, juce::sendNotificationSync);
+        check(dimmed && std::abs(parameter(*p, "echodrive") - 0.8f) < 0.001f, "pongControlsDimInClassic");
+        setParameter(*p, "echopong", 1.0f);
+        editor->refreshDisplay(0.0f);
+        check(cell("echodrive")->getAlpha() == 1.0f && cell("echotone")->getAlpha() == 1.0f, "pongControlsLightInPong");
 
-            editor->setTab(2);
-            check(shown("echosend") && shown("echotime") && shown("echofb") && !shown("echodrive"), "echoTabShowsItsControls");
-            editor->setTab(6);
-            check(shown("echodrive") && shown("echotone") && shown("echowidth") && shown("echolevel") && !shown("echosend"), "pongTabShowsItsControls");
-            std::vector<juce::Rectangle<int>> cells;
-            for (const char* id : { "echodrive", "echotone", "echowidth", "echolevel" }) cells.push_back(knobBounds(id));
-            cells.push_back(editor->toggleBounds("echopong"));
-            bool fit = true;
-            for (size_t i = 0; i < cells.size(); ++i) {
-                fit = fit && !cells[i].isEmpty() && cells[i].getX() >= 26 && cells[i].getRight() <= 760 - 26;
-                for (size_t j = i + 1; j < cells.size(); ++j) fit = fit && !cells[i].intersects(cells[j]);
-            }
-            check(fit, "pongControlsFit");
+        setParameter(*p, "poly", 0.0f);
+        editor->setSetupOpen(true);
+        editor->refreshDisplay(0.0f);
+        const bool polyOff = cell("coupling")->getAlpha() < 1.0f && cell("volume")->getAlpha() == 1.0f;
+        setParameter(*p, "poly", 1.0f);
+        editor->refreshDisplay(0.0f);
+        check(polyOff && cell("coupling")->getAlpha() == 1.0f, "stringsDimWithPolyOff");
+        editor->setSetupOpen(false);
 
-            setParameter(*p, "echopong", 0.0f);
-            editor->refreshDisplay(0.0f);
-            check(editor->tag("echodrive") == "PONG OFF" && editor->tag("echotone") == "PONG OFF" && editor->tag("echowidth") == "PONG OFF"
-                      && editor->tag("echolevel") == "PONG OFF" && editor->slider("echolevel")->getAlpha() < 1.0f
-                      && editor->tag("echofb").isEmpty(), "shapingTagWithPongOff");
-            editor->slider("echodrive")->setValue(0.8, juce::sendNotificationSync);
-            check(std::abs(parameter(*p, "echodrive") - 0.8f) < 0.001f, "shapingStaysEditableWithPongOff");
-            setParameter(*p, "echopong", 1.0f);
-            editor->refreshDisplay(0.0f);
-            check(editor->tag("echodrive").isEmpty() && editor->tag("echotone").isEmpty() && editor->tag("echowidth").isEmpty()
-                      && editor->readout("echolevel") == "0.0 dB" && editor->slider("echotone")->getAlpha() == 1.0f, "shapingTagWithPongOn");
-            p->getStateInformation(state);
+        // The row's controls fit the window side by side, in the order of the spec.
+        std::vector<juce::Rectangle<int>> cells;
+        for (const char* id : { "hpf", "lpf", "revmix", "revdecay", "echodrive", "echotone", "echowidth", "echolevel", "echosend", "echotime", "echofb" })
+            cells.push_back(editor->getLocalArea(cell(id), cell(id)->getLocalBounds()));
+        cells.push_back(editor->getLocalArea(editor->toggle("echopong"), editor->toggle("echopong")->getLocalBounds()));
+        cells.push_back(editor->getLocalArea(editor->toggle("echohalve"), editor->toggle("echohalve")->getLocalBounds()));
+        bool fit = true;
+        for (size_t i = 0; i < cells.size(); ++i) {
+            fit = fit && !cells[i].isEmpty() && cells[i].getX() >= 0 && cells[i].getRight() <= 900 && cells[i].getBottom() <= 560;
+            for (size_t j = i + 1; j < cells.size(); ++j) fit = fit && !cells[i].intersects(cells[j]);
+            if (i > 0 && i < 11) fit = fit && cells[i].getCentreX() > cells[i - 1].getCentreX();
         }
-        std::unique_ptr<juce::AudioProcessor> second(createPluginFilter());
-        second->setStateInformation(state.getData(), (int) state.getSize());
-        check(openEditor(*second)->tab() == 6, "pongTabPersists");
+        check(fit, "rowControlsFit");
     }
 
     {   // The interval knobs show the notes the voices play when MIDI Pitch controls them.
@@ -769,6 +897,88 @@ static void editorTests() {
         check(editor->readout("interval2") == "G3" && editor->tag("interval2") == "MIDI"
               && editor->slider("interval2")->isEnabled() && editor->slider("interval2")->getAlpha() < 1.0f, "intervalReadoutFollowsMidi");
         check(editor->readout("interval3") == "-" && editor->tag("interval3") == "MIDI", "intervalWithoutANote");
+    }
+
+    {   // With POLY from the knobs, an interval beyond the note range shows what the voice really plays.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        setParameter(*p, "poly", 1.0f);
+        setParameter(*p, "freq", 1.0f);
+        setParameter(*p, "interval2", 1.0f);
+        render(*p, 0.2);
+        editor->refreshDisplay(dt);
+        check(editor->readout("interval2") == "+12 st" && editor->tag("interval2") == "LIMIT", "intervalShowsWhatSounds");
+        setParameter(*p, "freq", 0.3f);
+        setParameter(*p, "interval2", 31.0f / 48.0f);
+        render(*p, 0.2);
+        editor->refreshDisplay(dt);
+        check(editor->readout("freq").contains(juce::String::fromUTF8(" \xc2\xb7 ")), "frequencyNamesTheChord");
+    }
+
+    {   // The header: arrows step through the presets and wrap, the menu lists them all, SETUP opens the panel.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        auto editor = openEditor(*p);
+        auto& header = editor->header();
+        p->setCurrentProgram(0);
+        header.previousButton().onClick();
+        const bool wrapped = p->getCurrentProgram() == p->getNumPrograms() - 1;
+        header.nextButton().onClick();
+        check(wrapped && p->getCurrentProgram() == 0, "presetArrowsCycle");
+
+        p->setCurrentProgram(2);
+        editor->refreshDisplay(0.0f);
+        const auto menu = header.presetMenu();
+        int items = 0, ticked = -1;
+        for (juce::PopupMenu::MenuItemIterator it(menu); it.next();) {
+            if (it.getItem().isTicked) ticked = items;
+            ++items;
+        }
+        check(items == p->getNumPrograms() && ticked == 2, "presetMenuListsEveryPreset");
+
+        header.setupButton().onClick();
+        const bool opened = editor->setupOpen();
+        header.setupButton().onClick();
+        check(opened && !editor->setupOpen(), "setupFieldOpensThePanel");
+    }
+
+    {   // With MIDI Gate, a released voice falls silent, so it is neither named nor marked.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        for (const char* id : { "poly", "midipitch", "midigate" }) setParameter(*p, id, 1.0f);
+        juce::MidiBuffer chord, release;
+        for (int n : { 48, 55, 64 }) chord.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8) 100), 0);
+        release.addEvent(juce::MidiMessage::noteOff(1, 55), 0);
+        render(*p, 0.1, &chord);
+        render(*p, 0.1, &release);
+        editor->refreshDisplay(dt);
+        check(editor->readout("freq") == juce::String::fromUTF8("C3 \xc2\xb7 E4") && !editor->plant().isMarked(bandOfNote(55.0f))
+                  && editor->plant().isMarked(bandOfNote(48.0f)), "gatedReleasedVoiceIsNotNamed");
+    }
+
+    {   // A played note must stand out on the plant: bands far below it, its noise and distant harmonics, stay near rest.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 800);
+        auto editor = openEditor(*p);
+        for (const char* id : { "midipitch", "midigate" }) setParameter(*p, id, 1.0f);
+        setParameter(*p, "fbgain", 63.0f / 72.0f);  // +3 dB: the loop sings
+        juce::MidiBuffer note, none;
+        note.addEvent(juce::MidiMessage::noteOn(1, 48, (juce::uint8) 100), 0);
+        juce::AudioBuffer<float> buffer(2, 800);
+        for (int b = 0; b < 90; ++b) {  // 1.5 s, a display tick per block as at 60 Hz
+            buffer.clear();
+            p->processBlock(buffer, b == 0 ? note : none);
+            editor->refreshDisplay(1.0f / 60.0f);
+        }
+        std::vector<float> amounts;
+        for (int i = 0; i < kNumBands; ++i) amounts.push_back(bandAmount(editor->plant().level(i)));
+        const float peak = *std::max_element(amounts.begin(), amounts.end());
+        std::nth_element(amounts.begin(), amounts.begin() + kNumBands / 2, amounts.end());
+        const float median = amounts[(size_t) kNumBands / 2];
+        const auto out = [&](float above) { return (int) std::count_if(amounts.begin(), amounts.end(), [above](float a) { return a > above; }); };
+        std::printf("  played note: peak tentacle %.2f, median %.2f; out past 0.3: %d, past 0.5: %d of %d\n", peak, median, out(0.3f), out(0.5f), kNumBands);
+        check(peak > 0.6f && median < 0.1f, "playedNoteStandsOut");
     }
 
     {   // A preset chosen in the window reaches the host's own display.
@@ -891,9 +1101,11 @@ static void stateJumpTests() {
 
 int main() {
     juce::ScopedJuceInitialiser_GUI init;
+    themeTests();
     tapTests();
     bandTests();
     readoutTests();
+    arcTests();
     plantTests();
     editorTests();
     stateTests();

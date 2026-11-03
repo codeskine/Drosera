@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drosera redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --page: #0b0809; --text: #cbb9ad; --muted: #7d6e68; }
+  html, body { margin: 0; background: var(--page); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+  main { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 16px; box-sizing: border-box; }
+  #frame { border-radius: 12px; box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px #241a1c; overflow: hidden; max-width: 100%; }
+  canvas { display: block; cursor: default; touch-action: none; }
+  .bar { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; justify-content: center; }
+  .bar button { background: #171113; color: var(--text); border: 1px solid #2c2124; border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  .bar button.on { border-color: #ffc27a; color: #ffc27a; }
+</style>
+</head>
+<body>
+<main>
+  <div id="frame"><canvas id="ui"></canvas></div>
+  <div class="bar">
+    <span>Scala</span>
+    <button data-scale="0.75">75%</button><button data-scale="1" class="on">100%</button>
+    <button data-scale="1.25">125%</button><button data-scale="1.5">150%</button>
+    <span style="margin-left:12px">Trascina i knob in verticale · doppio clic per il default · il suono è simulato</span>
+  </div>
+</main>
+<script>
+// Mockup of the redesigned Drosera window. The motion is simulated from the knob values: in the plugin it comes from the real output.
+const W = 900, H = 560;
+const RED = '#d0465c', AMBER = '#ffc27a', TEXT = '#eadacd', DIM = '#9d8a83', FAINT = '#6e605c', TRACK = '#2a1f21', LINE = '#33272a';
+const canvas = document.getElementById('ui'), ctx = canvas.getContext('2d');
+let scale = 1;
+
+const presets = ['Default', 'Sub Cellar', 'Glass Wind', 'Cathedral Bloom', 'Echo Drift', 'Doppler Void', 'Dark Tide',
+  'Razor Feedback', 'Quiet Room', 'Open Fifths', 'Sympathetic', 'Chord Keys', 'Ember Pong'];
+let preset = 12, presetOpen = false;
+
+const logMap = (v, a, b) => a * Math.pow(b / a, v);
+const fmtHz = f => f >= 1000 ? (f / 1000).toFixed(f >= 10000 ? 1 : 2) + ' kHz' : Math.round(f) + ' Hz';
+const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const noteName = f => { const n = Math.round(69 + 12 * Math.log2(f / 440)); return notes[(n % 12 + 12) % 12] + (Math.floor(n / 12) - 1); };
+const pct = v => Math.round(v * 100) + ' %';
+
+const ROW = 466;
+const knobs = [
+  { id: 'freq', x: 150, y: 236, r: 48, c: RED, v: 0.42, main: true, label: 'Frequency', text: v => { const f = logMap(v, 30, 1000); return noteName(f) + ' · ' + fmtHz(f); } },
+  { id: 'body', x: 750, y: 236, r: 48, c: RED, v: 0.55, main: true, label: 'Body', text: v => logMap(v, 0.5, 100).toFixed(1) + ' ms' },
+  { id: 'hpf', x: 66, y: ROW, r: 20, c: RED, v: 0.22, label: 'Highpass', text: v => fmtHz(logMap(v, 10, 4000)) },
+  { id: 'lpf', x: 126, y: ROW, r: 20, c: RED, v: 0.72, label: 'Lowpass', text: v => fmtHz(logMap(v, 100, 18000)) },
+  { id: 'revmix', x: 206, y: ROW, r: 20, c: RED, v: 0.30, label: 'Mix', text: pct },
+  { id: 'revdecay', x: 266, y: ROW, r: 20, c: RED, v: 0.60, label: 'Decay', text: pct },
+  { id: 'echodrive', x: 360, y: ROW, r: 18, c: AMBER, v: 0.35, pong: true, label: 'Drive', text: v => '+' + (v * 12).toFixed(1) + ' dB' },
+  { id: 'echotone', x: 420, y: ROW, r: 18, c: AMBER, v: 0.50, pong: true, label: 'Tone', text: v => fmtHz(logMap(v, 200, 3200)) },
+  { id: 'echowidth', x: 480, y: ROW, r: 18, c: AMBER, v: 1.00, pong: true, label: 'Width', text: pct },
+  { id: 'echolevel', x: 540, y: ROW, r: 18, c: AMBER, v: 0.83, pong: true, label: 'Level', text: v => { const d = -30 + 36 * v; return (d > 0 ? '+' : '') + d.toFixed(1) + ' dB'; } },
+  { id: 'echosend', x: 634, y: ROW, r: 20, c: AMBER, v: 0.45, label: 'Send', text: pct },
+  { id: 'echotime', x: 694, y: ROW, r: 20, c: AMBER, v: 0.40, label: 'Time', text: v => { const s = 0.05 + 4.95 * v * v * (warp ? 0.3 : 1); return s >= 1 ? s.toFixed(2) + ' s' : Math.round(s * 1000) + ' ms'; } },
+  { id: 'echofb', x: 754, y: ROW, r: 20, c: AMBER, v: 0.50, label: 'Feedback', text: v => Math.round(v * 150) + ' %' },
+];
+knobs.forEach(k => k.def = k.v);
+const heart = { id: 'fbgain', x: 450, y: 236, r: 40, v: 0.86, def: 0.86, text: v => { const d = -60 + 72 * v; return (d > 0 ? '+' : '') + d.toFixed(1) + ' dB'; } };
+const K = id => id === 'fbgain' ? heart : knobs.find(k => k.id === id);
+
+let pong = true, warp = false, moreOpen = false;
+const morePanel = {
+  knobs: [
+    { id: 'coupling', x: 140, y: 476, r: 19, c: RED, v: 0.4, label: 'Coupling', text: pct },
+    { id: 'interval2', x: 210, y: 476, r: 19, c: RED, v: 0.646, label: 'Interval 2', text: v => { const s = Math.round(-24 + 48 * v); return (s > 0 ? '+' : '') + s + ' st'; } },
+    { id: 'interval3', x: 280, y: 476, r: 19, c: RED, v: 0.75, label: 'Interval 3', text: v => { const s = Math.round(-24 + 48 * v); return (s > 0 ? '+' : '') + s + ' st'; } },
+    { id: 'volume', x: 415, y: 476, r: 19, c: AMBER, v: 0.7, label: 'Volume', text: pct },
+    { id: 'inputgain', x: 485, y: 476, r: 19, c: AMBER, v: 0.5, label: 'Input', text: pct },
+  ],
+  toggles: [
+    { id: 'poly', x: 175, y: 418, label: 'POLY', on: false }, { id: 'polylock', x: 245, y: 418, label: 'LOCK', on: true },
+    { id: 'midipitch', x: 705, y: 456, label: 'PITCH', on: false }, { id: 'midigate', x: 785, y: 456, label: 'GATE', on: false },
+  ],
+};
+morePanel.knobs.forEach(k => k.def = k.v);
+
+// ---- simulated sound, standing in for the real spectrum
+const NB = 54, bands = new Float32Array(NB), shown = new Float32Array(NB);
+const bandHz = i => 30 * Math.pow(16000 / 30, i / (NB - 1));
+const lp4 = (f, fc) => 1 / Math.sqrt(1 + Math.pow(f / fc, 4));
+const hp4 = (f, fc) => 1 / Math.sqrt(1 + Math.pow(fc / f, 4));
+let t0 = performance.now(), lastT = t0;
+
+function simulate(t, dt) {
+  const f0 = logMap(K('freq').v, 30, 1000), fb = -60 + 72 * heart.v;
+  const drive = Math.max(0, Math.min(1, (fb + 18) / 24));
+  const hp = logMap(K('hpf').v, 10, 4000), lp = logMap(K('lpf').v, 100, 18000), rev = K('revmix').v;
+  for (let i = 0; i < NB; i++) {
+    const f = bandHz(i);
+    let e = 0;
+    for (let h = 1; h <= 24; h++) {
+      const fh = f0 * h; if (fh > 16000) break;
+      const d = Math.log2(f / fh), w = Math.exp(-d * d * 60);
+      const wob = 0.65 + 0.35 * Math.sin(t * (0.37 + h * 0.11) + h * 1.7) * Math.sin(t * 0.13 + h);
+      e += w * wob / Math.pow(h, 0.55);
+    }
+    e += rev * 0.12 * (0.6 + 0.4 * Math.sin(t * 0.5 + i));
+    bands[i] = Math.min(1, e * hp4(f, hp) * lp4(f, lp) * drive);
+  }
+  for (let i = 0; i < NB; i++) {                                         // 40 ms attack, 300 ms release
+    const k = bands[i] > shown[i] ? 1 - Math.exp(-dt / 0.04) : 1 - Math.exp(-dt / 0.3);
+    shown[i] += (bands[i] - shown[i]) * k;
+  }
+}
+
+// ---- drawing helpers
+function txt(s, x, y, size, col, align = 'center', font = 'Inter', weight = 400, spacing = 0) {
+  ctx.font = `${weight} ${size}px ${font}`; ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(s, x, y);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+}
+function textWidth(s, size, spacing) { ctx.font = `500 ${size}px Inter`; return ctx.measureText(s).width + spacing * s.length; }
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+const mix = (a, b, t) => a + (b - a) * t;
+
+// A light cartouche: a hairline pill with the group's name, and fine rules out to the group's edges
+function cartouche(name, x0, x1, y, alpha = 1) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  const cx = (x0 + x1) / 2, w = textWidth(name, 9.5, 3) + 22, h = 18;
+  ctx.strokeStyle = '#3d2f31'; ctx.lineWidth = 1;
+  roundRect(cx - w / 2, y - h / 2, w, h, h / 2); ctx.stroke();
+  ctx.strokeStyle = '#2a2022';
+  ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(cx - w / 2 - 6, y); ctx.moveTo(cx + w / 2 + 6, y); ctx.lineTo(x1, y); ctx.stroke();
+  txt(name, cx + 1.5, y + 0.5, 9.5, DIM, 'center', 'Inter', 500, 3);
+  ctx.restore();
+}
+
+const A0 = 0.75 * Math.PI, SWEEP = 1.5 * Math.PI;
+function drawKnob(k, alpha = 1) {
+  const { x, y, r, c, v } = k, main = !!k.main, w = main ? 4 : 2.6;
+  ctx.save(); ctx.globalAlpha = alpha;
+  if (main) {
+    for (let i = 0; i <= 20; i++) {
+      const a = A0 + SWEEP * i / 20, r1 = r + 9, r2 = r + (i % 5 === 0 ? 15 : 12);
+      ctx.strokeStyle = i / 20 <= v ? c + 'aa' : '#3a2c2e'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); ctx.lineTo(x + Math.cos(a) * r2, y + Math.sin(a) * r2); ctx.stroke();
+    }
+  }
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = TRACK; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.arc(x, y, r, A0, A0 + SWEEP); ctx.stroke();
+  ctx.shadowColor = c; ctx.shadowBlur = main ? 14 : 8; ctx.strokeStyle = c;
+  ctx.beginPath(); ctx.arc(x, y, r, A0, A0 + SWEEP * v); ctx.stroke();
+  ctx.shadowBlur = 0;
+  const cap = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r * 0.82);
+  cap.addColorStop(0, '#2f2426'); cap.addColorStop(1, '#151012');
+  ctx.fillStyle = cap; ctx.beginPath(); ctx.arc(x, y, r - w - 3, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = LINE; ctx.lineWidth = 1; ctx.stroke();
+  const a = A0 + SWEEP * v;
+  ctx.strokeStyle = TEXT; ctx.lineWidth = main ? 2.4 : 1.8;
+  ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * (r * 0.32), y + Math.sin(a) * (r * 0.32));
+  ctx.lineTo(x + Math.cos(a) * (r - w - 7), y + Math.sin(a) * (r - w - 7)); ctx.stroke();
+  const ly = y + r + (main ? 30 : 16);
+  txt(k.label, x, ly, main ? 14 : 11, TEXT, 'center', 'Inter', 500);
+  txt(k.text(v), x, ly + (main ? 18 : 14), main ? 12 : 10, k === drag ? c : DIM);
+  ctx.restore();
+}
+
+// ---- the plant: a sundew leaf. At rest the tentacles are short and curled; the sound unfurls them.
+let seed;
+const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+const tentacles = [];
+(function grow() {
+  seed = 17;
+  for (let j = 0; j < NB; j++) tentacles.push({
+    band: (j * 23) % NB, a: j / NB * Math.PI * 2 - Math.PI / 2 + (rnd() - 0.5) * 0.09,
+    base: 62 + rnd() * 34, reach: 70 + rnd() * 45, curl: (rnd() < 0.5 ? -1 : 1) * (0.45 + rnd() * 0.5),
+    sway: (rnd() - 0.5) * 0.25, drop: 0.7 + rnd() * 0.6, width: 2.1 + rnd() * 0.9,
+  });
+})();
+
+function leafRadius(a) { return 50 * (1 + 0.05 * Math.sin(3 * a + 1.1) + 0.035 * Math.sin(5 * a + 0.4) + 0.02 * Math.sin(8 * a)); }
+
+function drawTentacle(cx, cy, tn, lvl) {
+  // wider than tall, so the tips stay clear of the header and the bottom row
+  const r0 = leafRadius(tn.a) - 3, L = (tn.base + tn.reach * lvl) * (1 - 0.22 * Math.abs(Math.sin(tn.a))), curl = tn.curl * (1 - 0.8 * lvl);
+  const n = 10, pts = [];
+  let x = cx + Math.cos(tn.a) * r0, y = cy + Math.sin(tn.a) * r0, th = tn.a + tn.sway;
+  pts.push([x, y]);
+  for (let s = 1; s <= n; s++) {
+    const u = s / n; th = tn.a + tn.sway * (1 - u) + curl * u * u;
+    x += Math.cos(th) * L / n; y += Math.sin(th) * L / n; pts.push([x, y]);
+  }
+  ctx.lineCap = 'round';
+  for (let s = 0; s < n; s++) {                                         // tapered, darker at the base
+    const u = s / n;
+    ctx.strokeStyle = `rgba(${Math.round(mix(110, 214, u))},${Math.round(mix(26, 74, u))},${Math.round(mix(42, 98, u))},${0.7 + 0.3 * lvl})`;
+    ctx.lineWidth = mix(tn.width + 0.8 * lvl, 0.7, u);
+    ctx.beginPath(); ctx.moveTo(pts[s][0], pts[s][1]); ctx.lineTo(pts[s + 1][0], pts[s + 1][1]); ctx.stroke();
+  }
+  const [ex, ey] = pts[n], dr = (1.5 + 4.3 * lvl) * tn.drop;
+  ctx.shadowColor = AMBER; ctx.shadowBlur = 3 + 18 * lvl;
+  const g = ctx.createRadialGradient(ex - dr * 0.35, ey - dr * 0.35, dr * 0.1, ex, ey, dr);
+  g.addColorStop(0, `rgba(255,246,228,${0.5 + 0.5 * lvl})`); g.addColorStop(0.45, `rgba(255,194,122,${0.45 + 0.55 * lvl})`); g.addColorStop(1, `rgba(214,120,70,${0.35 + 0.4 * lvl})`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ex, ey, dr, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function drawPlant() {
+  const cx = heart.x, cy = heart.y;
+  tentacles.forEach(tn => drawTentacle(cx, cy, tn, shown[tn.band]));
+  // the leaf blade
+  ctx.beginPath();
+  for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2, r = leafRadius(a); i ? ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+  ctx.closePath();
+  const level = shown.reduce((s, x) => s + x, 0) / NB;
+  const g = ctx.createRadialGradient(cx - 10, cy - 12, 4, cx, cy, 56);
+  g.addColorStop(0, `rgb(${Math.round(110 + 40 * level)},30,48)`); g.addColorStop(0.6, '#4d1222'); g.addColorStop(1, 'rgba(44,11,20,0)');
+  ctx.fillStyle = g; ctx.fill();
+  // veins
+  ctx.strokeStyle = 'rgba(160,56,76,0.35)'; ctx.lineWidth = 0.8;
+  for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2 + 0.3; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * 8, cy + Math.sin(a) * 8); ctx.quadraticCurveTo(cx + Math.cos(a + 0.25) * 28, cy + Math.sin(a + 0.25) * 28, cx + Math.cos(a) * 46, cy + Math.sin(a) * 46); ctx.stroke(); }
+  // Feedback, drawn on the leaf
+  const rr = heart.r - 8;
+  ctx.lineCap = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,6,10,0.55)';
+  ctx.beginPath(); ctx.arc(cx, cy, rr, A0, A0 + SWEEP); ctx.stroke();
+  ctx.shadowColor = RED; ctx.shadowBlur = 8 + 18 * level; ctx.strokeStyle = '#ee6a80';
+  ctx.beginPath(); ctx.arc(cx, cy, rr, A0, A0 + SWEEP * heart.v); ctx.stroke(); ctx.shadowBlur = 0;
+  txt('Feedback', cx, cy - 6, 10.5, TEXT, 'center', 'Inter', 500);
+  txt(heart.text(heart.v), cx, cy + 9, 11, AMBER, 'center', 'Inter', 500);
+}
+
+function drawFilterArc() {
+  const hp = logMap(K('hpf').v, 10, 4000), lp = logMap(K('lpf').v, 100, 18000);
+  const x0 = 46, x1 = 146, y = 430, n = 26;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1), f = 10 * Math.pow(18000 / 10, t), g = hp4(f, hp) * lp4(f, lp), x = x0 + (x1 - x0) * t;
+    ctx.strokeStyle = g > 0.5 ? RED : '#6d2a37'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 3 - 14 * g); ctx.stroke();
+  }
+}
+
+function drawToneArc(alpha) {
+  const tone = logMap(K('echotone').v, 200, 3200), x0 = 404, x1 = 436, y = 432, n = 11;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1), f = 100 * Math.pow(6400 / 100, t), d = Math.log2(f / tone), g = Math.exp(-d * d * 0.9), x = x0 + (x1 - x0) * t;
+    ctx.strokeStyle = AMBER; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 2 - 9 * g); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+const modeSwitch = { x: 834, y: 458, w: 92, h: 22 };
+const warpButton = { x: 834, y: 490, w: 50, h: 18 };
+function drawEchoControls() {
+  const { x, y, w, h } = modeSwitch;
+  ctx.fillStyle = '#1e1618'; roundRect(x - w / 2, y - h / 2, w, h, h / 2); ctx.fill();
+  ctx.strokeStyle = LINE; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = pong ? '#5a3f1e' : '#4a1d27';
+  roundRect(pong ? x + 1 : x - w / 2 + 2, y - h / 2 + 2, w / 2 - 3, h - 4, (h - 4) / 2); ctx.fill();
+  txt('CLASSIC', x - w / 4, y, 8.5, pong ? DIM : TEXT, 'center', 'Inter', 500, 0.8);
+  txt('PONG', x + w / 4, y, 8.5, pong ? AMBER : DIM, 'center', 'Inter', 500, 0.8);
+  const b = warpButton;
+  ctx.fillStyle = warp ? '#5a3f1e' : '#1e1618'; roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, b.h / 2); ctx.fill();
+  ctx.strokeStyle = warp ? AMBER : LINE; ctx.stroke();
+  txt('WARP', b.x, b.y, 8.5, warp ? AMBER : DIM, 'center', 'Inter', 500, 1);
+}
+
+// Header: two twin fields either side of the name
+const presetField = { x: 40, y: 30, w: 210, h: 30 }, moreField = { x: 650, y: 30, w: 210, h: 30 };
+function field(f, caption, open) {
+  txt(caption, f.x + 2, f.y - 10, 8.5, FAINT, 'left', 'Inter', 500, 2.5);
+  ctx.fillStyle = open ? '#1f1719' : '#181214'; roundRect(f.x, f.y, f.w, f.h, 7); ctx.fill();
+  ctx.strokeStyle = open ? '#5a4436' : LINE; ctx.lineWidth = 1; ctx.stroke();
+}
+function drawHeader() {
+  txt('DROSERA', 450, 46, 26, '#e6d4c6', 'center', 'Cormorant Garamond', 500, 9);
+  const p = presetField;
+  field(p, 'PRESET', presetOpen);
+  txt('‹', p.x + 15, p.y + p.h / 2, 16, DIM); txt('›', p.x + p.w - 15, p.y + p.h / 2, 16, DIM);
+  ctx.strokeStyle = LINE; ctx.beginPath(); ctx.moveTo(p.x + 30, p.y + 6); ctx.lineTo(p.x + 30, p.y + p.h - 6); ctx.moveTo(p.x + p.w - 30, p.y + 6); ctx.lineTo(p.x + p.w - 30, p.y + p.h - 6); ctx.stroke();
+  txt(presets[preset], p.x + p.w / 2 - 6, p.y + p.h / 2 + 0.5, 12.5, TEXT, 'center', 'Inter', 500);
+  txt('▾', p.x + p.w - 44, p.y + p.h / 2, 10, DIM);
+  const m = moreField;
+  field(m, 'SETUP', moreOpen);
+  txt('Strings · Output · MIDI', m.x + 14, m.y + m.h / 2 + 0.5, 12, moreOpen ? AMBER : TEXT, 'left', 'Inter', 500);
+  txt(moreOpen ? '▴' : '▾', m.x + m.w - 16, m.y + m.h / 2, 10, DIM);
+}
+
+function drawPresetList() {
+  const p = presetField, top = p.y + p.h + 6, ih = 24, h = presets.length * ih + 10;
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 24;
+  ctx.fillStyle = '#1b1416'; roundRect(p.x, top, p.w, h, 8); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#3a2c2e'; ctx.stroke();
+  presets.forEach((name, i) => {
+    const y = top + 5 + i * ih;
+    if (i === preset) { ctx.fillStyle = '#2a1d20'; roundRect(p.x + 4, y, p.w - 8, ih, 5); ctx.fill(); }
+    txt(name, p.x + 16, y + ih / 2, 12, i === preset ? AMBER : TEXT, 'left');
+  });
+}
+
+function drawMore() {
+  const top = 368;
+  ctx.fillStyle = 'rgba(11,8,9,0.6)'; ctx.fillRect(0, 70, W, top - 70);
+  const g = ctx.createLinearGradient(0, top, 0, H); g.addColorStop(0, '#1b1315'); g.addColorStop(1, '#140e10');
+  ctx.fillStyle = g; ctx.fillRect(0, top, W, H - top);
+  ctx.strokeStyle = LINE; ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(W, top); ctx.stroke();
+  cartouche('STRINGS', 100, 320, 392); cartouche('OUTPUT', 375, 525, 392); cartouche('MIDI', 660, 830, 392);
+  morePanel.toggles.forEach(tg => {
+    ctx.fillStyle = tg.on ? '#4a1d27' : '#1e1618'; roundRect(tg.x - 28, tg.y - 11, 56, 22, 11); ctx.fill();
+    ctx.strokeStyle = tg.on ? RED : LINE; ctx.stroke();
+    txt(tg.label, tg.x, tg.y, 9.5, tg.on ? TEXT : DIM, 'center', 'Inter', 500, 1);
+  });
+  const polyOn = morePanel.toggles[0].on;
+  morePanel.knobs.forEach(k => drawKnob(k, k.id.startsWith('interval') || k.id === 'coupling' ? (polyOn ? 1 : 0.35) : 1));
+}
+
+function frame(now) {
+  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  simulate((now - t0) / 1000, dt);
+  ctx.setTransform(scale * devicePixelRatio, 0, 0, scale * devicePixelRatio, 0, 0);
+  const bg = ctx.createRadialGradient(450, 240, 40, 450, 280, 560);
+  bg.addColorStop(0, '#1e1416'); bg.addColorStop(1, '#0f0a0b');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  drawPlant();
+  knobs.filter(k => !k.pong).forEach(k => drawKnob(k));
+  knobs.filter(k => k.pong).forEach(k => drawKnob(k, pong ? 1 : 0.35));
+  drawFilterArc(); drawToneArc(pong ? 1 : 0.35); drawEchoControls();
+  cartouche('FILTER', 44, 148, 534); cartouche('REVERB', 184, 288, 534);
+  cartouche('PONG', 340, 560, 534, pong ? 1 : 0.4); cartouche('ECHO', 612, 866, 534);
+  if (moreOpen) drawMore();
+  drawHeader();
+  if (presetOpen) drawPresetList();
+  requestAnimationFrame(frame);
+}
+
+// ---- interaction
+let drag = null, dragY = 0, dragV = 0;
+const point = e => { const b = canvas.getBoundingClientRect(); return { x: (e.clientX - b.left) / b.width * W, y: (e.clientY - b.top) / b.height * H }; };
+const inside = (p, o) => Math.abs(p.x - o.x) <= o.w / 2 && Math.abs(p.y - o.y) <= o.h / 2;
+const inRect = (p, f) => p.x >= f.x && p.x <= f.x + f.w && p.y >= f.y && p.y <= f.y + f.h;
+function knobAt(p) {
+  const list = moreOpen ? morePanel.knobs : [...knobs, heart];
+  return list.find(k => Math.hypot(p.x - k.x, p.y - k.y) <= k.r + 8) || null;
+}
+canvas.addEventListener('pointerdown', e => {
+  const p = point(e);
+  if (presetOpen) {
+    const top = presetField.y + presetField.h + 11, i = Math.floor((p.y - top) / 24);
+    if (p.x >= presetField.x && p.x <= presetField.x + presetField.w && i >= 0 && i < presets.length) preset = i;
+    presetOpen = false; return;
+  }
+  if (inRect(p, presetField)) {
+    if (p.x < presetField.x + 30) preset = (preset + presets.length - 1) % presets.length;
+    else if (p.x > presetField.x + presetField.w - 30) preset = (preset + 1) % presets.length;
+    else presetOpen = true;
+    return;
+  }
+  if (inRect(p, moreField)) { moreOpen = !moreOpen; return; }
+  if (moreOpen) {
+    if (p.y < 368) { moreOpen = false; return; }
+    const tg = morePanel.toggles.find(t => Math.abs(p.x - t.x) < 30 && Math.abs(p.y - t.y) < 12);
+    if (tg) { tg.on = !tg.on; return; }
+  } else {
+    if (inside(p, modeSwitch)) { pong = p.x > modeSwitch.x; return; }
+    if (inside(p, warpButton)) { warp = !warp; return; }
+  }
+  const k = knobAt(p);
+  if (k) { drag = k; dragY = e.clientY; dragV = k.v; canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'ns-resize'; }
+});
+canvas.addEventListener('pointermove', e => {
+  const p = point(e);
+  if (!drag) { canvas.style.cursor = knobAt(p) ? 'ns-resize' : (inRect(p, presetField) || inRect(p, moreField) || inside(p, modeSwitch) || inside(p, warpButton)) ? 'pointer' : 'default'; return; }
+  const b = canvas.getBoundingClientRect(), fine = e.shiftKey ? 0.2 : 1;
+  drag.v = Math.max(0, Math.min(1, dragV + (dragY - e.clientY) / (220 * b.width / W) * fine));
+});
+canvas.addEventListener('pointerup', () => { drag = null; canvas.style.cursor = 'default'; });
+canvas.addEventListener('dblclick', e => { const k = knobAt(point(e)); if (k) k.v = k.def; });
+canvas.addEventListener('wheel', e => { const k = knobAt(point(e)); if (!k) return; e.preventDefault(); k.v = Math.max(0, Math.min(1, k.v - e.deltaY * 0.0008)); }, { passive: false });
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') presetOpen = moreOpen = false; });
+document.addEventListener('pointerdown', e => { if (e.target !== canvas) presetOpen = false; });
+
+function setScale(s) {
+  scale = s;
+  canvas.width = W * s * devicePixelRatio; canvas.height = H * s * devicePixelRatio;
+  canvas.style.width = `min(${W * s}px, calc(100vw - 32px))`; canvas.style.height = 'auto';
+  document.querySelectorAll('[data-scale]').forEach(b => b.classList.toggle('on', +b.dataset.scale === s));
+}
+document.querySelectorAll('[data-scale]').forEach(b => b.onclick = () => setScale(+b.dataset.scale));
+setScale(1);
+document.fonts.ready.then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>

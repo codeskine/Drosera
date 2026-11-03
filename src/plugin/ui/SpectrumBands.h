@@ -7,11 +7,18 @@
 namespace drosera {
 
 constexpr int kNumBands = 54;
-constexpr float kFloorDb = -72.0f;
+constexpr float kFloorDb = -54.0f;  // lower, the loop's noise and far harmonics kept every tentacle half open
 
 /// Log-spaced from 30 Hz to 16 kHz.
 inline float bandCentreHz(int band) {
     return 30.0f * std::pow(16000.0f / 30.0f, (float) band / (float) (kNumBands - 1));
+}
+
+/// The band nearest a note's fundamental, or -1 when it falls outside the bands.
+inline int bandOfNote(float midiNote) {
+    const float hz = 440.0f * std::pow(2.0f, (midiNote - 69.0f) / 12.0f);
+    if (hz < 30.0f || hz > 16000.0f) return -1;
+    return (int) std::lround(std::log(hz / 30.0f) / std::log(16000.0f / 30.0f) * (float) (kNumBands - 1));
 }
 
 /// magnitudes: unnormalised |X[k]| of a Hann-windowed FFT, k = 0..fftSize/2. A full-scale sine gives 0 dBFS. A band with

@@ -8,10 +8,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 ### Added
 
 - Three-string polyphony: up to three notes at once as separate feedback loops, with Coupling between them.
-- The STRINGS tab, with POLY, LOCK, Coupling, Interval 2 and Interval 3. LOCK chooses between a tuned chord and the free drone.
+- POLY, LOCK, Coupling, Interval 2 and Interval 3. LOCK chooses between a tuned chord and the free drone.
 - Three presets: Open Fifths, Sympathetic and Chord Keys.
-- Echo Pong: a second echo, off by default, whose repeats bounce between left and right and saturate, with PONG, Drive, Tone, Width and Level in its own PONG tab.
+- Echo Pong: a second echo, off by default, whose repeats bounce between left and right and saturate, with PONG, Drive, Tone, Width and Level.
 - The Ember Pong preset.
+
+### Changed
+
+- A new window, on one page with no tabs: the plant in the centre with Frequency and Body beside it, one row of FILTER,
+  REVERB, PONG and ECHO below, and a SETUP panel for Strings, Output and MIDI. Red marks the controls inside the
+  feedback loop, amber those after it.
+- The plant is drawn as a sundew whose tentacles unfurl with the sound, and marks the strings' notes under POLY.
+- An arc over Highpass and Lowpass draws the band that survives in the loop, and one over Tone draws the echo's band-pass.
+  A dot beside Echo Time blinks at the real time between repeats.
+- The window scales from 75 % to 150 %, and the scale is saved with the project in place of the open tab.
+- Interval readouts show the interval a voice really plays when the note range holds it back, tagged LIMIT.
+- The interface's fonts, Inter and Cormorant Garamond, are embedded, under the SIL Open Font License.
 
 ### Fixed
 

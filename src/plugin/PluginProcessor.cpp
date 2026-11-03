@@ -228,14 +228,16 @@ public:
 
     void getStateInformation(juce::MemoryBlock& dest) override {
         auto state = apvts.copyState();
-        state.setProperty(kTabProperty, uiTab.load(), nullptr);
+        state.setProperty(kScaleProperty, uiScale_.load(), nullptr);
         if (auto xml = state.createXml()) copyXmlToBinary(*xml, dest);
     }
 
     void setStateInformation(const void* data, int size) override {
         if (auto xml = getXmlFromBinary(data, size))
             if (xml->hasTagName(apvts.state.getType())) {
-                uiTab.store(xml->getIntAttribute(kTabProperty, 0));  // an atomic: hosts may call this off the message thread
+                // An atomic: hosts may call this off the message thread. A missing or damaged scale opens at 100 %.
+                const double scale = xml->getDoubleAttribute(kScaleProperty, 1.0);
+                uiScale_.store(scale >= 0.75 && scale <= 1.5 ? (float) scale : 1.0f);
                 apvts.replaceState(juce::ValueTree::fromXml(*xml));
                 currentProgram = juce::jlimit(0, getNumPrograms() - 1, (int) apvts.state.getProperty("program", 0));
                 stateJump.store(true);  // a project must load onto the same drone every time: no glide from the defaults
@@ -248,15 +250,18 @@ private:
     float soundingNote() const override { return core->PublishedNote(); }
     bool polyMidiActive() const override { return polyMidiActive_.load(); }
     float voiceNote(int voice) const override { return voiceNotes_[voice].load(); }
+    float publishedNote(int voice) const override { return core->PublishedNote((size_t) voice); }
+    bool polyRunning() const override { return polyRaw->load() > 0.5f; }
     float bodySeconds() const override { return core->PublishedBodySeconds(); }
     float echoSeconds() const override { return DroseraCore::EchoTimeSeconds(raw[DroseraCore::EchoTime]->load(), halveRaw->load() > 0.5f); }
     double hostSampleRate() const override { return hostRate.load(); }
     drosera::SpectrumTap& spectrumTap() override { return tap; }
-    int openTab() const override { return uiTab.load(); }
-    void setOpenTab(int index) override { uiTab.store(index); }
+    float uiScale() const override { return uiScale_.load(); }
+    void setUiScale(float scale) override { uiScale_.store(scale); }
+
+    static constexpr const char* kScaleProperty = "uiScale";
 
     static constexpr int kMaxChunk = 1024;
-    static constexpr const char* kTabProperty = "uiTab";
     static constexpr size_t kPrime = 256;
     static constexpr int kMaxHeld = 16;
 
@@ -300,7 +305,7 @@ private:
         midiPitchActive_.store(pitchOn);
         polyMidiActive_.store(polyMidi);
         for (int v = 0; v < VoiceAllocator::kVoices; ++v)
-            voiceNotes_[v].store(polyMidi && allocator.Note(v) != VoiceAllocator::kNoNote
+            voiceNotes_[v].store(polyMidi && allocator.Note(v) != VoiceAllocator::kNoNote && (!gateOn || allocator.Held(v))  // a gated voice is silent once released
                                      ? juce::jlimit(16.0f, 84.0f, (float) allocator.Note(v) + bendSemis) : -1.0f);
 
         if (!polyMidi) {
@@ -486,7 +491,7 @@ private:
 
     drosera::SpectrumTap tap;
     std::atomic<double> hostRate { 0.0 };
-    std::atomic<int> uiTab { 0 };
+    std::atomic<float> uiScale_ { 1.0f };
 
     // Sample-rate bridging state
     double ratio = 1.0, inRatio = 1.0;

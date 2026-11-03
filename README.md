@@ -1,12 +1,12 @@
 # Drosera
 
-![Drosera's interface: a sundew whose tentacles show the sound's spectrum, with Feedback at its heart](docs/images/drosera.png)
+![Drosera's window: a sundew whose tentacles show the sound's spectrum, Feedback at its heart, Frequency and Body beside it, and one row of filter, reverb and echo controls below](docs/images/drosera.png)
 
 A feedback drone synth, as a VST3 plugin for macOS 11 or newer, on Apple silicon and Intel.
 
 Drosera makes sound on its own: a noise floor feeds two string resonators inside a saturating loop, and you steer
-what the loop settles on. Play it with its knobs, excite it with audio, or put it on a note with MIDI. It comes with
-15 presets.
+what the loop settles on. Play it with its knobs, excite it with audio, or put it on a note with MIDI, up to three
+notes at once. It comes with 16 presets.
 
 ## Install
 
@@ -23,6 +23,12 @@ xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Drosera.vst3
 ```
 
 ## Using it
+
+Everything is on one page. In the middle, a sundew shows the sound's real spectrum: each tentacle is a frequency band,
+from the lowest at the top, clockwise, and it unfurls as its band sounds. Feedback sits at its heart, with Frequency and
+Body beside it. Below, one row holds the filters, the reverb and the echo, with its PONG controls. Red controls are
+inside the feedback loop and change what the drone sustains; amber ones come after it and colour what comes out.
+Strings, Output and MIDI open from the SETUP field. Drag the window's corner to scale it from 75 % to 150 %.
 
 See the [manual](docs/MANUAL.md) for every control, MIDI, and the known limits.
 

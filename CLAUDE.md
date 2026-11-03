@@ -37,9 +37,10 @@ tools/hardware-comparison/check_reference.sh build/render_cli
 | `src/plugin/PluginEditor.*` | The window: assembles the interface and runs its timer |
 | `src/plugin/EditorBridge.h` | What the editor reads from the processor, beyond parameters |
 | `src/plugin/SpectrumTap.h` | Lock-free FIFO from the audio thread to the display |
-| `src/plugin/ui/` | Theme, knob drawing, plant, tabs. `SpectrumBands.h` and `Readouts.h` have no JUCE, so tests use them alone |
+| `src/plugin/ui/` | Theme and fonts, knob drawing, plant, header, control row, setup panel. `SpectrumBands.h`, `Readouts.h`, `ResponseArcs.h` and `EchoPulse.h` have no JUCE, so tests use them alone |
 | `src/plugin/Presets.h` | Factory presets, plain C++ so tests can use them |
 | `tests/` | `render_test`, `voice_allocator_test`, `ui_test`, `plugin_host_test`, `editor_snapshot` (draws the window to a PNG), measuring tools |
+| `assets/fonts/` | The interface's fonts, embedded as binary data, with their licences |
 | `third_party/` | Vendored DaisySP |
 | `tools/hardware-comparison/` | Comparison against a real unit, and the reference checksums |
 | `docs/superpowers/` | Design specs and implementation plans |
