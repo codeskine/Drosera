@@ -248,6 +248,8 @@ private:
     float soundingNote() const override { return core->PublishedNote(); }
     bool polyMidiActive() const override { return polyMidiActive_.load(); }
     float voiceNote(int voice) const override { return voiceNotes_[voice].load(); }
+    float publishedNote(int voice) const override { return core->PublishedNote((size_t) voice); }
+    bool polyRunning() const override { return polyRaw->load() > 0.5f; }
     float bodySeconds() const override { return core->PublishedBodySeconds(); }
     float echoSeconds() const override { return DroseraCore::EchoTimeSeconds(raw[DroseraCore::EchoTime]->load(), halveRaw->load() > 0.5f); }
     double hostSampleRate() const override { return hostRate.load(); }

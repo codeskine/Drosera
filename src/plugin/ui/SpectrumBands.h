@@ -14,6 +14,13 @@ inline float bandCentreHz(int band) {
     return 30.0f * std::pow(16000.0f / 30.0f, (float) band / (float) (kNumBands - 1));
 }
 
+/// The band nearest a note's fundamental, or -1 when it falls outside the bands.
+inline int bandOfNote(float midiNote) {
+    const float hz = 440.0f * std::pow(2.0f, (midiNote - 69.0f) / 12.0f);
+    if (hz < 30.0f || hz > 16000.0f) return -1;
+    return (int) std::lround(std::log(hz / 30.0f) / std::log(16000.0f / 30.0f) * (float) (kNumBands - 1));
+}
+
 /// magnitudes: unnormalised |X[k]| of a Hann-windowed FFT, k = 0..fftSize/2. A full-scale sine gives 0 dBFS. A band with
 /// no bin inside it, as low bands are narrower than a bin, takes the nearest bin. Bands above Nyquist stay at rest.
 inline void computeBands(const float* magnitudes, int fftSize, double sampleRate, float* outDb) {

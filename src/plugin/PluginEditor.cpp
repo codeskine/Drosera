@@ -68,18 +68,28 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
     plant_.setFeedbackText(apvts_.getParameter("fbgain")->getCurrentValueAsText());
 
     const bool midi = bridge_.midiPitchActive();
+    const bool polyMidi = bridge_.polyMidiActive();
     const auto frequency = drosera::readouts::frequency(midi, bridge_.soundingNote(), frequency_.parameter().getCurrentValueAsText().toStdString());
     const auto body = drosera::readouts::body(bridge_.bodySnapped(), bridge_.bodySeconds(), body_.parameter().getCurrentValueAsText().toStdString());
-    frequency_.show(frequency.value, frequency.tag);
+    if (bridge_.polyRunning()) {
+        float notes[3];
+        for (int v = 0; v < 3; ++v) notes[v] = polyMidi ? bridge_.voiceNote(v) : bridge_.publishedNote(v);
+        frequency_.show(juce::String::fromUTF8(drosera::readouts::chord(notes, 3).c_str()), frequency.tag);
+    } else {
+        frequency_.show(frequency.value, frequency.tag);
+    }
     body_.show(body.value, body.tag);
 
     const bool warp = apvts_.getRawParameterValue("echohalve")->load() > 0.5f;
     const bool pong = apvts_.getRawParameterValue("echopong")->load() > 0.5f;
-    const bool polyMidi = bridge_.polyMidiActive();
     for (const auto& [id, knob] : tabs_.knobs()) {
         const auto text = knob->parameter().getCurrentValueAsText();
         if (id == "interval2" || id == "interval3") {
-            const auto interval = drosera::readouts::interval(polyMidi, bridge_.voiceNote(id == "interval2" ? 1 : 2), text.toStdString());
+            const int voice = id == "interval2" ? 1 : 2;
+            const int semitones = juce::roundToInt(knob->parameter().convertFrom0to1(knob->parameter().getValue()));
+            const auto interval = polyMidi ? drosera::readouts::interval(true, bridge_.voiceNote(voice), text.toStdString())
+                                           : drosera::readouts::playedInterval(bridge_.polyRunning(), bridge_.publishedNote(0),
+                                                                               bridge_.publishedNote(voice), semitones, text.toStdString());
             knob->show(interval.value, interval.tag);
             continue;
         }

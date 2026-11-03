@@ -198,6 +198,16 @@ static void readoutTests() {
     check(is(interval(true, 60.0f, "+7 st"), "C4", "MIDI"), "interval with a MIDI note");
     check(is(interval(true, -1.0f, "+7 st"), "-", "MIDI"), "interval with no note");
     check(noteName(40.0f) == "E2" && noteName(60.0f) == "C4" && noteName(69.0f) == "A4", "note names");
+    check(is(playedInterval(true, 72.0f, 84.0f, 24, "+24 st"), "+12 st", "LIMIT"), "interval held at the note limit");
+    check(is(playedInterval(true, 60.0f, 67.0f, 7, "+7 st"), "+7 st", ""), "interval played as set");
+    check(is(playedInterval(false, 72.0f, 84.0f, 24, "+24 st"), "+24 st", ""), "interval with POLY off");
+    check(is(playedInterval(true, 72.0f, -1.0f, 24, "+24 st"), "+24 st", ""), "interval of a silent voice");
+    const float triad[] = {48.0f, 55.0f, 60.0f}, gap[] = {48.0f, -1.0f, 60.0f};
+    check(chord(triad, 3) == "C3 \xc2\xb7 G3 \xc2\xb7 C4" && chord(gap, 3) == "C3 \xc2\xb7 C4", "chord names the sounding voices");
+    int nearest440 = 0;
+    for (int i = 0; i < kNumBands; ++i)
+        if (std::abs(std::log2(bandCentreHz(i) / 440.0f)) < std::abs(std::log2(bandCentreHz(nearest440) / 440.0f))) nearest440 = i;
+    check(bandOfNote(69.0f) == nearest440 && bandOfNote(16.0f) == -1, "bandOfNote");
 }
 
 static void arcTests() {
@@ -799,6 +809,23 @@ static void editorTests() {
         check(editor->readout("interval2") == "G3" && editor->tag("interval2") == "MIDI"
               && editor->slider("interval2")->isEnabled() && editor->slider("interval2")->getAlpha() < 1.0f, "intervalReadoutFollowsMidi");
         check(editor->readout("interval3") == "-" && editor->tag("interval3") == "MIDI", "intervalWithoutANote");
+    }
+
+    {   // With POLY from the knobs, an interval beyond the note range shows what the voice really plays.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        setParameter(*p, "poly", 1.0f);
+        setParameter(*p, "freq", 1.0f);
+        setParameter(*p, "interval2", 1.0f);
+        render(*p, 0.2);
+        editor->refreshDisplay(dt);
+        check(editor->readout("interval2") == "+12 st" && editor->tag("interval2") == "LIMIT", "intervalShowsWhatSounds");
+        setParameter(*p, "freq", 0.3f);
+        setParameter(*p, "interval2", 31.0f / 48.0f);
+        render(*p, 0.2);
+        editor->refreshDisplay(dt);
+        check(editor->readout("freq").contains(juce::String::fromUTF8(" \xc2\xb7 ")), "frequencyNamesTheChord");
     }
 
     {   // A preset chosen in the window reaches the host's own display.
