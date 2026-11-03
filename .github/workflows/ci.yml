@@ -22,7 +22,8 @@ jobs:
     env:
       PLUGINVAL_VERSION: v1.0.4
       VST3: build/Drosera_artefacts/Release/VST3/Drosera.vst3
-      CAN_NOTARIZE: ${{ secrets.APPLE_ID != '' }}
+      # Any signing secret means signing is wanted: build_pkg.sh then fails unless all are there.
+      CAN_NOTARIZE: ${{ secrets.APPLE_CERTIFICATE != '' || secrets.APPLE_CERTIFICATE_PASSWORD != '' || secrets.APPLE_ID != '' || secrets.APPLE_TEAM_ID != '' || secrets.APPLE_APP_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -108,6 +109,7 @@ jobs:
             DEVELOPER_ID_APPLICATION=$(sed -nE 's/.*"(Developer ID Application: [^"]*)".*/\1/p' <<< "$identities" | head -1)
             DEVELOPER_ID_INSTALLER=$(sed -nE 's/.*"(Developer ID Installer: [^"]*)".*/\1/p' <<< "$identities" | head -1)
             export DEVELOPER_ID_APPLICATION DEVELOPER_ID_INSTALLER
+            export REQUIRE_SIGNED=1
           else
             unset APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD
           fi

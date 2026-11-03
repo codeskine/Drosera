@@ -67,8 +67,11 @@ if [ -n "$vst3" ]; then
 fi
 
 # A signed package must be signed for installation, notarized and stapled, with every bundle on the hardened runtime.
+# REQUIRE_SIGNED=1, set by CI whenever signing secrets exist, refuses an unsigned package.
 signature=$(pkgutil --check-signature "$package" 2>&1 || true)
-if [[ "$signature" != *"no signature"* ]]; then
+if [[ "$signature" == *"no signature"* ]]; then
+    [ "${REQUIRE_SIGNED:-0}" = 1 ] && fail "the package is not signed, and REQUIRE_SIGNED=1"
+else
     [[ "$signature" == *"Developer ID Installer"* ]] || fail "the package is not signed with Developer ID Installer"
     spctl --assess --type install -vv "$package" 2>&1 | grep -q 'source=Notarized Developer ID' \
         || fail "spctl does not accept the package as notarized"

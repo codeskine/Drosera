@@ -127,6 +127,17 @@ else
     fail unsigned_package_has_no_signature "the unsigned package carries a signature, or check_pkg.sh rejects it"
 fi
 
+# require_signed_rejects_unsigned
+if [ ! -f "$good" ]; then
+    fail require_signed_rejects_unsigned "no good package to check"
+elif REQUIRE_SIGNED=1 "$check" "$good" > /dev/null 2> "$tmp/require.err"; then
+    fail require_signed_rejects_unsigned "check_pkg.sh accepted an unsigned package with REQUIRE_SIGNED=1"
+elif ! grep -q 'not signed' "$tmp/require.err"; then
+    fail require_signed_rejects_unsigned "the error does not say not signed: $(cat "$tmp/require.err")"
+else
+    pass require_signed_rejects_unsigned
+fi
+
 # missing_au
 mkdir -p "$tmp/no-au"
 ditto "$artefacts/VST3" "$tmp/no-au/VST3"
