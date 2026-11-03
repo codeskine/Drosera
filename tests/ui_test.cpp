@@ -300,6 +300,9 @@ static void plantTests() {
         bool permutation = true;
         for (int i = 0; i < kNumBands; ++i) permutation = permutation && seen[(size_t) i] == i;
         check(permutation, "tentaclesCoverEveryBand");
+        PlantView loud;
+        loud.setBounds(0, 0, 520, 340);
+        check(loud.getLocalBounds().toFloat().contains(loud.reachAt(1.0f)), "loudTentaclesStayInside");
         PlantView marked;
         marked.setVoiceBands({10, -1, 30});
         check(marked.isMarked(10) && marked.isMarked(30) && !marked.isMarked(20), "plantMarksVoiceBands");
@@ -397,6 +400,13 @@ static void editorTests() {
         const bool proportional = std::abs(editor->getHeight() - editor->getWidth() * 560.0 / 900.0) <= 1.0;
         editor->setBoundsConstrained({0, 0, 200, 100});
         check(proportional && editor->getWidth() == 675 && editor->getHeight() == 420, "windowKeepsItsProportions");
+
+        // A host that sets a wider size directly, past the constrainer, must not cut the row off.
+        editor->setSize(1000, 560);
+        auto* echoCell = editor->slider("echofb")->getParentComponent();
+        const auto inWindow = editor->getLocalArea(echoCell, echoCell->getLocalBounds());
+        const float saved = dynamic_cast<EditorBridge*>(fourth.get())->uiScale();
+        check(inWindow.getBottom() <= 560 && inWindow.getRight() <= 1000 && saved >= 0.75f && saved <= 1.5f, "widerHostSizeKeepsTheRow");
     }
 
     {   // A host may restore state off the message thread while the window is resized.
@@ -923,6 +933,21 @@ static void editorTests() {
         const bool opened = editor->setupOpen();
         header.setupButton().onClick();
         check(opened && !editor->setupOpen(), "setupFieldOpensThePanel");
+    }
+
+    {   // With MIDI Gate, a released voice falls silent, so it is neither named nor marked.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        p->prepareToPlay(48000.0, 512);
+        auto editor = openEditor(*p);
+        for (const char* id : { "poly", "midipitch", "midigate" }) setParameter(*p, id, 1.0f);
+        juce::MidiBuffer chord, release;
+        for (int n : { 48, 55, 64 }) chord.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8) 100), 0);
+        release.addEvent(juce::MidiMessage::noteOff(1, 55), 0);
+        render(*p, 0.1, &chord);
+        render(*p, 0.1, &release);
+        editor->refreshDisplay(dt);
+        check(editor->readout("freq") == juce::String::fromUTF8("C3 \xc2\xb7 E4") && !editor->plant().isMarked(bandOfNote(55.0f))
+                  && editor->plant().isMarked(bandOfNote(48.0f)), "gatedReleasedVoiceIsNotNamed");
     }
 
     {   // A preset chosen in the window reaches the host's own display.

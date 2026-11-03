@@ -28,6 +28,8 @@ public:
     static constexpr int tentacleBand(int tentacle) { return (tentacle * 23) % kNumBands; }
     /// The bands holding the sounding strings' notes get a ring on their drop. -1 is no string.
     void setVoiceBands(const std::array<int, 3>&);
+    /// What the tentacles and their drops' glow cover with every band at this amount, in the component's coordinates.
+    juce::Rectangle<float> reachAt(float amount) const;
     bool isMarked(int band) const { return std::find(voiceBands_.begin(), voiceBands_.end(), band) != voiceBands_.end(); }
 
     void paint(juce::Graphics&) override;
@@ -50,6 +52,10 @@ private:
     struct Tentacle { float angle, base, reach, curl, sway, width, drop; };
     std::array<Tentacle, kNumBands> tentacles_ {};
     std::array<int, 3> voiceBands_ {-1, -1, -1};
+
+    static constexpr int kSegments = 10;
+    /// The tentacle's points from root to tip at this amount, and its drop's radius.
+    float shape(int tentacle, float amount, std::array<juce::Point<float>, kSegments + 1>& points) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlantView)
 };

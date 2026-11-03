@@ -8,7 +8,6 @@ namespace drosera {
 namespace {
 constexpr float kRepaintChange = 0.002f;  // of a tentacle's travel
 constexpr float kStoppedAfterSeconds = 0.2f;  // longer than an 8192-sample block at 44.1 kHz
-constexpr int kSegments = 10;
 constexpr float kFeedbackRing = 32.0f;
 
 /// The leaf blade's slightly irregular rim.
@@ -96,6 +95,42 @@ void PlantView::resized() {
     feedback_.setBounds(juce::Rectangle<int>(64, 64).withCentre(getLocalBounds().getCentre()));
 }
 
+float PlantView::shape(int tentacle, float amount, std::array<juce::Point<float>, kSegments + 1>& points) const {
+    const auto& t = tentacles_[(size_t) tentacle];
+    const auto centre = getLocalBounds().getCentre().toFloat();
+    const float root = leafRadius(t.angle) - 3.0f, radius = (1.5f + 4.3f * amount) * t.drop;
+    const float curl = t.curl * (1.0f - 0.8f * amount);
+    auto grow = [&](float length) {
+        points[0] = centre.getPointOnCircumference(root, t.angle + juce::MathConstants<float>::halfPi);
+        for (int k = 1; k <= kSegments; ++k) {
+            const float u = (float) k / (float) kSegments;
+            const float heading = t.angle + t.sway * (1.0f - u) + curl * u * u;
+            points[(size_t) k] = points[(size_t) k - 1] + juce::Point<float>(std::cos(heading), std::sin(heading)) * (length / (float) kSegments);
+        }
+    };
+    // Wider than tall, so the tips stay clear of the header and the row below.
+    float length = (t.base + t.reach * amount) * (1.0f - 0.22f * std::abs(std::sin(t.angle)));
+    grow(length);
+    // A loud tentacle whose tip and glow would pass the edge is shortened until they fit, rather than cut off.
+    const auto inside = getLocalBounds().toFloat();
+    const float glow = 2.2f * radius;
+    for (int tries = 0; tries < 12 && !inside.isEmpty()
+                        && !inside.contains(juce::Rectangle<float>(2.0f * glow, 2.0f * glow).withCentre(points.back())); ++tries)
+        grow(length *= 0.92f);
+    return radius;
+}
+
+juce::Rectangle<float> PlantView::reachAt(float amount) const {
+    juce::Rectangle<float> reach;
+    std::array<juce::Point<float>, kSegments + 1> points;
+    for (int j = 0; j < kNumBands; ++j) {
+        const float glow = 2.2f * shape(j, amount, points);
+        const auto drop = juce::Rectangle<float>(2.0f * glow, 2.0f * glow).withCentre(points.back());
+        reach = j == 0 ? drop : reach.getUnion(drop);
+    }
+    return reach;
+}
+
 void PlantView::paint(juce::Graphics& g) {
     const auto centre = getLocalBounds().getCentre().toFloat();
     float mean = 0.0f;
@@ -103,25 +138,19 @@ void PlantView::paint(juce::Graphics& g) {
     mean /= (float) kNumBands;
 
     for (int j = 0; j < kNumBands; ++j) {
-        const auto& t = tentacles_[(size_t) j];
         const int band = tentacleBand(j);
         const float amount = bandAmount(levels_[(size_t) band]);
         drawn_[(size_t) band] = amount;
 
-        // Wider than tall, so the tips stay clear of the header and the row below.
-        const float length = (t.base + t.reach * amount) * (1.0f - 0.22f * std::abs(std::sin(t.angle)));
-        const float curl = t.curl * (1.0f - 0.8f * amount);
-        auto point = centre.getPointOnCircumference(leafRadius(t.angle) - 3.0f, t.angle + juce::MathConstants<float>::halfPi);
+        std::array<juce::Point<float>, kSegments + 1> points;
+        const float radius = shape(j, amount, points);
+        const auto& t = tentacles_[(size_t) j];
         for (int k = 1; k <= kSegments; ++k) {
-            const float u = (float) k / (float) kSegments, from = (float) (k - 1) / (float) kSegments;
-            const float heading = t.angle + t.sway * (1.0f - u) + curl * u * u;
-            const auto next = point + juce::Point<float>(std::cos(heading), std::sin(heading)) * (length / (float) kSegments);
+            const float from = (float) (k - 1) / (float) kSegments;
             g.setColour(mixed(juce::Colour(0xff6e1a2a), juce::Colour(0xffd64a62), from).withAlpha(0.7f + 0.3f * amount));
-            g.drawLine({point, next}, juce::jmap(from, t.width + 0.8f * amount, 0.7f));
-            point = next;
+            g.drawLine({points[(size_t) k - 1], points[(size_t) k]}, juce::jmap(from, t.width + 0.8f * amount, 0.7f));
         }
-
-        const float radius = (1.5f + 4.3f * amount) * t.drop;
+        const auto point = points.back();
         for (const float halo : {2.2f, 1.5f}) {  // a glow of translucent rings, cheaper than a blur
             g.setColour(theme::echo().withAlpha(0.1f * amount));
             g.fillEllipse(juce::Rectangle<float>(2.0f * radius * halo, 2.0f * radius * halo).withCentre(point));

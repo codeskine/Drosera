@@ -305,7 +305,7 @@ private:
         midiPitchActive_.store(pitchOn);
         polyMidiActive_.store(polyMidi);
         for (int v = 0; v < VoiceAllocator::kVoices; ++v)
-            voiceNotes_[v].store(polyMidi && allocator.Note(v) != VoiceAllocator::kNoNote
+            voiceNotes_[v].store(polyMidi && allocator.Note(v) != VoiceAllocator::kNoNote && (!gateOn || allocator.Held(v))  // a gated voice is silent once released
                                      ? juce::jlimit(16.0f, 84.0f, (float) allocator.Note(v) + bendSemis) : -1.0f);
 
         if (!polyMidi) {

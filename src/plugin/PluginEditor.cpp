@@ -167,7 +167,7 @@ juce::String DroseraEditor::tag(const juce::String& paramId) const {
 }
 
 void DroseraEditor::paint(juce::Graphics& g) {
-    g.addTransform(juce::AffineTransform::scale(scale()));
+    g.addTransform(contentTransform());
     g.setGradientFill(juce::ColourGradient(drosera::theme::backgroundCentre(), {450.0f, 240.0f},
                                            drosera::theme::backgroundEdge(), {450.0f, 240.0f + 560.0f}, true));
     g.fillAll();
@@ -175,8 +175,13 @@ void DroseraEditor::paint(juce::Graphics& g) {
 
 void DroseraEditor::resized() {
     content_.setBounds(0, 0, kWidth, kHeight);
-    content_.setTransform(juce::AffineTransform::scale(scale()));
-    bridge_.setUiScale(scale());
+    content_.setTransform(contentTransform());
+    bridge_.setUiScale(juce::jlimit(0.75f, 1.5f, scale()));
+}
+
+juce::AffineTransform DroseraEditor::contentTransform() const {
+    const float s = scale();
+    return juce::AffineTransform::scale(s).translated(0.5f * ((float) getWidth() - kWidth * s), 0.5f * ((float) getHeight() - kHeight * s));
 }
 
 void DroseraEditor::layOut() {
