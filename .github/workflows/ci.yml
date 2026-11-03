@@ -42,7 +42,7 @@ jobs:
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
 
       - name: Build
-        run: cmake --build build --target voice_allocator_test render_test render_cli ui_test plugin_host_test Drosera_VST3 Drosera_AU
+        run: cmake --build build --target voice_allocator_test render_test render_cli ui_test plugin_host_test Drosera_VST3 Drosera_AU Drosera_Standalone
 
       - name: Test the release check
         run: python3 tools/test_release_check.py
@@ -77,54 +77,48 @@ jobs:
       - name: Check reference renders
         run: tools/hardware-comparison/check_reference.sh build/render_cli
 
-      - name: Sign with Developer ID and notarize
-        if: inputs.version != '' && env.CAN_NOTARIZE == 'true'
+      - name: Test the package scripts
+        run: tools/package/test_package.sh build/Drosera_artefacts/Release
+
+      - name: Build and check the installer
         env:  # only this step sees them, not brew, pluginval or the tests
+          VERSION: ${{ inputs.version }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          password=$(uuidgen)
-          security create-keychain -p "$password" "$keychain"
-          security unlock-keychain -p "$password" "$keychain"
-          security list-keychains -d user -s "$keychain"
-          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
-          codesign --force --deep --options runtime --timestamp --sign "Developer ID Application" "$VST3"
-          ditto -c -k --keepParent "$VST3" "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
-          xcrun stapler staple "$VST3"
+          version="$VERSION"
+          [ -n "$version" ] || version=$(sed -nE 's/^project\(Drosera VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
 
-      - name: Package
-        if: inputs.version != ''
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          stage="$RUNNER_TEMP/stage"
-          mkdir -p "$stage/licenses"
-          ditto "$VST3" "$stage/Drosera.vst3"
-          cp LICENSE THIRD_PARTY_LICENSES.md docs/INSTALL.txt "$stage/"
-          cp LICENSE-AudreyII "$stage/licenses/"
-          cp third_party/DaisySP/LICENSE "$stage/licenses/DaisySP-LICENSE"
-          ditto -c -k --norsrc --noextattr "$stage" "Drosera-$VERSION-macos.zip"
+          # Sign only a versioned build, and only when the secrets exist. build_pkg.sh signs when all five
+          # variables are set, so the others are cleared for every other build.
+          if [ -n "$VERSION" ] && [ "$CAN_NOTARIZE" = true ]; then
+            keychain="$RUNNER_TEMP/signing.keychain-db"
+            password=$(uuidgen)
+            security create-keychain -p "$password" "$keychain"
+            security unlock-keychain -p "$password" "$keychain"
+            security list-keychains -d user -s "$keychain"
+            echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+            security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" \
+              -T /usr/bin/codesign -T /usr/bin/productbuild
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+            identities=$(security find-identity -v -p basic "$keychain")
+            DEVELOPER_ID_APPLICATION=$(sed -nE 's/.*"(Developer ID Application: [^"]*)".*/\1/p' <<< "$identities" | head -1)
+            DEVELOPER_ID_INSTALLER=$(sed -nE 's/.*"(Developer ID Installer: [^"]*)".*/\1/p' <<< "$identities" | head -1)
+            export DEVELOPER_ID_APPLICATION DEVELOPER_ID_INSTALLER
+          else
+            unset APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD
+          fi
 
-          # What a user unpacks is what must work, not the build folder.
-          unpacked="$RUNNER_TEMP/unpacked"
-          ditto -x -k "Drosera-$VERSION-macos.zip" "$unpacked"
-          ls -la "$unpacked"
-          test -f "$unpacked/Drosera.vst3/Contents/MacOS/Drosera"
-          test -x "$unpacked/Drosera.vst3/Contents/MacOS/Drosera"
-          codesign --verify --deep --strict "$unpacked/Drosera.vst3"
-          build/plugin_host_test_artefacts/Release/plugin_host_test "$unpacked/Drosera.vst3" tests/fixtures/state-baseline.bin
+          tools/package/build_pkg.sh build/Drosera_artefacts/Release "$version" "Drosera-$version-macos.pkg"
+          tools/package/check_pkg.sh "Drosera-$version-macos.pkg"
 
       - name: Upload the package
         if: inputs.version != ''
         uses: actions/upload-artifact@v4
         with:
           name: drosera-macos
-          path: Drosera-${{ inputs.version }}-macos.zip
+          path: Drosera-${{ inputs.version }}-macos.pkg
           if-no-files-found: error
