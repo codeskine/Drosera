@@ -1,7 +1,0 @@
-Default (mono knob)            0.56% of one core   peak 0.329   samples > 1.0: 0   recoveries 0
-Keys (mono MIDI tracking)      0.95% of one core   peak 0.336   samples > 1.0: 0   recoveries 0
-Open Fifths (poly, lock)       2.14% of one core   peak 0.476   samples > 1.0: 0   recoveries 0
-Sympathetic (poly, free)       1.37% of one core   peak 0.497   samples > 1.0: 0   recoveries 0
-Chord Keys (poly MIDI)         2.22% of one core   peak 0.283   samples > 1.0: 0   recoveries 0
-Ember Pong (pong on)           0.59% of one core   peak 0.243   samples > 1.0: 0   recoveries 0
-Razor Feedback (gain 0.95)     0.53% of one core   peak 0.285   samples > 1.0: 0   recoveries 0

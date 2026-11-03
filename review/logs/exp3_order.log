@@ -1,2 +1,0 @@
-registration order: Frequency .. OutputVolume
-handler order:      OutputVolume EchoFeedback EchoTime EchoSend ReverbDecay ReverbMix FeedbackHPF FeedbackLPF FeedbackBody FeedbackGain Frequency 

@@ -2,7 +2,7 @@
 
 Data: 2026-11-03. Commit analizzato: `9447f73` (branch `claude/audio-plugin-vst3-au-review-9b137d`).
 Revisione eseguita su una copia isolata del progetto; il repository originale non è stato modificato.
-Gli esperimenti, le patch di prova e i log citati sono in `review/experiments/` e `review/logs/`.
+Gli esperimenti e le patch di prova sono in `review/experiments/`. I log di build e test citati sono stati tenuti fuori dal repository.
 
 ---
 
@@ -136,7 +136,7 @@ intenzionale), `PluginProcessor.cpp:50` (`switch-enum`). Nessuno indica un bug.
 | `tools/hardware-comparison/check_reference.sh` | 10/10 WAV con SHA-256 identico ai riferimenti |
 | `tools/test_release_check.py` | 8 test OK |
 | `voice_allocator_test` sotto ASan+UBSan | OK, nessun report |
-| `render_test` e `ui_test` sotto ASan+UBSan | Prima esecuzione: **interrotte al primo campione** dall'overflow in `whitenoise.h:34` (D-01). Con la patch di D-01 applicata alla copia sandbox: `ui_test` ALL OK e `render_test` 471/471 OK, **zero report** di ASan e UBSan in entrambi (`review/logs/render_test-asan-ubsan-sandbox-prefix.log`). |
+| `render_test` e `ui_test` sotto ASan+UBSan | Prima esecuzione: **interrotte al primo campione** dall'overflow in `whitenoise.h:34` (D-01). Con la patch di D-01 applicata alla copia sandbox: `ui_test` ALL OK e `render_test` 471/471 OK, **zero report** di ASan e UBSan in entrambi. |
 | `host_probe` (esperimento, VST3 nell'host JUCE) | ALL OK: 22.05/44.1/88.2/176.4/192 kHz × blocchi 1/7/2048/8192 con input; latenza dichiarata = misurata a 22.05/88.2/192 kHz (±5); 60 s a 44.1 kHz con blocchi misti (4096, 64, 1000, 3, 2048, 512) senza buchi; blocco vuoto; bypass; stato corrotto e troncato; note-on con velocity 0 |
 | Esperimenti DSP (`exp1_cpu`, `exp2_edges`, `exp3_order`, `exp4_size`) | Vedi §7, §8, §9 |
 
@@ -479,11 +479,11 @@ funzionalità; CI con pluginval.
 ## 13. Interventi applicati (dopo la revisione)
 
 Su richiesta, gli interventi 1–7 del piano sono stati applicati nel worktree (non committati). Diff: 13 file,
-+144/−56 righe. Log in `review/logs/*-after-fixes.log`.
++144/−56 righe.
 
 | # | ID | Cosa è cambiato | Verifica |
 |---|---|---|---|
-| 1 | D-01 | `whitenoise.h`: prodotto in `uint32_t` riconvertito a `int32_t`; nota in `PATCHES.txt` | 7 render senza echo identici al bit; `ui_test` e `voice_allocator_test` passano sotto ASan+UBSan senza report; `render_test` sotto ASan+UBSan: 472/472 OK, zero report (`review/logs/render_test-asan-ubsan-after-fixes.log`) |
+| 1 | D-01 | `whitenoise.h`: prodotto in `uint32_t` riconvertito a `int32_t`; nota in `PATCHES.txt` | 7 render senza echo identici al bit; `ui_test` e `voice_allocator_test` passano sotto ASan+UBSan senza report; `render_test` sotto ASan+UBSan: 472/472 OK, zero report |
 | 2 | D-03 | `ParameterRegistry` su `std::array<std::optional<ParamState>, N>`, `Process` scorre dall'id più alto al più basso (l'ordine che libc++ dava); gli enum hanno `NumVoiceParams`/`NumEchoParams`; −9 righe nette | I 7 render senza echo restano identici al bit; i 3 con echo cambiano solo per D-02 |
 | 3 | D-02 | `Engine::SetEchoDelayTime(t, immediate)`; `DroseraCore` fa saltare l'echo al primo tick dopo `Init` e dopo `Recover` (`echo_jump_`); nuovo test `echoStartsAtKnobTime` | Prima ripetizione a 0,248 s con manopola a 0,248 s (prima: 0,954 s). `SHA256SUMS` rigenerati: p05, p06, p10 cambiano, gli altri 7 no. Motivo nel CHANGELOG |
 | 4 | D-04 | `processBlockBypassed` con un ring per canale lungo `getLatencySamples()`, allocato in `prepareToPlay`; nuovo test `bypassKeepsLatency`/`bypassPassesThrough` | Bypass a 44,1 kHz: dichiarati 327, misurati 327; a 48 kHz passa inalterato |
