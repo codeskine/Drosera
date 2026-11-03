@@ -835,6 +835,32 @@ static void editorTests() {
         check(editor->readout("freq").contains(juce::String::fromUTF8(" \xc2\xb7 ")), "frequencyNamesTheChord");
     }
 
+    {   // The header: arrows step through the presets and wrap, the menu lists them all, SETUP opens the panel.
+        std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
+        auto editor = openEditor(*p);
+        auto& header = editor->header();
+        p->setCurrentProgram(0);
+        header.previousButton().onClick();
+        const bool wrapped = p->getCurrentProgram() == p->getNumPrograms() - 1;
+        header.nextButton().onClick();
+        check(wrapped && p->getCurrentProgram() == 0, "presetArrowsCycle");
+
+        p->setCurrentProgram(2);
+        editor->refreshDisplay(0.0f);
+        const auto menu = header.presetMenu();
+        int items = 0, ticked = -1;
+        for (juce::PopupMenu::MenuItemIterator it(menu); it.next();) {
+            if (it.getItem().isTicked) ticked = items;
+            ++items;
+        }
+        check(items == p->getNumPrograms() && ticked == 2, "presetMenuListsEveryPreset");
+
+        header.setupButton().onClick();
+        const bool opened = editor->setupOpen();
+        header.setupButton().onClick();
+        check(opened && !editor->setupOpen(), "setupFieldOpensThePanel");
+    }
+
     {   // A preset chosen in the window reaches the host's own display.
         struct Listener final : juce::AudioProcessorListener {
             bool programChanged = false;

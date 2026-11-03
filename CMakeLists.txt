@@ -64,6 +64,7 @@ if(DROSERA_BUILD_PLUGIN)
         src/plugin/ui/LabeledKnob.cpp
         src/plugin/ui/PlantView.cpp
         src/plugin/ui/ControlRow.cpp
+        src/plugin/ui/HeaderBar.cpp
         src/plugin/ui/SetupPanel.cpp)
 
     juce_add_plugin(Drosera

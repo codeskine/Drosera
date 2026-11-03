@@ -1,12 +1,13 @@
 #pragma once
-// Drosera's window: assembles the plant, the main knobs, the row of controls and the setup panel, and runs the timer
-// that keeps them honest.
+// Drosera's window: assembles the header, the plant, the main knobs, the row of controls and the setup panel, and runs
+// the timer that keeps them honest.
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <functional>
 #include "EditorBridge.h"
 #include "ui/ControlRow.h"
 #include "ui/DroseraLookAndFeel.h"
+#include "ui/HeaderBar.h"
 #include "ui/LabeledKnob.h"
 #include "ui/PlantView.h"
 #include "ui/SetupPanel.h"
@@ -28,6 +29,7 @@ public:
     juce::String readout(const juce::String& paramId) const;
     juce::String tag(const juce::String& paramId) const;
     const drosera::PlantView& plant() const { return plant_; }
+    drosera::HeaderBar& header() { return header_; }
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -53,8 +55,7 @@ private:
     drosera::ControlRow row_;
     Scrim scrim_;
     drosera::SetupPanel setup_;
-    juce::ComboBox presetBox_;
-    juce::TextButton previous_ {juce::String(juce::CharPointer_UTF8("\xe2\x80\xb9"))}, next_ {juce::String(juce::CharPointer_UTF8("\xe2\x80\xba"))};
+    drosera::HeaderBar header_;
     double lastTick_ = 0.0, pulseSeconds_ = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DroseraEditor)

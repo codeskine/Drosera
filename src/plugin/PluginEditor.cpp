@@ -19,7 +19,7 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
       feedbackAttachment_(*apvts.getParameter("fbgain"), plant_.feedback(), nullptr),
       frequency_(*apvts.getParameter("freq"), "Frequency", drosera::KnobSize::large, drosera::KnobGroup::loop),
       body_(*apvts.getParameter("body"), "Body", drosera::KnobSize::large, drosera::KnobGroup::loop),
-      row_(apvts), setup_(apvts) {
+      row_(apvts), setup_(apvts), header_(p) {
     setLookAndFeel(&lookAndFeel_);
     addAndMakeVisible(plant_);
     addAndMakeVisible(frequency_);
@@ -29,14 +29,9 @@ DroseraEditor::DroseraEditor(juce::AudioProcessor& p, juce::AudioProcessorValueT
     addChildComponent(scrim_);
     addChildComponent(setup_);
 
-    for (int i = 0; i < p.getNumPrograms(); ++i) presetBox_.addItem(p.getProgramName(i), i + 1);
-    presetBox_.setSelectedId(p.getCurrentProgram() + 1, juce::dontSendNotification);
-    presetBox_.onChange = [this] { selectProgram(presetBox_.getSelectedId() - 1); };
-    addAndMakeVisible(presetBox_);
-    previous_.onClick = [this] { selectProgram((processor.getCurrentProgram() + processor.getNumPrograms() - 1) % processor.getNumPrograms()); };
-    next_.onClick = [this] { selectProgram((processor.getCurrentProgram() + 1) % processor.getNumPrograms()); };
-    addAndMakeVisible(previous_);
-    addAndMakeVisible(next_);
+    header_.onProgramChosen = [this](int index) { selectProgram(index); };
+    header_.onSetupClicked = [this] { setSetupOpen(!setupOpen()); };
+    addAndMakeVisible(header_);
 
     setWantsKeyboardFocus(true);
     setResizable(false, false);
@@ -58,13 +53,14 @@ void DroseraEditor::selectProgram(int index) {
     if (!juce::isPositiveAndBelow(index, processor.getNumPrograms())) return;
     processor.setCurrentProgram(index);
     processor.updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withProgramChanged(true));
-    presetBox_.setSelectedId(index + 1, juce::dontSendNotification);
+    header_.setProgram(index);
 }
 
 void DroseraEditor::setSetupOpen(bool open) {
     scrim_.setVisible(open);
     setup_.setVisible(open);
     if (open) setup_.toFront(false);
+    header_.setSetupOpen(open);
 }
 
 bool DroseraEditor::keyPressed(const juce::KeyPress& key) {
@@ -122,8 +118,7 @@ void DroseraEditor::refreshDisplay(float dtSeconds) {
     setup_.refresh(bridge_.polyRunning());
 
     // Follow what the host changes.
-    const int program = processor.getCurrentProgram() + 1;
-    if (presetBox_.getSelectedId() != program) presetBox_.setSelectedId(program, juce::dontSendNotification);
+    header_.setProgram(processor.getCurrentProgram());
 }
 
 const drosera::LabeledKnob* DroseraEditor::findKnob(const juce::String& paramId) const {
@@ -161,9 +156,6 @@ void DroseraEditor::paint(juce::Graphics& g) {
     g.setGradientFill(juce::ColourGradient(drosera::theme::backgroundCentre(), {450.0f, 240.0f},
                                            drosera::theme::backgroundEdge(), {450.0f, 240.0f + 560.0f}, true));
     g.fillAll();
-    g.setColour(drosera::theme::text());
-    g.setFont(drosera::theme::titleFont());
-    g.drawText("DROSERA", 26, 18, 260, 28, juce::Justification::centredLeft);
 }
 
 void DroseraEditor::resized() {
@@ -175,10 +167,7 @@ void DroseraEditor::resized() {
     placeLarge(frequency_, 150);
     placeLarge(body_, 750);
     row_.setBounds(0, drosera::ControlRow::kTop, kWidth, kHeight - drosera::ControlRow::kTop);
-    scrim_.setBounds(0, 0, kWidth, drosera::SetupPanel::kTop);
+    header_.setBounds(0, 0, kWidth, drosera::HeaderBar::kHeight);
+    scrim_.setBounds(0, drosera::HeaderBar::kHeight, kWidth, drosera::SetupPanel::kTop - drosera::HeaderBar::kHeight);
     setup_.setBounds(0, drosera::SetupPanel::kTop, kWidth, kHeight - drosera::SetupPanel::kTop);
-
-    previous_.setBounds(kWidth - 26 - 220, 20, 24, 24);
-    presetBox_.setBounds(kWidth - 26 - 196, 20, 172, 24);
-    next_.setBounds(kWidth - 26 - 24, 20, 24, 24);
 }
