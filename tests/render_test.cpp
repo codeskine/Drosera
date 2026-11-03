@@ -1736,8 +1736,206 @@ static bool echoShapedAtUnityIsProcess() {
     return pass;
 }
 
+struct StereoRender { std::vector<float> L, R; };
+
+// The same input on both sides, as a mono source sends it.
+template <typename Input>
+static StereoRender renderStereo(Stereo& echo, size_t n, Input input) {
+    StereoRender r { std::vector<float>(n), std::vector<float>(n) };
+    for (size_t i = 0; i < n; ++i) echo.Process(input(i), input(i), r.L[i], r.R[i]);
+    return r;
+}
+
+static std::unique_ptr<Stereo> makeStereo(float seconds, float feedback, float drive, float toneHz = 800.0f, bool pong = true) {
+    auto echo = std::make_unique<Stereo>();
+    setUpEcho(*echo, seconds, feedback);
+    echo->SetDrive(drive);
+    echo->SetTone(toneHz);
+    echo->SetPong(pong, true);
+    return echo;
+}
+
+// An impulse of 1: the band-pass passes about 5% of it, and less with each repeat.
+static bool stereoBounces() {
+    auto echo = makeStereo(0.25f, 0.7f, 0.0f);
+    const size_t T = 12000;
+    const auto r = renderStereo(*echo, 4 * T, impulse(1.0f));
+    bool pass = true;
+    for (size_t k = 1; k <= 3; ++k) {
+        const auto& on = k % 2 == 1 ? r.L : r.R;
+        const auto& off = k % 2 == 1 ? r.R : r.L;
+        const float peak = peakOf(on, k * T - 40, k * T + 40), other = peakOf(off, k * T - 40, k * T + 40);
+        pass &= peak > 1e-3f && other < 1e-3f * peak;
+    }
+    printf("stereoBounces: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// The band-pass delays every repeat by a few samples, so the bounces are timed against a single firmware line.
+static bool stereoTiming() {
+    bool ok = true;
+    for (const float seconds : { 0.25f, DroseraCore::EchoTimeSeconds(0.5f, true) }) {
+        auto echo = makeStereo(seconds, 0.7f, 0.0f);
+        auto line = std::make_unique<Line>();
+        setUpEcho(*line, seconds, 0.7f);
+        const auto T = (size_t)std::lround(seconds * 48000.0f);
+        const auto r = renderStereo(*echo, 4 * T, impulse(1.0f));
+        std::vector<float> single(4 * T);
+        for (size_t i = 0; i < single.size(); ++i) single[i] = line->Process(i == 0 ? 1.0f : 0.0f);
+        bool pass = true;
+        for (size_t k = 1; k <= 3; ++k) {
+            const size_t a = k * T - T / 2, b = k * T + T / 2;
+            const long bounce = (long)peakAt(k % 2 == 1 ? r.L : r.R, a, b), firmware = (long)peakAt(single, a, b);
+            pass &= std::labs(bounce - firmware) <= 2;
+        }
+        printf("stereoTiming, T %zu samples: %s\n", T, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+static std::vector<double> firstRepeatSpectrum(Stereo& echo, size_t T) {
+    const auto r = renderStereo(echo, T - 100 + (1 << 17), impulse(1.0f));
+    return magnitudeSpectrum(r.L, T - 100);
+}
+
+static double binOf(double hz) { return hz * (double)(1 << 17) / 48000.0; }
+
+static bool stereoSameColor() {
+    auto on = makeStereo(0.25f, 0.0f, 0.0f, 800.0f, true), off = makeStereo(0.25f, 0.0f, 0.0f, 800.0f, false);
+    const auto a = firstRepeatSpectrum(*on, 12000), b = firstRepeatSpectrum(*off, 12000);
+    double worst = 0.0;
+    for (const double hz : { 200.0, 800.0, 3200.0 }) {
+        const size_t k = (size_t)std::lround(binOf(hz));
+        worst = std::max(worst, std::fabs(dbOf(a[k], b[k])));
+    }
+    const bool pass = worst <= 0.5;
+    printf("stereoSameColor: largest difference %.3f dB %s\n", worst, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool stereoToneMovesCenter() {
+    bool ok = true;
+    for (const float center : { 300.0f, 3000.0f }) {
+        auto echo = makeStereo(0.25f, 0.0f, 0.0f, center);
+        const auto m = firstRepeatSpectrum(*echo, 12000);
+        size_t peak = (size_t)binOf(20.0);
+        for (size_t k = peak; k < m.size(); ++k) if (m[k] > m[peak]) peak = k;
+        const double hz = (double)peak * 48000.0 / (double)(1 << 17), octaves = std::log2(hz / center);
+        const bool pass = std::fabs(octaves) <= 1.0 / 3.0;
+        printf("stereoToneMovesCenter, Tone %.0f Hz: peak at %.0f Hz %s\n", center, hz, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+static bool stereoRunaway() {
+    bool ok = true;
+    const struct { float drive, feedback; bool sustains; } cases[] = { {1.0f, 0.6f, true}, {1.0f, 0.4f, false}, {0.0f, 0.9f, false} };
+    for (const auto& c : cases) {
+        auto echo = makeStereo(0.1f, c.feedback, c.drive);
+        const auto r = renderStereo(*echo, 48000 * 20, burst(800.0f, 0.1f, 2400));
+        const double level = rmsOf(r.L, 48000 * 19, 48000 * 20);
+        const bool pass = c.sustains ? level > 0.1 : level < 1e-3;
+        printf("stereoRunaway, Drive %.0f, Feedback %.1f: RMS %.5f after 20 s %s\n", c.drive, c.feedback, level, pass ? "OK" : "FAIL");
+        ok &= pass;
+    }
+    return ok;
+}
+
+static bool stereoFeedbackZeroIsOneRepeat() {
+    auto echo = makeStereo(0.1f, 0.0f, 1.0f);
+    const auto r = renderStereo(*echo, 48000, impulse(1.0f));
+    const float first = peakOf(r.L, 4800 - 40, 4800 + 40);
+    const bool pass = first > 1e-3f && peakOf(r.R, 0, r.R.size()) == 0.0f && peakOf(r.L, 7200, r.L.size()) < first * 3.2e-5f;
+    printf("stereoFeedbackZeroIsOneRepeat: %s\n", pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Width 0 puts every repeat in the middle, at half the level of the side it came from.
+static bool stereoWidthZeroIsMono() {
+    auto wide = makeStereo(0.25f, 0.7f, 0.0f), narrow = makeStereo(0.25f, 0.7f, 0.0f);
+    narrow->SetWidth(0.0f);
+    const auto w = renderStereo(*wide, 48000, impulse(1.0f)), m = renderStereo(*narrow, 48000, impulse(1.0f));
+    bool same = true;
+    for (size_t i = 0; i < m.L.size(); ++i) same &= m.L[i] == m.R[i];
+    const float half = 0.5f * peakOf(w.L, 12000 - 40, 12000 + 40), mid = peakOf(m.L, 12000 - 40, 12000 + 40);
+    const bool pass = same && std::fabs(mid - half) < 1e-6f;
+    printf("stereoWidthZeroIsMono: repeat %.6f, half the side %.6f %s\n", mid, half, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Width and Level only shape what comes out: the loop, so every repeat after the first, is the same.
+static bool stereoWidthAndLevelLeaveTheLoop() {
+    auto plain = makeStereo(0.1f, 0.6f, 1.0f), shaped = makeStereo(0.1f, 0.6f, 1.0f);
+    shaped->SetWidth(0.3f);
+    shaped->SetLevel(0.5f);
+    const auto a = renderStereo(*plain, 48000 * 5, burst(800.0f, 0.1f, 2400)), b = renderStereo(*shaped, 48000 * 5, burst(800.0f, 0.1f, 2400));
+    float worst = 0.0f;
+    for (size_t i = 0; i < a.L.size(); ++i) {
+        const float mid = 0.5f * (a.L[i] + a.R[i]), side = 0.5f * (a.L[i] - a.R[i]);
+        worst = std::max({worst, std::fabs(b.L[i] - 0.5f * (mid + 0.3f * side)), std::fabs(b.R[i] - 0.5f * (mid - 0.3f * side))});
+    }
+    const bool pass = worst < 1e-6f && rmsOf(a.L, 48000 * 4, 48000 * 5) > 0.1;  // still self-oscillating after 4 s
+    printf("stereoWidthAndLevelLeaveTheLoop: largest difference %.2g %s\n", (double)worst, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+// Power away from the harmonics against the power on them, as inharmonicDb, with Tone at its top.
+static double stereoInharmonicDb(float feedback) {
+    const double hz = 3100.0;
+    auto echo = makeStereo(0.25f, feedback, 1.0f, 3200.0f);
+    const size_t n = 1 << 17, from = 48000 * 4;
+    const auto r = renderStereo(*echo, from + n, [hz](size_t i) { return 0.5f * (float)std::sin(2.0 * M_PI * hz * (double)i / 48000.0); });
+    std::vector<std::complex<double>> a(n);
+    for (size_t i = 0; i < n; ++i) a[i] = (0.5 - 0.5 * std::cos(2.0 * M_PI * (double)i / (double)n)) * r.L[from + i];
+    fft(a);
+    const double binHz = 48000.0 / (double)n;
+    double on = 0.0, off = 0.0;
+    for (size_t k = 4; k < n / 2; ++k) {
+        const double f = (double)k * binHz, nearest = std::round(f / hz) * hz;
+        (std::fabs(f - nearest) <= 4.0 * binHz && nearest > 0.0 ? on : off) += std::norm(a[k]);
+    }
+    return 10.0 * std::log10(std::max(off, 1e-30) / std::max(on, 1e-30));
+}
+
+// 3 dB above what was measured: -54.0 dB at Feedback 0, the aliasing alone, so no oversampling. At Feedback 0.9, -31.4 dB:
+// the loop also runs on its own modes, which are not harmonics of the input either.
+static constexpr double kStereoAliasLimitDry = -51.0, kStereoAliasLimitLoop = -28.4;
+
+static bool stereoAliasing() {
+    const double dry = stereoInharmonicDb(0.0f), loop = stereoInharmonicDb(0.9f);
+    const bool pass = dry <= kStereoAliasLimitDry && loop <= kStereoAliasLimitLoop;
+    printf("stereoAliasing at 3100 Hz, Drive 1, Tone 3200 Hz: %.1f dB at Feedback 0, %.1f dB at Feedback 0.9 %s\n", dry, loop, pass ? "OK" : "FAIL");
+    return pass;
+}
+
+static bool stereoRampSettles() {
+    auto echo = makeStereo(0.1f, 0.5f, 0.0f, 800.0f, false);
+    float l, r;
+    echo->SetPong(true);
+    for (int i = 0; i < 960; ++i) echo->Process(0.0f, 0.0f, l, r);
+    const float on = echo->PongMix();
+    echo->SetPong(false);
+    for (int i = 0; i < 960; ++i) echo->Process(0.0f, 0.0f, l, r);
+    const float off = echo->PongMix();
+    const bool pass = on == 1.0f && off == 0.0f;
+    printf("stereoRampSettles: %.7f after switching on, %.7f after switching off %s\n", on, off, pass ? "OK" : "FAIL");
+    return pass;
+}
+
 static bool stereoEchoTests() {
     bool ok = true;
+    ok &= stereoBounces();
+    ok &= stereoTiming();
+    ok &= stereoSameColor();
+    ok &= stereoToneMovesCenter();
+    ok &= stereoRunaway();
+    ok &= stereoFeedbackZeroIsOneRepeat();
+    ok &= stereoWidthZeroIsMono();
+    ok &= stereoWidthAndLevelLeaveTheLoop();
+    ok &= stereoAliasing();
+    ok &= stereoRampSettles();
     ok &= echoCenterReturnsBitForBit();
     ok &= echoShapedAtUnityIsProcess();
     ok &= stereoEchoMatchesTwoLines();
