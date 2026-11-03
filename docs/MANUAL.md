@@ -6,21 +6,35 @@ DSP is the Audrey II firmware's own code at a fixed 48 kHz.
 
 Readouts show what the engine really uses, not the knob's position. These curves are far from linear.
 
+## The window
+
+One page, with no tabs. In the middle band, Frequency, the plant with Feedback at its heart, and Body. Below, one row of
+controls in four groups, each named under its knobs: FILTER and REVERB on the left, PONG in the centre, ECHO on the right.
+The header holds the preset selector on the left and, on the right, the SETUP field that opens Strings, Output and MIDI.
+
+Colour says where a control sits. **Red** controls are inside the feedback loop, so they change what the drone sustains.
+**Amber** controls are after the loop, so they colour what comes out.
+
+Drag the window's corner to scale it from 75 % to 150 %. The scale is saved with your project.
+
 ## The plant
 
-The sundew in the middle of the window shows the output's real spectrum. Each of its 54 tentacles is a frequency band,
-from 30 Hz at the top, clockwise to 16 kHz, and its length and drop of dew follow that band's level from −72 dBFS to 0
-dBFS. Nothing moves unless the sound does: a silent plugin shows a still plant.
+The sundew in the middle of the window shows the output's real spectrum. Each of its 54 tentacles is a frequency band from
+30 Hz to 16 kHz, with neighbouring bands spread around the leaf, so one partial lights tentacles on every side. A band's
+level, from −72 dBFS to 0 dBFS, unfurls its tentacle and swells its drop of dew: at rest the tentacles are short and
+curled. Nothing moves unless the sound does: a silent plugin shows a still, closed plant.
 
 Low bands are coarser than high ones. Below about 150 Hz several tentacles share what one FFT bin measured.
 
+With POLY on, the drops of the bands that hold the strings' notes get a fine ring, and Frequency shows the three notes.
+
 Readouts can carry a tag. **MIDI** on Frequency means a note sets the pitch, and **SNAP** on Body means Body shows the time
-snapped to that note. Those knobs look dimmed, because they are not what sounds, but they keep working.
+snapped to that note. **LIMIT** on an interval means the voice cannot reach it, and the readout shows the interval it plays.
+Those knobs look dimmed, because they are not what sounds, but they keep working.
 
 ## Main controls
 
-Feedback sits at the plant's heart, with Frequency and Body on either side. Everything else is in the tabs below, and the
-open tab is saved with your project.
+Feedback sits at the plant's heart, with Frequency and Body on either side.
 
 | Control | Range | What it does |
 |---|---|---|
@@ -31,23 +45,25 @@ open tab is saved with your project.
 The drone settles where the resonances of the string and of the Body delay coincide, which is rarely the exact
 pitch Frequency shows. Moving Body can jump the drone to another partial.
 
-## Filters tab
+## FILTER
 
 | Control | Range | What it does |
 |---|---|---|
 | Lowpass | 100 Hz to 18 kHz | Lowpass inside the loop |
 | Highpass | 10 Hz to 4 kHz | Highpass inside the loop |
 
-Both are in the feedback path, so they shape which partials sustain, not only the tone.
+Both are in the feedback path, so they shape which partials sustain, not only the tone. The arc of ticks above the
+two knobs draws the band that survives: each tick's length is the two filters' gain at its frequency, from 10 Hz on the
+left to 18 kHz on the right.
 
-## Reverb tab
+## REVERB
 
 | Control | What it does |
 |---|---|
 | Reverb Mix | Dry to wet, inside the loop |
 | Reverb Decay | Reverb feedback, 20 % to 100 %, on a curved law |
 
-## Echo tab
+## ECHO
 
 | Control | What it does |
 |---|---|
@@ -56,13 +72,14 @@ Both are in the feedback path, so they shape which partials sustain, not only th
 | Echo Feedback | 100 % is unity, and up to 150 % it runs away, bounded by a soft clip |
 | Echo Warp (WARP) | The firmware's delay switch. Echo Time's readout shows the shortened time |
 
-Echo Send, Echo Time and Echo Feedback also drive Echo Pong, in the Pong tab.
+Echo Send, Echo Time and Echo Feedback also drive Echo Pong. The switch beside them chooses CLASSIC, the firmware's echo, or
+PONG. The dot beside Time blinks at the real time between repeats, and with PONG two dots take turns, left and right.
 
 **WARP** halves the Echo Time knob's position before its square-law curve. Above about a quarter of the knob's
 travel the echo gets 2.8 to 3.9 times shorter, not twice as short, so it acts as a doppler warp and not as a tempo
 halving. Lower down the difference shrinks, because Echo Time cannot go below 50 ms.
 
-## Pong tab
+## PONG
 
 | Control | What it does |
 |---|---|
@@ -72,7 +89,8 @@ halving. Lower down the difference shrinks, because Echo Time cannot go below 50
 | Echo Level | -30 to +6 dB on the echo's repeats. 0 dB by default |
 | Echo Pong (PONG) | Makes the firmware's echo bounce between left and right. Off by default |
 
-The four knobs are dimmed while PONG is off, and stay usable.
+The four knobs are dimmed in CLASSIC, and stay usable, so they can be set before switching. The arc above Tone draws where
+the echo's band-pass sits.
 
 **PONG** sums the input to mono and starts on the left, and Echo Time is the time between bounces. The two lines of the
 echo feed each other, so the repeats keep the firmware's color, band-passed above the drone, until Drive and Tone move.
@@ -81,7 +99,7 @@ bounce: with Drive at zero, Echo Feedback runs away above 100 %, and with Drive 
 Echo Width and Echo Level act on what comes out, not on the loop, so they change neither how long the repeats last nor
 where Echo Feedback runs away. At 0 %, Width plays each repeat in the middle at half the level it had on its side.
 
-## Output tab
+## SETUP: Output
 
 | Control | What it does |
 |---|---|
@@ -93,7 +111,7 @@ The output has a limiter and a final hard clip at full scale, because the loop c
 The audio input is optional, and excites the strings. It stays off until the host connects the plugin's input
 bus. Some presets need it to make sound.
 
-## MIDI tab
+## SETUP: MIDI
 
 Both switches are off by default, and Drosera then ignores notes.
 
@@ -112,7 +130,7 @@ pitch back after release: move it again.
 **MIDI Gate (GATE)** closes the feedback unless a key is down, so the drone swells on note-on and dies away on
 note-off.
 
-## STRINGS tab
+## SETUP: Strings
 
 Three-string polyphony lets Drosera sound up to three notes at once, as three feedback loops. It is off by default,
 and with it off Drosera sounds exactly as before.

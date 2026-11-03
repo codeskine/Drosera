@@ -1,5 +1,6 @@
-// Renders the plugin editor to a PNG: editor_snapshot <out.png> [paramId=normalizedValue | program=N | note=N | sound=1 ...]
-// sound=1 renders a second of audio with the window open, so the plant shows real sound.
+// Renders the plugin editor to a PNG: editor_snapshot <out.png> [paramId=normalizedValue | program=N | note=N | sound=1 | setup=1 |
+// scale=N ...]
+// setup=1 opens the setup panel, scale=N sizes the window at N times 900×560. sound=1 renders a second of audio with the window open, so the plant shows real sound.
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <cstdio>
 #include "PluginEditor.h"
@@ -10,7 +11,8 @@ int main(int argc, char** argv) {
     if (argc < 2) { std::printf("usage: editor_snapshot <out.png> [id=value ...]\n"); return 2; }
     juce::ScopedJuceInitialiser_GUI init;
     std::unique_ptr<juce::AudioProcessor> proc(createPluginFilter());
-    bool sound = false, prepared = false;
+    bool sound = false, prepared = false, setup = false;
+    float scale = 1.0f;
     auto prepare = [&] { if (!prepared) { proc->prepareToPlay(48000.0, 512); prepared = true; } };
     for (int i = 2; i < argc; ++i) {
         juce::String arg(argv[i]);
@@ -18,6 +20,8 @@ int main(int argc, char** argv) {
         auto v = arg.fromFirstOccurrenceOf("=", false, false).getFloatValue();
         if (id == "program") { proc->setCurrentProgram((int) v); continue; }
         if (id == "sound") { sound = v > 0.5f; continue; }
+        if (id == "setup") { setup = v > 0.5f; continue; }
+        if (id == "scale") { scale = v; continue; }
         if (id == "note") {  // play a note through processBlock before drawing
             prepare();
             juce::AudioBuffer<float> buf(2, 512);
@@ -33,6 +37,8 @@ int main(int argc, char** argv) {
     std::unique_ptr<juce::AudioProcessorEditor> ed(proc->createEditor());
     auto* editor = dynamic_cast<DroseraEditor*>(ed.get());
     ed->setVisible(true);
+    ed->setSize(juce::roundToInt(900.0f * scale), juce::roundToInt(560.0f * scale));
+    editor->setSetupOpen(setup);
     if (prepared || sound) {  // let the values settle, with the window open
         prepare();
         juce::AudioBuffer<float> buf(2, 512);

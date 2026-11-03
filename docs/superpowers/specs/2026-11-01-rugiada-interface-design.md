@@ -1,5 +1,7 @@
 # Rugiada interface design
 
+> **Replaced** by `2026-11-03-interface-redesign-design.md`, which removes the tabs.
+
 Sub-project 2 of 2. It builds on `2026-11-01-repository-and-release-design.md`, which creates `src/plugin/`
 and the CI that covers this work.
 
