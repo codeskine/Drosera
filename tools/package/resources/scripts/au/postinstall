@@ -1,0 +1,4 @@
+#!/bin/sh
+# Hosts cache the Audio Units they found: restart the registrar so they see this version without a restart.
+killall -9 AudioComponentRegistrar 2>/dev/null
+exit 0
