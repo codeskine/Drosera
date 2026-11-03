@@ -2,7 +2,8 @@
 
 ![Drosera's window: a sundew whose tentacles show the sound's spectrum, Feedback at its heart, Frequency and Body beside it, and one row of filter, reverb and echo controls below](docs/images/drosera.png)
 
-A feedback drone synth, as a VST3 plugin for macOS 11 or newer, on Apple silicon and Intel.
+A feedback drone synth, as a VST3 and Audio Unit plugin and a standalone app for macOS 11 or newer, on Apple silicon
+and Intel.
 
 Drosera makes sound on its own: a noise floor feeds two string resonators inside a saturating loop, and you steer
 what the loop settles on. Play it with its knobs, excite it with audio, or put it on a note with MIDI, up to three
@@ -10,17 +11,31 @@ notes at once. It comes with 16 presets.
 
 ## Install
 
-Download the zip from [Releases](https://github.com/codeskine/Drosera/releases), unpack it, and move `Drosera.vst3` to
-`~/Library/Audio/Plug-Ins/VST3/`. Then rescan plugins in your host. Drosera loads as an instrument.
+Download `Drosera-X.Y.Z-macos.pkg` from [Releases](https://github.com/codeskine/Drosera/releases) and open it. It
+installs, for all users:
 
-### If the plugin is blocked
+- the VST3 in `/Library/Audio/Plug-Ins/VST3/`
+- the Audio Unit in `/Library/Audio/Plug-Ins/Components/`
+- the standalone app in `/Applications/`
 
-Releases are not yet notarized by Apple, so macOS blocks files downloaded with a browser. After moving the plugin,
-run this once in Terminal:
+To leave out a format, click Customize in the installer. Then rescan plugins in your host. Drosera loads as an
+instrument.
 
-```bash
-xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Drosera.vst3
-```
+### If macOS blocks the installer
+
+Releases are not yet notarized by Apple, so macOS blocks the installer the first time. Close the warning, open
+System Settings → Privacy & Security, scroll down and click **Open Anyway**, then confirm. Nothing else needs
+unblocking: the installed plugins and app open normally.
+
+### Upgrading from 0.1.x
+
+Version 0.1.x was copied by hand to `~/Library/Audio/Plug-Ins/VST3/`. Delete `Drosera.vst3` there, or your host finds
+two copies.
+
+### Uninstalling
+
+Delete `/Library/Audio/Plug-Ins/VST3/Drosera.vst3`, `/Library/Audio/Plug-Ins/Components/Drosera.component` and
+`/Applications/Drosera.app`.
 
 ## Using it
 

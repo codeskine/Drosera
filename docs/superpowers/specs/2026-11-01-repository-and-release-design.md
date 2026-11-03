@@ -1,5 +1,8 @@
 # Repository and release design
 
+> The release zip and the non-goals on installers and on AU and Standalone releases are replaced by
+> `2026-11-03-macos-installer-design.md`.
+
 Sub-project 1 of 2. The new interface is specified in
 `2026-11-01-rugiada-interface-design.md` and is built on top of this work.
 
