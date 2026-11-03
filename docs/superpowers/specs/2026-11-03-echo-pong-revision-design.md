@@ -194,12 +194,12 @@ isolated. The last three run through `DroseraCore`:
 | Test | Setup | Pass |
 |---|---|---|
 | Bounce | Impulse into both inputs, Time T, Feedback 70%, PONG on | Left at T, right at 2T, left at 3T. The other side is below -60 dB relative to the peak |
-| Timing | Same, with and without WARP | Peaks at T, 2T and 3T within ±2 samples |
+| Timing | Same, with and without WARP | Peaks at T, 2T and 3T within ±2 samples of a single firmware line's, since the band-pass delays every repeat by a few samples |
 | Same color | Noise burst, Drive 0, Tone 0.5, PONG on against off with the same mono input on both sides | First repeat's spectrum within 0.5 dB at 200 Hz, 800 Hz and 3.2 kHz |
 | Tone | Noise burst, Tone at 300 Hz and 3 kHz | The first repeat's spectral peak within a third of an octave of the center |
 | Runaway | Drive 1, level after 20 s | Sustains at Feedback 60%, dies at 40%. At Drive 0 it dies at 90% |
 | Width and Level | Width 0, then Level changes | Width 0 gives L = R. Repeats after the first are the same whatever Width and Level are |
-| Bounds and DC | Drive 1, Feedback 150%, Send 100%, minimum Time, all voices, 60 s | Always finite, `RecoveryCount() == 0`, wet mean within ±0.01 |
+| Bounds and DC | Drive 1, Feedback 150%, Send 100%, minimum Time, all voices, 60 s | Always finite, `RecoveryCount() == 0`, output mean within ±0.01 |
 | Mono sum | Drone, L + R with PONG on and off | RMS with PONG on at most 3 dB below PONG off |
 | Back to the firmware | Send 0, PONG switched on and off before any signal reaches the echo | The render matches one where PONG was never switched, byte for byte |
 
