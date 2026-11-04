@@ -75,10 +75,10 @@ static Spec spectrum(const std::vector<float>& x, size_t start) {
 }
 
 static void loudnessTable() {
-    std::printf("\n## A. Preset: livello, dinamica e tempo di nascita (20 s da Init)\n\n");
-    std::printf("| Preset | RMS 5-20 s | Picco | Cresta | -3 dB dopo | Spread 2 s | Dominante | Centroide |\n|---|---|---|---|---|---|---|---|\n");
+    std::printf("\n## A. Presets: level, dynamics and onset time (20 s from Init)\n\n");
+    std::printf("| Preset | RMS 5-20 s | Peak | Crest | -3 dB after | Spread 2 s | Dominant | Centroid |\n|---|---|---|---|---|---|---|---|\n");
     for (const auto& p : infrasonic::kFactoryPresets) {
-        if (p.needsInput) { std::printf("| %s | (richiede ingresso: vedi F) | | | | | | |\n", p.name); continue; }
+        if (p.needsInput) { std::printf("| %s | (needs input: see F) | | | | | | |\n", p.name); continue; }
         DroseraCore c; c.Init(); apply(c, p); play(c, p);
         const Stereo s = render(c, 20.0);
         const double steady = rmsDb(s, 5.0, 20.0), peak = peakOf(s, 5.0, 20.0);
@@ -90,12 +90,12 @@ static void loudnessTable() {
 }
 
 static void pitchMap() {
-    std::printf("\n## B. Mappa della tessitura sotto MIDI Pitch (scarto in cent della parziale dominante; `mute` = sotto -40 dBFS; `*` = oltre 25 cent)\n");
+    std::printf("\n## B. Note range under MIDI Pitch (error in cents of the dominant partial; `mute` = below -40 dBFS; `*` = over 25 cents)\n");
     const float base[] = {0.43f, 0.75f, 0.30f, 0.80f, 0.20f, 0.00f, 0.50f, 0.00f, 0.50f, 0.00f, 0.70f};  // Keys preset, dry
     const float bodies[] = {0.1f, 0.3f, 0.5f, 0.7f, 0.9f};
     const int notes[] = {16, 18, 20, 24, 28, 31, 36, 40, 43, 48, 52, 55, 60, 64, 67, 72, 76, 79, 80, 84};
     for (float revmix : {0.0f, 0.35f}) {
-        std::printf("\n### Reverb Mix %.2f\n\n| Body \\ nota |", revmix);
+        std::printf("\n### Reverb Mix %.2f\n\n| Body \\ note |", revmix);
         for (int n : notes) std::printf(" %d |", n);
         std::printf("\n|---|"); for (size_t i = 0; i < sizeof(notes) / sizeof(notes[0]); ++i) std::printf("---|"); std::printf("\n");
         for (float body : bodies) {
@@ -118,8 +118,8 @@ static void pitchMap() {
 }
 
 static void repeatability() {
-    std::printf("\n## C. Ripetibilita: lo stesso preset raggiunto subito da Init, o dopo 1 / 10 / 100 blocchi ai valori di default (come un host che carica lo stato dopo prepareToPlay)\n\n");
-    std::printf("| Preset | Dominante subito | dopo 1 blocco | dopo 10 | dopo 100 | RMS subito / 1 / 10 / 100 |\n|---|---|---|---|---|---|\n");
+    std::printf("\n## C. Repeatability: the same preset reached straight from Init, or after 1 / 10 / 100 blocks at the default values (like a host that loads the state after prepareToPlay)\n\n");
+    std::printf("| Preset | Dominant at once | after 1 block | after 10 | after 100 | RMS at once / 1 / 10 / 100 |\n|---|---|---|---|---|---|\n");
     for (const auto& p : infrasonic::kFactoryPresets) {
         if (p.needsInput) continue;
         std::printf("| %s |", p.name);
@@ -139,7 +139,7 @@ static void repeatability() {
 }
 
 static void monoCompat() {
-    std::printf("\n## D. Compatibilita mono (5-20 s): somma mono contro media dei canali, energia del lato, correlazione L/R\n\n");
+    std::printf("\n## D. Mono compatibility (5-20 s): mono sum against the channel average, side energy, L/R correlation\n\n");
     std::printf("| Preset | Mono - stereo | Side - Mid | Corr. L/R |\n|---|---|---|---|\n");
     for (const auto& p : infrasonic::kFactoryPresets) {
         if (p.needsInput) continue;
@@ -154,14 +154,14 @@ static void monoCompat() {
 }
 
 static void longRuns() {
-    std::printf("\n## E. Dieci minuti ai valori estremi: livello e centroide per minuto\n\n");
+    std::printf("\n## E. Ten minutes at extreme values: level and centroid per minute\n\n");
     struct Case { const char* name; float knobs[11]; bool poly; float coupling; bool pong; float drive; };
     const Case cases[] = {
         {"Reverb Decay 1.0, Feedback max", {0.43f, 1.0f, 0.3f, 0.9f, 0.2f, 0.5f, 1.0f, 0.2f, 0.5f, 0.4f, 0.7f}, false, 0, false, 0},
         {"Echo feedback 150 %, PONG drive max", {0.43f, 0.75f, 0.3f, 0.9f, 0.2f, 0.3f, 0.5f, 1.0f, 0.5f, 1.0f, 0.7f}, false, 0, true, 1},
         {"Poly, Coupling max, Feedback max", {0.43f, 1.0f, 0.3f, 0.9f, 0.2f, 0.3f, 0.5f, 0.2f, 0.5f, 0.4f, 0.7f}, true, 1, false, 0},
     };
-    std::printf("| Caso | RMS per minuto (dBFS) | Centroide per minuto (Hz) | Picco | DC | Recuperi |\n|---|---|---|---|---|---|\n");
+    std::printf("| Case | RMS per minute (dBFS) | Centroid per minute (Hz) | Peak | DC | Recoveries |\n|---|---|---|---|---|---|\n");
     for (const auto& k : cases) {
         DroseraCore c; c.Init();
         for (int i = 0; i < 11; ++i) c.SetParam((DroseraCore::Param) i, k.knobs[i]);
@@ -179,27 +179,27 @@ static void longRuns() {
 }
 
 static void extremes() {
-    std::printf("\n## F. Combinazioni estreme e ingresso (20 s)\n\n| Caso | RMS 5-20 s | Picco | Dominante | Centroide | Note |\n|---|---|---|---|---|---|\n");
+    std::printf("\n## F. Extreme combinations and input (20 s)\n\n| Case | RMS 5-20 s | Peak | Dominant | Centroid | Notes |\n|---|---|---|---|---|---|\n");
     auto row = [](const char* name, DroseraCore& c, const float* in, const char* note) {
         const Stereo s = render(c, 20.0, in);
         const Spec sp = spectrum(mono(s), (size_t) (10.0 * kSr));
         std::printf("| %s | %.1f dBFS | %.2f | %.0f Hz | %.0f Hz | %s |\n", name, rmsDb(s, 5.0, 20.0), peakOf(s, 5.0, 20.0), sp.dominantHz, sp.centroidHz, note);
     };
     { DroseraCore c; c.Init(); apply(c, infrasonic::kFactoryPresets[0]); c.SetParam(DroseraCore::FeedbackLPF, 0.0f); c.SetParam(DroseraCore::FeedbackHPF, 1.0f);
-      row("Highpass 4 kHz sopra Lowpass 100 Hz", c, nullptr, "i filtri si escludono"); }
+      row("Highpass 4 kHz above Lowpass 100 Hz", c, nullptr, "the filters cancel out"); }
     { DroseraCore c; c.Init(); apply(c, infrasonic::kFactoryPresets[13]); c.SetStringLock(false); c.SetCoupling(1.0f);
-      row("Sympathetic, LOCK off, Coupling 100 %", c, nullptr, "voci libere accoppiate"); }
+      row("Sympathetic, LOCK off, Coupling 100 %", c, nullptr, "free voices, coupled"); }
     { DroseraCore c; c.Init(); apply(c, infrasonic::kFactoryPresets[15]); c.SetParam(DroseraCore::EchoFeedback, 1.0f); c.SetEchoDrive(1.0f); c.SetEchoTone(1.0f);
-      row("Ember Pong, Echo Feedback 150 %, Drive max, Tone 3.2 kHz", c, nullptr, "runaway saturato"); }
+      row("Ember Pong, Echo Feedback 150 %, Drive max, Tone 3.2 kHz", c, nullptr, "saturated runaway"); }
     { DroseraCore c; c.Init(); apply(c, infrasonic::kFactoryPresets[0]); c.SetParam(DroseraCore::FeedbackGain, 1.0f); c.SetParam(DroseraCore::FeedbackBody, 0.0f);
-      row("Default, Feedback +12 dB, Body minimo", c, nullptr, "anello corto al massimo"); }
+      row("Default, Feedback +12 dB, Body minimum", c, nullptr, "shortest loop at full gain"); }
     {   // the resonator preset with a 220 Hz sine, then with pink-ish noise bursts
         const size_t n = (size_t) (20.0 * kSr); std::vector<float> sine(n), bursts(n);
         for (size_t i = 0; i < n; ++i) { sine[i] = 0.3f * (float) std::sin(2.0 * M_PI * 220.0 * i / kSr); bursts[i] = ((i / 24000) % 2 == 0) ? 0.3f * (float) std::sin(2.0 * M_PI * 110.0 * i / kSr) : 0.0f; }
         DroseraCore c; c.Init(); apply(c, infrasonic::kFactoryPresets[10]); c.SetMidiPitch(true, 57.0f);
-        row("Resonator, sinusoide 220 Hz in ingresso, nota MIDI 57", c, sine.data(), "ingresso continuo");
+        row("Resonator, 220 Hz sine at the input, MIDI note 57", c, sine.data(), "continuous input");
         DroseraCore d; d.Init(); apply(d, infrasonic::kFactoryPresets[10]); d.SetMidiPitch(true, 45.0f);
-        row("Resonator, 110 Hz a raffiche di 0.5 s, nota 45", d, bursts.data(), "ingresso intermittente");
+        row("Resonator, 110 Hz in 0.5 s bursts, note 45", d, bursts.data(), "intermittent input");
     }
 }
 
