@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
     const struct { int program; const char* name; bool chord; } cases[] = {
         {0, "Default", false}, {1, "Sub Cellar", false}, {2, "Glass Wind", false}, {4, "Echo Drift", false}, {7, "Razor Feedback", false},
         {12, "Open Fifths", false}, {13, "Sympathetic", false}, {15, "Ember Pong", false}, {14, "Chord Keys (C E G)", true}};
-    std::printf("| Preset | 44.1 kHz: RMS / dominante / centroide | 48 kHz | 96 kHz |\n|---|---|---|---|\n");
+    std::printf("| Preset | 44.1 kHz: RMS / dominant / centroid | 48 kHz | 96 kHz |\n|---|---|---|---|\n");
     for (const auto& k : cases) {
         std::printf("| %s |", k.name);
         for (double sr : {44100.0, 48000.0, 96000.0}) {

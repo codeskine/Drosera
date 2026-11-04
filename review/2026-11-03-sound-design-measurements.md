@@ -1,68 +1,65 @@
-# Drosera – Misure per il sound design
+# Drosera – Sound design measurements
 
-Data: 2026-11-03, sul commit `ec6e150` (fix della revisione inclusi). Motore a 48 kHz tramite `DroseraCore`
-(`review/experiments/sd_measure.cpp`), VST3 caricato in un host JUCE per il confronto fra sample rate
-(`review/experiments/sr_probe.cpp`). Tutto automatico: nessun ascolto. Le letture qui sotto dicono dove vale
-la pena ascoltare.
+Date: 2026-11-03, on commit `ec6e150` (with the review's fixes). The engine runs at 48 kHz through `DroseraCore`
+(`review/experiments/sd_measure.cpp`), and the VST3 is loaded in a JUCE host to compare sample rates
+(`review/experiments/sr_probe.cpp`). Everything is automatic: nothing was listened to. The readings below say where
+listening is worth the time.
 
-## Cosa dicono le misure
+## What the measurements say
 
-1. **I preset non sono allineati di livello.** Da −9,2 dBFS (Cathedral Bloom) a −22,5 dBFS (Quiet Room): 13 dB di
-   escursione cambiando preset. Glass Wind e Cathedral Bloom sono i più caldi e hanno la cresta più bassa
-   (il limiter lavora). Glass Wind oscilla di 11,5 dB fra finestre di 2 s e ci mette 3,6 s a nascere: è il
-   preset più instabile. Razor Feedback e Chord Keys sono istantanei e fermi (spread 0,3–0,4 dB).
+1. **The presets are not level-matched.** From −9.2 dBFS (Cathedral Bloom) to −22.5 dBFS (Quiet Room): a 13 dB swing
+   when changing preset. Glass Wind and Cathedral Bloom are the hottest and have the lowest crest factor (the limiter
+   is working). Glass Wind swings by 11.5 dB between 2 s windows and takes 3.6 s to build up: it is the least stable
+   preset. Razor Feedback and Chord Keys start at once and hold still (spread 0.3–0.4 dB).
 
-2. **Tessitura sotto MIDI.** A secco tutte le note da 18 a 84 sono entro ±17 cent a ogni Body, con una sola
-   eccezione (nota 80, Body 0,7: −36 cent). La nota 16 suona sempre 11 semitoni sopra (+1104 cent): va
-   esclusa dal range MIDI o documentata come oggi. Nessuna nota muta in queste impostazioni (Lowpass 0,8,
-   Highpass 0,2). **Con Reverb Mix al 35 %** l'intonazione si rompe sotto la nota 48: +46 a 18, −25 a 24,
-   −27 a 36, −25 a 43, e un +105 a 52 con Body 0,9. Sopra 48 resta entro ±20. Il riverbero nell'anello
-   stona i bassi: è il limite più serio per un uso melodico, e suggerisce un avviso nel manuale ("sotto
-   il Do 3 tenere il riverbero basso") o la compensazione di fase del riverbero.
+2. **Note range under MIDI.** Dry, every note from 18 to 84 is within ±17 cents at every Body setting, with one
+   exception (note 80, Body 0.7: −36 cents). Note 16 always sounds 11 semitones high (+1104 cents): it should be left
+   out of the MIDI range, or documented as it is today. No note is mute at these settings (Lowpass 0.8,
+   Highpass 0.2). **With Reverb Mix at 35 %** the tuning breaks below note 48: +46 at 18, −25 at 24, −27 at 36, −25 at
+   43, and +105 at 52 with Body 0.9. Above 48 it stays within ±20. The reverb inside the loop detunes the low notes:
+   this is the most serious limit for melodic use, and it calls for a warning in the manual ("below C3, MIDI note 48,
+   keep the reverb low") or for phase compensation of the reverb.
 
-3. **Lo stesso progetto non suona sempre uguale.** Un host applica lo stato *dopo* `prepareToPlay`, così i
-   parametri scivolano dai default al preset con lo smoothing (fino a 1 s per Body). Simulando l'arrivo
-   dello stato dopo 0, 1, 10 o 100 blocchi: 9 preset su 14 si assestano sulla stessa parziale, ma Doppler
-   Void (704 o 198 Hz), Dark Tide (195, 124 o 315 Hz, con 4 dB di differenza di livello), Echo Drift
-   (1142 o 832 Hz), Ember Pong (832 o 766 Hz) e Sub Cellar (668 o 721 Hz) cambiano "nota" a seconda del
-   momento. Per chi salva un brano è un problema reale. Rimedio piccolo: al ripristino dello stato far
-   saltare i parametri al valore (come fa `first_` dopo `Init`) invece di farli scivolare; i preset
-   caricati dalla finestra possono continuare a scivolare.
+3. **The same project does not always sound the same.** A host applies the state *after* `prepareToPlay`, so the
+   parameters glide from their defaults to the preset through the smoothing (up to 1 s for Body). Simulating the
+   state arriving after 0, 1, 10 or 100 blocks: 9 presets out of 14 settle on the same partial, but Doppler Void
+   (704 or 198 Hz), Dark Tide (195, 124 or 315 Hz, with a 4 dB level difference), Echo Drift (1142 or 832 Hz), Ember
+   Pong (832 or 766 Hz) and Sub Cellar (668 or 721 Hz) change "note" depending on the timing. For someone saving a
+   song this is a real problem. A small remedy: when the state is restored, make the parameters jump to their value
+   (as `first_` does after `Init`) instead of gliding; presets loaded from the window can keep gliding.
 
-4. **Mono.** Tutti i preset perdono fra 0,5 e 4,4 dB sommati a mono. I due canali sono quasi indipendenti
-   (correlazione ~0: Echo Drift, Razor, Sympathetic, Ember Pong, Keys), per via dello sfasamento di 4
-   campioni fra i delay di sinistra e destra: −3 dB è la somma di due segnali scorrelati. Chord Keys ha
-   correlazione negativa (−0,27) e perde 4,4 dB: in mono si svuota. Glass Wind, Cathedral Bloom e Open
-   Fifths sono invece quasi mono (correlazione 0,6–0,8). Da decidere se è la larghezza voluta; un controllo
-   di Width sulle voci, come quello del PONG, lo renderebbe scelta e non caso.
+4. **Mono.** Every preset loses between 0.5 and 4.4 dB when summed to mono. The two channels are nearly independent
+   (correlation ~0: Echo Drift, Razor, Sympathetic, Ember Pong, Keys) because of the 4-sample offset between the left
+   and right delays: −3 dB is the sum of two uncorrelated signals. Chord Keys has negative correlation (−0.27) and
+   loses 4.4 dB: in mono it hollows out. Glass Wind, Cathedral Bloom and Open Fifths are close to mono instead
+   (correlation 0.6–0.8). Whether this is the intended width is still to be decided; a Width control on the voices,
+   like the PONG's, would make it a choice rather than an accident.
 
-5. **Durata.** Nessuna deriva di livello, nessun DC, nessun recupero in 30 minuti complessivi ai valori
-   estremi. Un comportamento da conoscere: con Reverb Decay a 1,0 il centroide scende da 1130 a 160 Hz in
-   dieci minuti (già a 300 Hz dopo due): il drone affonda in un rombo grave e non torna. È il riverbero
-   infinito che accumula il basso che il DC blocker lascia passare. Udibile e forse voluto, ma vale un
-   ascolto lungo.
+5. **Duration.** No level drift, no DC and no recovery in 30 minutes in total at extreme values. One behaviour worth
+   knowing: with Reverb Decay at 1.0 the centroid falls from 1130 to 160 Hz in ten minutes (already 300 Hz after two):
+   the drone sinks into a low rumble and does not come back. It is the infinite reverb accumulating the low end that
+   the DC blocker lets through. Audible and perhaps intended, but worth a long listen.
 
-6. **Combinazioni estreme.** Highpass sopra Lowpass dà silenzio assoluto (−171 dBFS): la finestra non lo
-   segnala. Le altre combinazioni restano limitate (picco ≤ 0,58) e suonano, compreso il runaway del PONG.
-   Il Resonator con una sinusoide in ingresso si aggancia all'ingresso (220 Hz), e con raffiche
-   intermittenti risuona sulla nota (110 Hz) fra una raffica e l'altra.
+6. **Extreme combinations.** Highpass above Lowpass gives total silence (−171 dBFS), and the window does not flag
+   it. The other combinations stay bounded (peak ≤ 0.58) and sound, the PONG runaway included. The Resonator with a
+   sine at its input locks to the input (220 Hz), and with intermittent bursts it rings at the note (110 Hz) between
+   one burst and the next.
 
-7. **Sample rate.** Nel VST3 a 44,1, 48 e 96 kHz livelli identici al decimo di dB e stesse parziali in 7 preset
-   su 9; le due eccezioni (Echo Drift a 96 kHz, Chord Keys a 48 kHz) hanno RMS identico e cadono su parziali
-   vicine di livello (per Chord Keys sono il Mi e il Sol dell'accordo): la finestra d'analisi è a numero fisso
-   di campioni, a 96 kHz dura la metà. Letto come artefatto di misura, non verificato all'ascolto.
+7. **Sample rate.** In the VST3 at 44.1, 48 and 96 kHz, levels match to a tenth of a dB and the partials match in 7
+   presets out of 9. The two exceptions (Echo Drift at 96 kHz, Chord Keys at 48 kHz) have identical RMS and land on
+   partials of similar level (for Chord Keys, the E and the G of the chord): the analysis window has a fixed number
+   of samples, so at 96 kHz it lasts half as long. Read as a measurement artefact; not checked by ear.
 
-## Cosa resta all'orecchio
+## What is left for the ear
 
-Ascolto dei 16 preset con queste tabelle davanti; fraseggio MIDI (glide fisso di 200 ms, velocity ignorata,
-nessun sustain); movimento delle manopole; sorgenti reali nel Resonator; giudizio sull'aliasing del PONG a
-Drive e Tone massimi.
+Listening to the 16 presets with these tables at hand; MIDI phrasing (fixed 200 ms glide, velocity ignored, no
+sustain); knob movement; real sources in the Resonator; judging the PONG's aliasing at maximum Drive and Tone.
 
-## Tabelle
+## Tables
 
-### A. Preset: livello, dinamica e tempo di nascita (20 s da Init)
+### A. Presets: level, dynamics and onset time (20 s from Init)
 
-| Preset | RMS 5-20 s | Picco | Cresta | -3 dB dopo | Spread 2 s | Dominante | Centroide |
+| Preset | RMS 5-20 s | Peak | Crest | -3 dB after | Spread 2 s | Dominant | Centroid |
 |---|---|---|---|---|---|---|---|
 | Default | -18.3 dBFS | 0.33 | 8.8 dB | 0.95 s | 3.8 dB | 500 Hz | 3398 Hz |
 | Sub Cellar | -17.5 dBFS | 0.47 | 11.1 dB | 0.85 s | 3.5 dB | 668 Hz | 1051 Hz |
@@ -74,18 +71,18 @@ Drive e Tone massimi.
 | Razor Feedback | -16.8 dBFS | 0.26 | 5.1 dB | 0.05 s | 0.3 dB | 512 Hz | 7329 Hz |
 | Quiet Room | -22.5 dBFS | 0.27 | 11.1 dB | 2.05 s | 3.8 dB | 543 Hz | 1117 Hz |
 | Keys (play notes) | -18.3 dBFS | 0.33 | 8.8 dB | 0.40 s | 2.5 dB | 133 Hz | 765 Hz |
-| Resonator (needs input) | (richiede ingresso: vedi F) | | | | | | |
-| Init (silent) | (richiede ingresso: vedi F) | | | | | | |
+| Resonator (needs input) | (needs input: see F) | | | | | | |
+| Init (silent) | (needs input: see F) | | | | | | |
 | Open Fifths | -14.9 dBFS | 0.48 | 8.5 dB | 0.65 s | 2.9 dB | 151 Hz | 1075 Hz |
 | Sympathetic | -17.5 dBFS | 0.52 | 11.8 dB | 0.75 s | 1.5 dB | 597 Hz | 1980 Hz |
 | Chord Keys | -19.2 dBFS | 0.28 | 8.3 dB | 0.15 s | 0.4 dB | 165 Hz | 1253 Hz |
 | Ember Pong | -21.3 dBFS | 0.23 | 8.4 dB | 0.35 s | 1.4 dB | 832 Hz | 3492 Hz |
 
-### B. Mappa della tessitura sotto MIDI Pitch (scarto in cent della parziale dominante; `mute` = sotto -40 dBFS; `*` = oltre 25 cent)
+### B. Note range under MIDI Pitch (error in cents of the dominant partial; `mute` = below -40 dBFS; `*` = over 25 cents)
 
 #### Reverb Mix 0.00
 
-| Body \ nota | 16 | 18 | 20 | 24 | 28 | 31 | 36 | 40 | 43 | 48 | 52 | 55 | 60 | 64 | 67 | 72 | 76 | 79 | 80 | 84 |
+| Body \ note | 16 | 18 | 20 | 24 | 28 | 31 | 36 | 40 | 43 | 48 | 52 | 55 | 60 | 64 | 67 | 72 | 76 | 79 | 80 | 84 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 0.1 | +1104* | +1 | +1 | +1 | +0 | +1 | +0 | +1 | -3 | +2 | +2 | +2 | +5 | +7 | +0 | +0 | +0 | +16 | +17 | +0 |
 | 0.3 | +1104* | +1 | +1 | +1 | +0 | +1 | +0 | +1 | -3 | +2 | +2 | +2 | -0 | +0 | +6 | +0 | +0 | +0 | +0 | +0 |
@@ -95,7 +92,7 @@ Drive e Tone massimi.
 
 #### Reverb Mix 0.35
 
-| Body \ nota | 16 | 18 | 20 | 24 | 28 | 31 | 36 | 40 | 43 | 48 | 52 | 55 | 60 | 64 | 67 | 72 | 76 | 79 | 80 | 84 |
+| Body \ note | 16 | 18 | 20 | 24 | 28 | 31 | 36 | 40 | 43 | 48 | 52 | 55 | 60 | 64 | 67 | 72 | 76 | 79 | 80 | 84 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 0.1 | +1125* | +46* | -15 | -25* | +0 | +15 | -27* | -7 | -25* | +20 | +13 | +8 | -1 | -9 | +10 | +3 | +9 | -1 | -1 | +19 |
 | 0.3 | +1125* | +46* | -15 | -25* | +0 | +15 | -27* | -7 | -25* | +20 | +13 | +8 | -8 | -15 | +10 | +4 | +7 | +2 | +11 | +10 |
@@ -103,9 +100,9 @@ Drive e Tone massimi.
 | 0.7 | +1125* | +46* | -15 | -25* | +0 | +15 | -24 | -5 | -8 | +10 | +9 | +7 | +6 | -1 | +7 | +3 | +4 | +3 | +0 | +32* |
 | 0.9 | +1125* | +46* | -15 | -28* | -5 | +10 | +18 | -5 | -7 | +5 | +105* | +3 | -1 | -0 | +6 | -0 | +32* | +2 | -0 | +21 |
 
-### C. Ripetibilita: lo stesso preset raggiunto subito da Init, o dopo 1 / 10 / 100 blocchi ai valori di default (come un host che carica lo stato dopo prepareToPlay)
+### C. Repeatability: the same preset reached straight from Init, or after 1 / 10 / 100 blocks at the default values (like a host that loads the state after prepareToPlay)
 
-| Preset | Dominante subito | dopo 1 blocco | dopo 10 | dopo 100 | RMS subito / 1 / 10 / 100 |
+| Preset | Dominant at once | after 1 block | after 10 | after 100 | RMS at once / 1 / 10 / 100 |
 |---|---|---|---|---|---|
 | Default | 500 Hz | 500 Hz | 500 Hz | 501 Hz | -19 / -19 / -19 / -19 |
 | Sub Cellar | 668 Hz | 668 Hz | 668 Hz | 721 Hz | -17 / -17 / -17 / -17 |
@@ -122,9 +119,9 @@ Drive e Tone massimi.
 | Chord Keys | 165 Hz | 165 Hz | 165 Hz | 165 Hz | -19 / -19 / -19 / -19 |
 | Ember Pong | 832 Hz | 766 Hz | 766 Hz | 766 Hz | -21 / -20 / -20 / -20 |
 
-### D. Compatibilita mono (5-20 s): somma mono contro media dei canali, energia del lato, correlazione L/R
+### D. Mono compatibility (5-20 s): mono sum against the channel average, side energy, L/R correlation
 
-| Preset | Mono - stereo | Side - Mid | Corr. L/R |
+| Preset | Mono - stereo | Side - Mid | L/R corr. |
 |---|---|---|---|
 | Default | -1.9 dB | -2.6 dB | +0.29 |
 | Sub Cellar | -2.7 dB | -0.6 dB | +0.07 |
@@ -141,28 +138,28 @@ Drive e Tone massimi.
 | Chord Keys | -4.4 dB | +2.4 dB | -0.27 |
 | Ember Pong | -3.1 dB | +0.2 dB | -0.03 |
 
-### F. Combinazioni estreme e ingresso (20 s)
+### F. Extreme combinations and input (20 s)
 
-| Caso | RMS 5-20 s | Picco | Dominante | Centroide | Note |
+| Case | RMS 5-20 s | Peak | Dominant | Centroid | Notes |
 |---|---|---|---|---|---|
-| Highpass 4 kHz sopra Lowpass 100 Hz | -171.0 dBFS | 0.00 | 2319 Hz | 3467 Hz | i filtri si escludono |
-| Sympathetic, LOCK off, Coupling 100 % | -16.2 dBFS | 0.58 | 597 Hz | 1888 Hz | voci libere accoppiate |
-| Ember Pong, Echo Feedback 150 %, Drive max, Tone 3.2 kHz | -18.1 dBFS | 0.29 | 832 Hz | 6777 Hz | runaway saturato |
-| Default, Feedback +12 dB, Body minimo | -20.3 dBFS | 0.27 | 1076 Hz | 6036 Hz | anello corto al massimo |
-| Resonator, sinusoide 220 Hz in ingresso, nota MIDI 57 | -16.9 dBFS | 0.40 | 220 Hz | 642 Hz | ingresso continuo |
-| Resonator, 110 Hz a raffiche di 0.5 s, nota 45 | -25.5 dBFS | 0.19 | 110 Hz | 254 Hz | ingresso intermittente |
+| Highpass 4 kHz above Lowpass 100 Hz | -171.0 dBFS | 0.00 | 2319 Hz | 3467 Hz | the filters cancel out |
+| Sympathetic, LOCK off, Coupling 100 % | -16.2 dBFS | 0.58 | 597 Hz | 1888 Hz | free voices, coupled |
+| Ember Pong, Echo Feedback 150 %, Drive max, Tone 3.2 kHz | -18.1 dBFS | 0.29 | 832 Hz | 6777 Hz | saturated runaway |
+| Default, Feedback +12 dB, Body minimum | -20.3 dBFS | 0.27 | 1076 Hz | 6036 Hz | shortest loop at full gain |
+| Resonator, 220 Hz sine at the input, MIDI note 57 | -16.9 dBFS | 0.40 | 220 Hz | 642 Hz | continuous input |
+| Resonator, 110 Hz in 0.5 s bursts, note 45 | -25.5 dBFS | 0.19 | 110 Hz | 254 Hz | intermittent input |
 
-### E. Dieci minuti ai valori estremi: livello e centroide per minuto
+### E. Ten minutes at extreme values: level and centroid per minute
 
-| Caso | RMS per minuto (dBFS) | Centroide per minuto (Hz) | Picco | DC | Recuperi |
+| Case | RMS per minute (dBFS) | Centroid per minute (Hz) | Peak | DC | Recoveries |
 |---|---|---|---|---|---|
 | Reverb Decay 1.0, Feedback max | -11 -9 -9 -9 -10 -10 -11 -11 -11 -11 | 1130 300 226 199 177 167 165 159 157 159 | 0.74 | -0.00013 | 0 |
 | Echo feedback 150 %, PONG drive max | -16 -16 -17 -16 -16 -17 -17 -16 -17 -17 | 2452 2721 2555 2526 2557 2563 2490 2578 2526 2775 | 0.45 | +0.00000 | 0 |
 | Poly, Coupling max, Feedback max | -19 -19 -20 -19 -19 -19 -20 -19 -20 -19 | 4862 4999 4882 5237 5057 5259 5222 5005 4832 5114 | 0.41 | -0.00000 | 0 |
 
-### G. VST3 ai tre sample rate (15 s, RMS 5-15 s, spettro da 8 s)
+### G. VST3 at the three sample rates (15 s, RMS 5-15 s, spectrum from 8 s)
 
-| Preset | 44.1 kHz: RMS / dominante / centroide | 48 kHz | 96 kHz |
+| Preset | 44.1 kHz: RMS / dominant / centroid | 48 kHz | 96 kHz |
 |---|---|---|---|
 | Default | -20.6 dBFS / 500 Hz / 3176 Hz | -20.6 dBFS / 501 Hz / 3156 Hz | -20.6 dBFS / 501 Hz / 2889 Hz |
 | Sub Cellar | -19.4 dBFS / 721 Hz / 998 Hz | -19.4 dBFS / 721 Hz / 994 Hz | -19.4 dBFS / 721 Hz / 1011 Hz |

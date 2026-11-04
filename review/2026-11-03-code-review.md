@@ -1,527 +1,523 @@
-# Drosera – Revisione tecnica (DSP, real-time, VST3/AU, build)
+# Drosera – Technical review (DSP, real time, VST3/AU, build)
 
-Data: 2026-11-03. Commit analizzato: `9447f73` (branch `claude/audio-plugin-vst3-au-review-9b137d`).
-Revisione eseguita su una copia isolata del progetto; il repository originale non è stato modificato.
-Gli esperimenti e le patch di prova sono in `review/experiments/`. I log di build e test citati sono stati tenuti fuori dal repository.
+Date: 2026-11-03. Commit reviewed: `9447f73` (branch `claude/audio-plugin-vst3-au-review-9b137d`).
+The review ran on an isolated copy of the project; the original repository was not modified.
+The experiments and trial patches are in `review/experiments/`. The build and test logs cited here were kept out of
+the repository.
 
 ---
 
 ## 1. Executive summary
 
-Drosera è un drone synth a feedback (porting del firmware Audrey II) in JUCE 8.0.9, con formati VST3, AU e
-Standalone. Il progetto è in buono stato: la separazione fra motore DSP (senza JUCE) e wrapper plugin è
-netta, il thread audio non alloca né blocca, la suite di test è ampia (471 verifiche offline, test del VST3
-caricato in un host, test dell'interfaccia, checksum di riferimento del motore) e tutto è passato nella
-sandbox. Il manuale documenta onestamente i limiti sonori.
+Drosera is a feedback drone synth (a port of the Audrey II firmware) in JUCE 8.0.9, in VST3, AU and Standalone
+formats. The project is in good shape: the DSP engine (without JUCE) is cleanly separated from the plugin wrapper,
+the audio thread neither allocates nor blocks, the test suite is broad (471 offline checks, a test of the VST3
+loaded in a host, interface tests, reference checksums of the engine) and everything passed in the sandbox. The
+manual documents the sound's limits honestly.
 
-Nessun problema Critical o High. I punti più rilevanti:
+No Critical or High issues. The most relevant points:
 
-| ID | Severità | Sintesi |
+| ID | Severity | Summary |
 |---|---|---|
-| D-01 | Medium | Overflow intero con segno (undefined behaviour) nel generatore di rumore DaisySP, eseguito a ogni campione sul thread audio. Rilevato da UBSan. Fix di una riga, bit-identico. |
-| D-02 | Medium | L'echo parte da 5 s e scivola al valore della manopola in ~3 s dopo ogni `prepareToPlay` (e dopo ogni recupero da NaN): le prime ripetizioni sono in ritardo e intonate male. Ereditato dal firmware. |
-| D-03 | Medium | L'ordine dei gestori dei parametri dipende dall'iterazione di `std::unordered_map`: i render di riferimento (checksum) dipendono dalla libreria standard, e la compensazione di fase MIDI legge valori del tick corrente o precedente a seconda di quell'ordine. |
-| D-04 | Low | Latenza dichiarata all'host ma nessun `processBlockBypassed`: in bypass l'audio passa senza ritardo (compensazione di latenza dell'host disallineata). |
-| D-05 | Low | L'Audio Unit viene costruito ma mai validato (`auval`) né rilasciato; la CI valida solo il VST3. |
-| D-06 | Low | `prepareToPlay` con sample rate 0 produce un `ratio` infinito convertito a `size_t`. |
+| D-01 | Medium | Signed integer overflow (undefined behaviour) in the DaisySP noise generator, run on every sample on the audio thread. Found by UBSan. One-line fix, bit-identical. |
+| D-02 | Medium | The echo starts at 5 s and glides to the knob's value in ~3 s after every `prepareToPlay` (and after every NaN recovery): the first repeats are late and out of tune. Inherited from the firmware. |
+| D-03 | Medium | The order of the parameter handlers depends on `std::unordered_map` iteration: the reference renders (checksums) depend on the standard library, and the MIDI phase compensation reads current-tick or previous-tick values depending on that order. |
+| D-04 | Low | Latency reported to the host but no `processBlockBypassed`: in bypass the audio passes with no delay (the host's latency compensation is misaligned). |
+| D-05 | Low | The Audio Unit is built but never validated (`auval`) or released; CI validates only the VST3. |
+| D-06 | Low | `prepareToPlay` with a sample rate of 0 produces an infinite `ratio` converted to `size_t`. |
 
-CPU misurata: da 0,5 % (mono) a 2,2 % (tre voci MIDI) di un core Apple Silicon. Memoria: circa 3,5 MB di
-stato DSP per istanza.
+Measured CPU: from 0.5 % (mono) to 2.2 % (three MIDI voices) of one Apple silicon core. Memory: about 3.5 MB of DSP
+state per instance.
 
-Valutazione complessiva: qualità alta per un progetto di questa dimensione; gli interventi suggeriti sono
-piccoli e a basso rischio. Vedi §12 per il piano.
+Overall assessment: high quality for a project of this size; the suggested changes are small and low risk. See §12
+for the plan.
 
 ---
 
-## 2. Architettura analizzata
+## 2. Architecture reviewed
 
-### 2.1 Componenti
+### 2.1 Components
 
-| Area | File | Ruolo |
+| Area | File | Role |
 |---|---|---|
-| Motore (senza JUCE) | `src/dsp/FeedbackSynthEngine.*` | Tre `FeedbackVoice`, rumore bianco per voce, echo stereo, accoppiamento fra voci, rampa di polifonia |
-| | `src/dsp/FeedbackVoice.*` | Un anello di feedback: linea di ritardo stereo ("Body"), due corde Karplus-Strong, overdrive, LPF/HPF biquad, riverbero `ReverbSc`, band-pass di tracking opzionale |
-| | `src/dsp/KarplusString.*`, `BiquadFilters.*`, `EchoDelay.h`, `StereoEcho.h` | Blocchi DSP |
-| | `src/dsp/DroseraCore.h` | Facciata a 48 kHz fissi: mappa parametri normalizzati, smoothing a 12 kHz (blocco di 4 campioni), MIDI pitch/gate, polifonia, PONG, limiter, recupero da NaN |
-| | `src/dsp/ParameterRegistry.h`, `SmoothedValue.h` | Registro parametri con smoothing one-pole e handler `std::function` |
-| | `src/dsp/SincResampler.h` | Convertitore windowed-sinc (96 tap, Kaiser β=9, 512 fasi) |
-| | `src/dsp/VoiceAllocator.h` | Assegnazione note MIDI a tre voci, array fissi |
-| Plugin | `src/plugin/PluginProcessor.cpp` | `AudioProcessor`: APVTS (25 parametri), MIDI sample-accurate, ponte di sample rate, stato, programmi |
-| | `src/plugin/PluginEditor.*`, `src/plugin/ui/*` | Finestra 760×500, pianta/spettro, manopole, tab |
-| | `src/plugin/SpectrumTap.h` | FIFO SPSC lock-free audio → UI |
-| | `src/plugin/EditorBridge.h` | Interfaccia editor → processor oltre ai parametri |
-| | `src/plugin/Presets.h` | 16 preset di fabbrica |
-| Terze parti | `third_party/DaisySP` (commit 7f67768, MIT) | Delay line, ReverbSc, Limiter, Overdrive, WhiteNoise, Tone, DcBlock, CrossFade |
-| Test | `tests/render_test.cpp` (1930 righe), `plugin_host_test.cpp`, `ui_test.cpp`, `voice_allocator_test.cpp`, `render_cli.cpp`, `editor_snapshot.cpp` | |
+| Engine (no JUCE) | `src/dsp/FeedbackSynthEngine.*` | Three `FeedbackVoice`s, white noise per voice, stereo echo, coupling between voices, polyphony ramp |
+| | `src/dsp/FeedbackVoice.*` | One feedback loop: stereo delay line ("Body"), two Karplus-Strong strings, overdrive, biquad LPF/HPF, `ReverbSc` reverb, optional tracking band-pass |
+| | `src/dsp/KarplusString.*`, `BiquadFilters.*`, `EchoDelay.h`, `StereoEcho.h` | DSP blocks |
+| | `src/dsp/DroseraCore.h` | Front end fixed at 48 kHz: maps normalised parameters, smoothing at 12 kHz (4-sample block), MIDI pitch/gate, polyphony, PONG, limiter, NaN recovery |
+| | `src/dsp/ParameterRegistry.h`, `SmoothedValue.h` | Parameter registry with one-pole smoothing and `std::function` handlers |
+| | `src/dsp/SincResampler.h` | Windowed-sinc converter (96 taps, Kaiser β=9, 512 phases) |
+| | `src/dsp/VoiceAllocator.h` | Assigns MIDI notes to three voices, fixed arrays |
+| Plugin | `src/plugin/PluginProcessor.cpp` | `AudioProcessor`: APVTS (25 parameters), sample-accurate MIDI, sample-rate bridge, state, programs |
+| | `src/plugin/PluginEditor.*`, `src/plugin/ui/*` | 760×500 window, plant/spectrum, knobs, tabs |
+| | `src/plugin/SpectrumTap.h` | Lock-free SPSC FIFO, audio → UI |
+| | `src/plugin/EditorBridge.h` | Editor → processor interface beyond the parameters |
+| | `src/plugin/Presets.h` | 16 factory presets |
+| Third party | `third_party/DaisySP` (commit 7f67768, MIT) | Delay line, ReverbSc, Limiter, Overdrive, WhiteNoise, Tone, DcBlock, CrossFade |
+| Tests | `tests/render_test.cpp` (1930 lines), `plugin_host_test.cpp`, `ui_test.cpp`, `voice_allocator_test.cpp`, `render_cli.cpp`, `editor_snapshot.cpp` | |
 
-### 2.2 Flusso del segnale
+### 2.2 Signal flow
 
 ```
 host in (L+R)/2 · inputgain ──► [SincResampler host→48k] ──┐
                                                            ▼
-   per voce v:  noise_v + in + coupling_v ──► DelayLine(Body, R = L−4) ──► KarplusString ×2 ──► Overdrive
+   per voice v: noise_v + in + coupling_v ──► DelayLine(Body, R = L−4) ──► KarplusString ×2 ──► Overdrive
                 ──► LPF12 ──► HPF12 ──► ReverbSc (mix) ──► samp_v ──► ×fb_gain ──► [BPF24 tracking] ──► DelayLine (write)
-   mix voci (×ramp, ×1/√3) ──► StereoEcho (send; PONG: linee incrociate, drive, tone, width, level) ──► 0.5·(dry+wet)
-   ──► ×volume ──► Limiter (pre-gain 0.7) ──► controllo NaN/inf (Recover) ──► [SincResampler 48k→host]
+   voice mix (×ramp, ×1/√3) ──► StereoEcho (send; PONG: crossed lines, drive, tone, width, level) ──► 0.5·(dry+wet)
+   ──► ×volume ──► Limiter (pre-gain 0.7) ──► NaN/inf check (Recover) ──► [SincResampler 48k→host]
    ──► hard clip ±1 ──► SpectrumTap (UI) ──► host out
 ```
 
-Il controllo gira a 12 kHz: ogni 4 campioni `ParameterRegistry::Process` applica lo smoothing e chiama gli
-handler, che scrivono nel motore. In modo MIDI/LOCK `applyPitchAndBody` calcola la risposta in fase dei
-filtri dell'anello alla nota (numeri complessi) e corregge i ritardi perché l'anello oscilli sulla
-fondamentale.
+Control runs at 12 kHz: every 4 samples `ParameterRegistry::Process` applies the smoothing and calls the handlers,
+which write into the engine. In MIDI/LOCK mode `applyPitchAndBody` computes the phase response of the loop's filters
+at the note (complex numbers) and corrects the delays so that the loop oscillates at the fundamental.
 
 ### 2.3 Threading
 
-- Thread audio: `processBlock` → `updateParams` (legge gli atomici APVTS) → `renderChunk` → `DroseraCore::Render`.
-- Thread messaggi: editor con timer a 30 Hz; legge solo atomici (`published_note_`, `midiPitchActive_`, `uiTab`…) e la FIFO `SpectrumTap`.
-- `prepareToPlay` alloca (vettori, tabelle del resampler, `Engine::Init` alla prima chiamata); mai dal thread audio.
-- Stato: XML tramite `copyXmlToBinary`; `replaceState` è thread-safe (documentato in JUCE).
+- Audio thread: `processBlock` → `updateParams` (reads the APVTS atomics) → `renderChunk` → `DroseraCore::Render`.
+- Message thread: editor with a 30 Hz timer; reads only atomics (`published_note_`, `midiPitchActive_`, `uiTab`…) and the `SpectrumTap` FIFO.
+- `prepareToPlay` allocates (vectors, resampler tables, `Engine::Init` on the first call); never from the audio thread.
+- State: XML through `copyXmlToBinary`; `replaceState` is thread-safe (documented in JUCE).
 
 ---
 
-## 3. Ambiente di analisi
+## 3. Analysis environment
 
-Sandbox: `…/scratchpad/sandbox/` con `src/` (copia da `git archive HEAD`), `tools/venv/` (strumenti), `build/release`, `build/asan`, `experiments/`. Nessuna installazione globale sull'host.
+Sandbox: `…/scratchpad/sandbox/` with `src/` (a copy from `git archive HEAD`), `tools/venv/` (tools), `build/release`, `build/asan`, `experiments/`. Nothing installed globally on the host.
 
-| Strumento | Versione | Provenienza |
+| Tool | Version | Source |
 |---|---|---|
 | macOS | Darwin 27.2.0, arm64 | host |
-| Compilatore | AppleClang 21.0.0.21000401 (Command Line Tools) | host, già presente |
-| CMake | 4.4.4 | venv della sandbox (pip) – **mancava sull'host** |
-| Ninja | 1.13.2 | venv della sandbox (pip) – **mancava sull'host** |
-| JUCE | 8.0.9 | scaricato da CMake `FetchContent` nella build dir della sandbox |
-| clang-tidy | LLVM 23.1.4 | venv della sandbox (pip) |
-| Python | 3.11 (uv venv) | per `tools/test_release_check.py` |
+| Compiler | AppleClang 21.0.0.21000401 (Command Line Tools) | host, already present |
+| CMake | 4.4.4 | sandbox venv (pip) – **missing on the host** |
+| Ninja | 1.13.2 | sandbox venv (pip) – **missing on the host** |
+| JUCE | 8.0.9 | downloaded by CMake `FetchContent` into the sandbox build dir |
+| clang-tidy | LLVM 23.1.4 | sandbox venv (pip) |
+| Python | 3.11 (uv venv) | for `tools/test_release_check.py` |
 
-Non disponibili e non installati: `pluginval` (richiede download di un binario esterno), `auval` su un
-componente non installato in `~/Library/Audio/Plug-Ins/Components` (fuori dalla sandbox), toolchain Intel
-(l'host è arm64; la CI costruisce l'universale).
+Not available and not installed: `pluginval` (needs an external binary to be downloaded), `auval` on a component not
+installed in `~/Library/Audio/Plug-Ins/Components` (outside the sandbox), an Intel toolchain (the host is arm64; CI
+builds the universal binary).
 
-Modifiche sperimentali, **solo nella copia sandbox**:
-1. `CMakeLists.txt`: aggiunto il target `host_probe` (vedi `review/experiments/CMakeLists-host_probe.txt`).
-2. `tests/host_probe.cpp`: nuovo (copia in `review/experiments/`).
-3. `third_party/DaisySP/Source/Noise/whitenoise.h`: patch per D-01 (`review/experiments/whitenoise-unsigned.patch`), applicata **dopo** la prima esecuzione dei sanitizer, per verificare il fix.
-4. Riconfigurazione con `CMAKE_EXPORT_COMPILE_COMMANDS=ON` per clang-tidy.
+Experimental changes, **in the sandbox copy only**:
+1. `CMakeLists.txt`: added the `host_probe` target (see `review/experiments/CMakeLists-host_probe.txt`).
+2. `tests/host_probe.cpp`: new (copy in `review/experiments/`).
+3. `third_party/DaisySP/Source/Noise/whitenoise.h`: patch for D-01 (`review/experiments/whitenoise-unsigned.patch`), applied **after** the first sanitizer run, to verify the fix.
+4. Reconfigured with `CMAKE_EXPORT_COMPILE_COMMANDS=ON` for clang-tidy.
 
 ---
 
-## 4. Configurazione e compilazione
+## 4. Configuration and build
 
-| Build | Esito |
+| Build | Result |
 |---|---|
-| Release, Ninja, tutti i target (VST3, AU, Standalone, test) | OK, 199 passi, 53 warning |
+| Release, Ninja, all targets (VST3, AU, Standalone, tests) | OK, 199 steps, 53 warnings |
 | Debug + `-fsanitize=address,undefined` (render_test, voice_allocator_test, render_cli, ui_test) | OK |
-| Firme ad hoc dei bundle (`codesign --verify --deep --strict`) | OK per VST3, AU, Standalone |
-| AU `Info.plist` | `aumu` / `Dros` / `Cdsk`, versione 257 (0.1.1), bundle `com.codeskine.Drosera` |
-| Binario | arm64, minOS 11.0; VST3 e AU ≈ 10 MB ciascuno (statico JUCE) |
+| Ad hoc bundle signatures (`codesign --verify --deep --strict`) | OK for VST3, AU, Standalone |
+| AU `Info.plist` | `aumu` / `Dros` / `Cdsk`, version 257 (0.1.1), bundle `com.codeskine.Drosera` |
+| Binary | arm64, minOS 11.0; VST3 and AU ≈ 10 MB each (JUCE linked statically) |
 
-Dei 53 warning, 44 vengono da DaisySP (compilato con `-w`, ma gli header sono inclusi dal plugin con i
-flag JUCE) e 9 dal codice del progetto: `ParameterRegistry.h` (shadowing dei campi nel costruttore, `;`
-superflui), `DroseraCore.h:52` (conversione di segno), `PluginProcessor.cpp:243` (`!=` fra float, qui
-intenzionale), `PluginProcessor.cpp:50` (`switch-enum`). Nessuno indica un bug.
+Of the 53 warnings, 44 come from DaisySP (compiled with `-w`, but its headers are included by the plugin with JUCE's
+flags) and 9 from the project's own code: `ParameterRegistry.h` (fields shadowed in the constructor, superfluous
+`;`), `DroseraCore.h:52` (sign conversion), `PluginProcessor.cpp:243` (`!=` between floats, intentional here),
+`PluginProcessor.cpp:50` (`switch-enum`). None points to a bug.
 
 ---
 
-## 5. Risultati dei test
+## 5. Test results
 
-### 5.1 Eseguiti con successo
+### 5.1 Passed
 
-| Test | Risultato |
+| Test | Result |
 |---|---|
 | `voice_allocator_test` | 14/14 OK |
-| `render_test` (Release) | 471 verifiche OK, 0 FAIL; allocazioni durante il render (incluso recupero da NaN): 0 |
-| `ui_test` (Release) | ALL OK; allocazioni nel percorso audio polifonico: 0 (hook `malloc_logger`) |
-| `plugin_host_test` sul VST3 costruito, con fixture `state-baseline.bin` | ALL OK: identità dei 25 parametri e dei loro ID VST3, stato salvato dalla build baseline, round trip dello stato, livelli a 44.1/48/96 kHz × blocchi 64/512/1000, input audio, MIDI gate, latenza dichiarata = misurata (±3 campioni), nota MIDI 60 entro +0,2 cent a tutte le frequenze di campionamento, preset |
-| `tools/hardware-comparison/check_reference.sh` | 10/10 WAV con SHA-256 identico ai riferimenti |
-| `tools/test_release_check.py` | 8 test OK |
-| `voice_allocator_test` sotto ASan+UBSan | OK, nessun report |
-| `render_test` e `ui_test` sotto ASan+UBSan | Prima esecuzione: **interrotte al primo campione** dall'overflow in `whitenoise.h:34` (D-01). Con la patch di D-01 applicata alla copia sandbox: `ui_test` ALL OK e `render_test` 471/471 OK, **zero report** di ASan e UBSan in entrambi. |
-| `host_probe` (esperimento, VST3 nell'host JUCE) | ALL OK: 22.05/44.1/88.2/176.4/192 kHz × blocchi 1/7/2048/8192 con input; latenza dichiarata = misurata a 22.05/88.2/192 kHz (±5); 60 s a 44.1 kHz con blocchi misti (4096, 64, 1000, 3, 2048, 512) senza buchi; blocco vuoto; bypass; stato corrotto e troncato; note-on con velocity 0 |
-| Esperimenti DSP (`exp1_cpu`, `exp2_edges`, `exp3_order`, `exp4_size`) | Vedi §7, §8, §9 |
+| `render_test` (Release) | 471 checks OK, 0 FAIL; allocations during rendering (NaN recovery included): 0 |
+| `ui_test` (Release) | ALL OK; allocations in the polyphonic audio path: 0 (`malloc_logger` hook) |
+| `plugin_host_test` on the built VST3, with the `state-baseline.bin` fixture | ALL OK: identity of the 25 parameters and their VST3 IDs, state saved by the baseline build, state round trip, levels at 44.1/48/96 kHz × blocks of 64/512/1000, audio input, MIDI gate, reported latency = measured (±3 samples), MIDI note 60 within +0.2 cents at every sample rate, presets |
+| `tools/hardware-comparison/check_reference.sh` | 10/10 WAVs with SHA-256 identical to the references |
+| `tools/test_release_check.py` | 8 tests OK |
+| `voice_allocator_test` under ASan+UBSan | OK, no reports |
+| `render_test` and `ui_test` under ASan+UBSan | First run: **stopped at the first sample** by the overflow in `whitenoise.h:34` (D-01). With the D-01 patch applied to the sandbox copy: `ui_test` ALL OK and `render_test` 471/471 OK, **zero** ASan and UBSan **reports** in both. |
+| `host_probe` (experiment, VST3 in the JUCE host) | ALL OK: 22.05/44.1/88.2/176.4/192 kHz × blocks of 1/7/2048/8192 with input; reported latency = measured at 22.05/88.2/192 kHz (±5); 60 s at 44.1 kHz with mixed blocks (4096, 64, 1000, 3, 2048, 512) without gaps; empty block; bypass; corrupt and truncated state; note-ons with velocity 0 |
+| DSP experiments (`exp1_cpu`, `exp2_edges`, `exp3_order`, `exp4_size`) | See §7, §8, §9 |
 
-### 5.2 Falliti
+### 5.2 Failed
 
-Nessun test del progetto è fallito. L'unico esito negativo è il report UBSan di D-01, che impedisce di
-usare i sanitizer così com'è.
+No project test failed. The only negative result is the UBSan report for D-01, which stops the sanitizers from
+being used as things stand.
 
-### 5.3 Non eseguibili per limiti ambientali
+### 5.3 Not runnable because of the environment
 
-- `pluginval` (la CI lo esegue a strictness 5 sul VST3): richiede il download di un eseguibile esterno.
-- `auval` sull'AU: richiede l'installazione del componente in `~/Library`, fuori dalla sandbox.
-- Build e test Intel x86_64: host arm64. I checksum di riferimento sono dichiarati validi solo su arm64.
-- ThreadSanitizer: non eseguito (richiederebbe una terza build; il percorso audio↔UI è stato verificato a lettura, §8).
+- `pluginval` (CI runs it at strictness 5 on the VST3): needs an external executable to be downloaded.
+- `auval` on the AU: needs the component installed in `~/Library`, outside the sandbox.
+- Intel x86_64 build and tests: the host is arm64. The reference checksums are declared valid on arm64 only.
+- ThreadSanitizer: not run (it would need a third build; the audio↔UI path was checked by reading, §8).
 
-### 5.4 Non previsti dal progetto
+### 5.4 Not covered by the project
 
-- Validazione AU in CI (D-05).
-- Test a sample rate ≠ 44.1/48/96 kHz e a blocchi > 1000 campioni (coperti qui da `host_probe`, tutti OK).
-- Build con sanitizer in CI.
+- AU validation in CI (D-05).
+- Tests at sample rates other than 44.1/48/96 kHz and with blocks over 1000 samples (covered here by `host_probe`, all OK).
+- A sanitizer build in CI.
 
 ---
 
-## 6. Problemi individuati (per severità)
+## 6. Issues found (by severity)
 
-Convenzione: file e righe si riferiscono al commit analizzato.
+Convention: files and lines refer to the commit reviewed.
 
-### D-01 · Medium · Real-time / Bug
+### D-01 · Medium · Real time / Bug
 **File:** `third_party/DaisySP/Source/Noise/whitenoise.h:34` (`randseed_ *= 16807;`, `int32_t`)
-**Descrizione:** moltiplicazione intera con segno che va in overflow a quasi ogni chiamata: comportamento
-indefinito in C++. Viene eseguita per ogni campione da tre generatori (`Engine::Process`) e 60 020 volte in
-`Engine::Init` (pre-roll dei semi).
-**Impatto:** oggi i compilatori producono il wrap-around atteso, quindi il suono è corretto; ma il codice non
-ha garanzie, un futuro compilatore o flag (`-ftrapv`, ottimizzazioni su UB) può cambiarne l'esito, e **oggi
-rende inutilizzabili ASan/UBSan** sull'intera suite (si fermano al primo campione).
-**Evidenza:** `runtime error: signed integer overflow: 282475249 * 16807 cannot be represented in type 'int'`,
+**Description:** a signed integer multiplication that overflows on almost every call: undefined behaviour in C++.
+It runs on every sample in three generators (`Engine::Process`) and 60,020 times in `Engine::Init` (seed
+pre-roll).
+**Impact:** today's compilers produce the expected wrap-around, so the sound is correct; but the code has no
+guarantees, a future compiler or flag (`-ftrapv`, optimisations that exploit UB) may change the result, and **today
+it makes ASan/UBSan unusable** on the whole suite (they stop at the first sample).
+**Evidence:** `runtime error: signed integer overflow: 282475249 * 16807 cannot be represented in type 'int'`,
 stack `WhiteNoise::Process ← Engine::Init ← DroseraCore::Init ← prepareToPlay`.
-**Soluzione:** `randseed_ = (int32_t) ((uint32_t) randseed_ * 16807u);` – stessi bit, stesso suono.
-Verificato nella sandbox: con la patch, `check_reference.sh` dà 10/10 checksum identici e `render_test` passa
-(471/471), quindi il suono non cambia di un bit. Registrare la modifica in `third_party/DaisySP/PATCHES.txt` (regola 4).
-**Priorità:** 1 (banale, sblocca i sanitizer).
+**Fix:** `randseed_ = (int32_t) ((uint32_t) randseed_ * 16807u);` – same bits, same sound.
+Verified in the sandbox: with the patch, `check_reference.sh` gives 10/10 identical checksums and `render_test`
+passes (471/471), so the sound does not change by a single bit. Record the change in
+`third_party/DaisySP/PATCHES.txt` (rule 4).
+**Priority:** 1 (trivial, unblocks the sanitizers).
 
 ### D-02 · Medium · DSP
 **File:** `src/dsp/FeedbackSynthEngine.cpp:34-36` (`SetDelayTime(5.0f, true)`, `SetLagTime(0.5f)`), `src/dsp/EchoDelay.h:114-118`
-**Descrizione:** `Engine::Init` imposta il tempo dell'echo a 5 s "immediatamente"; il valore reale arriva dal
-registro al tick successivo ma come *target*, e `EchoDelay` lo insegue con un one-pole da 0,5 s. Il tempo
-di ritardo quindi scivola da 5 s al valore della manopola nei primi secondi dopo **ogni** `prepareToPlay`
-(caricamento, cambio di sample rate o buffer in molti host) e dopo ogni `Recover()`.
-**Impatto:** le prime ripetizioni sono molto in ritardo e, poiché il ritardo varia mentre si legge, trasposte
-verso il basso (effetto nastro). Dopo circa 3 s tutto è a posto. È comportamento del firmware, dove però
-`Init` avviene solo all'accensione.
-**Evidenza:** `exp2_edges`, sezione A, echo time 0,248 s: impulso a t=0 → prima ripetizione dopo 0,954 s;
-a t=2 s → 0,296 s; a t=6 s → 0,248 s.
-**Soluzione:** al primo push (`first_`) e dopo `Recover`, far saltare anche lo stato interno dell'echo:
-`Engine::SetEchoDelayTime(float, bool immediate)` → `stereo_echo_->SetDelayTime(t, immediate)`, chiamato
-da `DroseraCore::pushControls` con `imm`. Cambia i render di riferimento con echo: va dichiarato e
-vanno rigenerati i checksum (regola 2).
-**Nota emersa applicando il fix** (`review/experiments/exp5_stall.cpp`): il one-pole in `float` di `EchoDelay` non
-raggiunge mai il suo target: si ferma quando il passo scende sotto mezzo ulp, cioè 8,6 campioni prima di 0,248 s,
-68,7 prima di 1,29 s, 137 prima di 2,5 s (fino a 2,9 ms). Per questo i tre render con echo cambiano per tutta la
-durata, non solo nei primi secondi. Lo stesso scarto resta, dopo il fix, a ogni movimento della manopola Echo Time:
-inudibile (0,1 %), ma se si vuole esattezza basta agganciare il valore al target quando la distanza è sotto un
-campione (opzionale, cambierebbe ancora i checksum).
-**Priorità:** 3.
+**Description:** `Engine::Init` sets the echo time to 5 s "immediately"; the real value comes from the registry on
+the next tick, but as a *target*, and `EchoDelay` chases it with a 0.5 s one-pole. So the delay time glides from 5 s
+to the knob's value in the first seconds after **every** `prepareToPlay` (loading, a change of sample rate or buffer
+in many hosts) and after every `Recover()`.
+**Impact:** the first repeats are very late and, since the delay changes while it is being read, transposed down (a
+tape effect). After about 3 s everything is in place. This is the firmware's behaviour, but there `Init` happens only
+at power-on.
+**Evidence:** `exp2_edges`, section A, echo time 0.248 s: impulse at t=0 → first repeat after 0.954 s; at t=2 s →
+0.296 s; at t=6 s → 0.248 s.
+**Fix:** on the first push (`first_`) and after `Recover`, make the echo's internal state jump as well:
+`Engine::SetEchoDelayTime(float, bool immediate)` → `stereo_echo_->SetDelayTime(t, immediate)`, called from
+`DroseraCore::pushControls` with `imm`. This changes the reference renders that use the echo: it must be declared and
+the checksums regenerated (rule 2).
+**Note found while applying the fix** (`review/experiments/exp5_stall.cpp`): `EchoDelay`'s `float` one-pole never
+reaches its target: it stops when the step falls below half an ulp, that is 8.6 samples short of 0.248 s, 68.7 short
+of 1.29 s, 137 short of 2.5 s (up to 2.9 ms). That is why the three renders with echo change for their whole length,
+not just the first seconds. After the fix, the same gap remains on every movement of the Echo Time knob: inaudible
+(0.1 %), but for exactness it is enough to snap the value to the target once the distance is under one sample
+(optional; it would change the checksums again).
+**Priority:** 3.
 
-### D-03 · Medium · Architecture (portabilità, determinismo)
-**File:** `src/dsp/ParameterRegistry.h:67-71` e `:99`, `src/dsp/DroseraCore.h:141` (commento che ammette il problema), `:206-227`
-**Descrizione:** gli handler vengono chiamati nell'ordine di iterazione di `std::unordered_map<int, …>`, che
-è un dettaglio della libreria standard. Con libc++ è l'inverso dell'ordine di registrazione (`exp3_order`:
-`OutputVolume … FeedbackBody FeedbackGain Frequency`). L'handler di `Frequency` chiama `applyPitchAndBody(0)`,
-che usa `body_s_`, `lpf_hz_`, `hpf_hz_` scritti dagli handler di Body/LPF/HPF: con l'ordine attuale vede i
-valori del tick corrente, con un altro ordine quelli del tick precedente. Inoltre, ogni tick fa una ricerca
-hash e una chiamata `std::function` per parametro.
-**Impatto:** (a) i checksum di riferimento valgono solo per questa libreria standard (oltre che per arm64);
-(b) un build con libstdc++ (Linux/Windows, citato in `BUILDING.md` come possibile ripresa) renderebbe
-diverso senza che nulla lo segnali; (c) costo per tick evitabile.
-**Evidenza:** `review/experiments/exp3_order.cpp`; `DroseraCore.h:141` ("more entries could reorder its handlers").
-**Soluzione:** sostituire la mappa con `std::array<ParamState, N>` indicizzato dall'enum e iterare in un
-ordine scelto esplicitamente. Mantenendo l'ordine inverso attuale i render restano identici; in
-alternativa dichiarare il cambio. Elimina `kParamSmoothingThresh` (inutilizzato) e il TODO. ~40 righe,
-riduce codice.
-**Priorità:** 2.
+### D-03 · Medium · Architecture (portability, determinism)
+**File:** `src/dsp/ParameterRegistry.h:67-71` and `:99`, `src/dsp/DroseraCore.h:141` (a comment admitting the problem), `:206-227`
+**Description:** the handlers are called in the iteration order of `std::unordered_map<int, …>`, which is a detail
+of the standard library. With libc++ it is the reverse of the registration order (`exp3_order`:
+`OutputVolume … FeedbackBody FeedbackGain Frequency`). The `Frequency` handler calls `applyPitchAndBody(0)`, which
+uses `body_s_`, `lpf_hz_`, `hpf_hz_` written by the Body/LPF/HPF handlers: with the current order it sees the current
+tick's values, with another order the previous tick's. Moreover, every tick does a hash lookup and a `std::function`
+call per parameter.
+**Impact:** (a) the reference checksums hold only for this standard library (as well as for arm64 only); (b) a build
+with libstdc++ (Linux/Windows, mentioned in `BUILDING.md` as a possible future step) would render differently with
+nothing to flag it; (c) an avoidable cost per tick.
+**Evidence:** `review/experiments/exp3_order.cpp`; `DroseraCore.h:141` ("more entries could reorder its handlers").
+**Fix:** replace the map with a `std::array<ParamState, N>` indexed by the enum and iterate in an explicitly chosen
+order. Keeping the current reverse order leaves the renders identical; otherwise declare the change. It removes
+`kParamSmoothingThresh` (unused) and the TODO. ~40 lines, less code.
+**Priority:** 2.
 
 ### D-04 · Low · Compatibility
-**File:** `src/plugin/PluginProcessor.cpp:168-170` (latenza dichiarata), nessun override di `processBlockBypassed`
-**Descrizione:** con host ≠ 48 kHz e bus d'ingresso collegato il plugin dichiara una latenza (327 campioni a
-44,1 kHz, 1264 a 192 kHz); il bypass di default di JUCE copia l'ingresso in uscita senza ritardo e, in
-Debug, scatta `jassert(getLatencySamples() == 0)` (`juce_AudioProcessor.cpp:599`).
-**Impatto:** durante il bypass, l'audio passante è spostato in avanti di quella latenza rispetto alla
-compensazione dell'host; in Debug l'assert interrompe. Riguarda solo l'uso come effetto su un ingresso.
-**Soluzione:** override di `processBlockBypassed` con una linea di ritardo di `getLatencySamples()` campioni
-dimensionata in `prepareToPlay` (`juce::dsp::DelayLine` o un ring di `std::vector` già allocato). ~25 righe.
-**Priorità:** 4.
+**File:** `src/plugin/PluginProcessor.cpp:168-170` (reported latency), no override of `processBlockBypassed`
+**Description:** with a host rate other than 48 kHz and the input bus connected, the plugin reports a latency (327
+samples at 44.1 kHz, 1264 at 192 kHz); JUCE's default bypass copies the input to the output with no delay and, in
+Debug, `jassert(getLatencySamples() == 0)` fires (`juce_AudioProcessor.cpp:599`).
+**Impact:** during bypass, the audio passing through is shifted ahead by that latency relative to the host's
+compensation; in Debug the assert interrupts. It only matters when Drosera is used as an effect on an input.
+**Fix:** override `processBlockBypassed` with a delay line of `getLatencySamples()` samples sized in `prepareToPlay`
+(`juce::dsp::DelayLine` or a ring on an already allocated `std::vector`). ~25 lines.
+**Priority:** 4.
 
 ### D-05 · Low · Compatibility (AU)
-**File:** `CMakeLists.txt:67` (`FORMATS VST3 AU Standalone`), `.github/workflows/ci.yml` (target `Drosera_VST3`, `pluginval` solo VST3)
-**Descrizione:** l'AU viene costruito da ogni build locale, ma la CI non lo compila, non esegue `auval` né
-`pluginval` su di esso, e la release pubblica solo il VST3.
-**Impatto:** l'AU è un artefatto non verificato; chi lo installa da una build locale non ha garanzie
-(Logic/GarageBand rifiutano i componenti che non passano `auval`).
-**Soluzione:** o rimuovere `AU` dai formati finché non è supportato, oppure aggiungere alla CI:
-build `Drosera_AU`, copia in `~/Library/Audio/Plug-Ins/Components`, `killall -9 AudioComponentRegistrar`,
-`auval -v aumu Dros Cdsk`, `pluginval` sul `.component`.
-**Priorità:** 5.
+**File:** `CMakeLists.txt:67` (`FORMATS VST3 AU Standalone`), `.github/workflows/ci.yml` (target `Drosera_VST3`, `pluginval` on the VST3 only)
+**Description:** every local build builds the AU, but CI does not compile it, does not run `auval` or `pluginval` on
+it, and the release publishes only the VST3.
+**Impact:** the AU is an unverified artefact; whoever installs it from a local build has no guarantees
+(Logic/GarageBand reject components that fail `auval`).
+**Fix:** either remove `AU` from the formats until it is supported, or add to CI: build `Drosera_AU`, copy it to
+`~/Library/Audio/Plug-Ins/Components`, `killall -9 AudioComponentRegistrar`, `auval -v aumu Dros Cdsk`, `pluginval`
+on the `.component`.
+**Priority:** 5.
 
-### D-06 · Low · Bug (robustezza)
+### D-06 · Low · Bug (robustness)
 **File:** `src/plugin/PluginProcessor.cpp:142-150`
-**Descrizione:** `ratio = 48000 / sampleRate`; con `sampleRate` 0 (alcuni host interrogano/preparano con
-valori provvisori) `ratio` è infinito, `std::ceil(inf)` convertito a `size_t` è comportamento indefinito e
-`outL.assign(...)` può chiedere una quantità enorme di memoria.
-**Impatto:** crash o eccezione `bad_alloc` all'apertura in un host che passa 0.
-**Soluzione:** all'inizio di `prepareToPlay`: `if (sampleRate <= 0.0) sampleRate = DroseraCore::kRate;`. 1 riga.
-**Priorità:** 6.
+**Description:** `ratio = 48000 / sampleRate`; with a `sampleRate` of 0 (some hosts query or prepare with
+provisional values) `ratio` is infinite, `std::ceil(inf)` converted to `size_t` is undefined behaviour, and
+`outL.assign(...)` may ask for an enormous amount of memory.
+**Impact:** a crash or a `bad_alloc` exception on opening in a host that passes 0.
+**Fix:** at the start of `prepareToPlay`: `if (sampleRate <= 0.0) sampleRate = DroseraCore::kRate;`. 1 line.
+**Priority:** 6.
 
 ### D-07 · Low · Bug (UX) / Compatibility
-**File:** `src/dsp/DroseraCore.h:192` (clamp a `kNoteMin..kNoteMax` tramite `Update`), `src/plugin/PluginProcessor.cpp:403-404` (`Interval` −24..+24)
-**Descrizione:** la nota di una voce è limitata a 16..84; con la manopola Frequency in alto (nota 72) un
-intervallo di +24 st suona la nota 84, come +12. Lo stesso in basso.
-**Evidenza:** `exp2_edges`, sezione D: voce 1 (+24) e voce 2 (+12) pubblicano entrambe 84,0.
-**Impatto:** la manopola mostra "+24 st" ma la voce non lo suona; nessun artefatto.
-**Soluzione:** nel readout dell'intervallo mostrare l'intervallo effettivo (nota pubblicata − nota della
-voce 0), oppure documentarlo nel manuale. Non cambiare il range del parametro (romperebbe le automazioni).
-**Priorità:** 9.
+**File:** `src/dsp/DroseraCore.h:192` (clamp to `kNoteMin..kNoteMax` through `Update`), `src/plugin/PluginProcessor.cpp:403-404` (`Interval` −24..+24)
+**Description:** a voice's note is limited to 16..84; with the Frequency knob high (note 72) an interval of +24 st
+plays note 84, the same as +12. The same happens at the bottom.
+**Evidence:** `exp2_edges`, section D: voice 1 (+24) and voice 2 (+12) both publish 84.0.
+**Impact:** the knob shows "+24 st" but the voice does not play it; no artefacts.
+**Fix:** show the effective interval in the interval readout (published note − voice 0's note), or document it in
+the manual. Do not change the parameter's range (it would break automation).
+**Priority:** 9.
 
-### D-08 · Low · Real-time
+### D-08 · Low · Real time
 **File:** `src/dsp/DroseraCore.h:125-129` (`Recover`), `FeedbackSynthEngine.cpp:13-37`
-**Descrizione:** il recupero da NaN re-inizializza tutto il motore sul thread audio: azzera 3 `ReverbSc`
-(386 KB l'uno), le due linee dell'echo (940 KB l'una), corde e delay (≈ 160 KB per voce): ≈ 3,5 MB scritti
-in un colpo, oltre a riportare l'echo a 5 s (D-02).
-**Impatto:** un picco di carico di qualche centinaio di µs nel blocco in cui scatta; con buffer da 64
-campioni a 96 kHz (0,67 ms) può causare un dropout. È un percorso d'emergenza: in 3 minuti di render ai
-valori massimi (`exp2_edges` B) non è mai scattato, e il test `recoversFromNan` ne verifica l'esito.
-**Soluzione:** accettabile così; se si vuole, azzerare solo il necessario (delay line, filtri, riverberi) senza
-ricalcolare i semi del rumore, e saltare subito l'echo al valore corrente.
-**Priorità:** 10 (opzionale).
+**Description:** NaN recovery re-initialises the whole engine on the audio thread: it clears 3 `ReverbSc`s (386 KB
+each), the echo's two lines (940 KB each), the strings and delays (≈ 160 KB per voice): ≈ 3.5 MB written in one go,
+and it also puts the echo back to 5 s (D-02).
+**Impact:** a load spike of a few hundred µs in the block where it fires; with 64-sample buffers at 96 kHz (0.67 ms)
+it can cause a dropout. It is an emergency path: in 3 minutes of rendering at maximum values (`exp2_edges` B) it
+never fired, and the `recoversFromNan` test checks its outcome.
+**Fix:** acceptable as is; if desired, clear only what is needed (delay lines, filters, reverbs) without recomputing
+the noise seeds, and jump the echo straight to the current value.
+**Priority:** 10 (optional).
 
-### D-09 · Low · Real-time / Compatibility (thread)
+### D-09 · Low · Real time / Compatibility (threads)
 **File:** `src/plugin/PluginProcessor.cpp:103-130`
-**Descrizione:** `setCurrentProgram` scrive `apvts.state.setProperty(...)` (un `ValueTree`, non thread-safe) e
-chiama `setValueNotifyingHost` con gesture. Dall'editor è sul thread messaggi; un host AU che ripristina un
-preset da un altro thread farebbe una corsa con i listener dell'APVTS.
-**Soluzione:** eseguire la parte `ValueTree` sul thread messaggi (`MessageManager::callAsync`) o almeno
-`jassert(MessageManager::existsAndIsCurrentThread())`. ~5 righe.
-**Priorità:** 11.
+**Description:** `setCurrentProgram` writes `apvts.state.setProperty(...)` (a `ValueTree`, not thread-safe) and calls
+`setValueNotifyingHost` with gestures. From the editor this happens on the message thread; an AU host restoring a
+preset from another thread would race with the APVTS listeners.
+**Fix:** run the `ValueTree` part on the message thread (`MessageManager::callAsync`), or at least
+`jassert(MessageManager::existsAndIsCurrentThread())`. ~5 lines.
+**Priority:** 11.
 
 ### D-10 · Low · Security (supply chain) / Build
 **File:** `CMakeLists.txt:48-51`
-**Descrizione:** JUCE è scaricato con `GIT_TAG 8.0.9`. Un tag git è mutabile.
-**Soluzione:** usare l'hash del commit del tag (con `GIT_SHALLOW` serve un server che supporti fetch per
-SHA, GitHub lo fa) o verificare un hash dell'archivio. 1 riga.
-**Priorità:** 7.
+**Description:** JUCE is downloaded with `GIT_TAG 8.0.9`. A git tag is mutable.
+**Fix:** use the hash of the tag's commit (with `GIT_SHALLOW` this needs a server that supports fetching by SHA,
+which GitHub does) or verify a hash of the archive. 1 line.
+**Priority:** 7.
 
 ### D-11 · Low · Bug (MIDI)
 **File:** `src/plugin/PluginProcessor.cpp:158-159`
-**Descrizione:** `prepareToPlay` azzera `heldCount`, `haveNote` e l'allocatore: una nota tenuta mentre l'host
-cambia buffer o sample rate si perde (con MIDI Gate il suono si chiude finché non si suona un'altra nota).
-Mancano anche il sustain pedal (CC 64) e la bend range configurabile (RPN), oggi fissa a ±2 st.
-**Impatto:** raro nell'uso normale; i secondi due sono limiti di funzionalità, non bug.
-**Soluzione:** conservare `held[]` e riapplicare `allocator.Assign(held, heldCount)` dopo `Init`; valutare
-CC 64 e RPN 0 come funzionalità.
-**Priorità:** 12.
+**Description:** `prepareToPlay` clears `heldCount`, `haveNote` and the allocator: a note held while the host changes
+buffer or sample rate is lost (with MIDI Gate the sound closes until another note is played). The sustain pedal
+(CC 64) and a configurable bend range (RPN), today fixed at ±2 st, are also missing.
+**Impact:** rare in normal use; the latter two are feature limits, not bugs.
+**Fix:** keep `held[]` and reapply `allocator.Assign(held, heldCount)` after `Init`; consider CC 64 and RPN 0 as
+features.
+**Priority:** 12.
 
 ### D-12 · Low · Code quality
-Warning nel codice del progetto (§4) e segnalazioni clang-tidy senza impatto: `performance-unnecessary-value-param`
-per `Handler` in `ParameterRegistry.h:39,87` (copia di `std::function` alla registrazione, solo in `Init`),
-`bugprone-implicit-widening-of-multiplication-result` in `PluginProcessor.cpp:147,150` e `FeedbackSynthEngine.h:77`
-(valori piccoli, innocui), `cert-err33-c` su `snprintf` in `Readouts.h:14`. Correggere quando si tocca il file.
-**Priorità:** 13.
+Warnings in the project's code (§4) and clang-tidy findings with no impact: `performance-unnecessary-value-param`
+for `Handler` in `ParameterRegistry.h:39,87` (a `std::function` copy at registration, only in `Init`),
+`bugprone-implicit-widening-of-multiplication-result` in `PluginProcessor.cpp:147,150` and `FeedbackSynthEngine.h:77`
+(small values, harmless), `cert-err33-c` on `snprintf` in `Readouts.h:14`. Fix them when the file is touched.
+**Priority:** 13.
 
 ---
 
-## 7. Analisi DSP e qualità audio
+## 7. DSP and audio quality analysis
 
-**Motore a 48 kHz fissi.** Scelta corretta per preservare il comportamento del firmware (dimensioni delle
-delay line, `ReverbSc` tarato su 48 kHz) e la riproducibilità dei checksum. Il costo è il resampler e la sua
-latenza, dichiarata solo con l'ingresso collegato (coerente: senza ingresso non c'è nulla da allineare).
+**Engine fixed at 48 kHz.** The right choice to keep the firmware's behaviour (delay line sizes, `ReverbSc` tuned for
+48 kHz) and the reproducibility of the checksums. The cost is the resampler and its latency, reported only with the
+input connected (consistent: with no input there is nothing to align).
 
-**Resampler windowed-sinc.** Misure (`exp2_edges` C, 48 k → 44,1 k): guadagno 0,00 dB a 1, 10 e 18 kHz;
-−16,5 dB a 21 kHz (banda di transizione, sotto la nuova Nyquist di 22,05 kHz); −94 dB a 23 kHz. Nessun
-aliasing udibile, tabella normalizzata a guadagno unitario in DC. Il ponte input-driven/output-driven con
-prime di 256 campioni ha retto 60 s di blocchi misti da 3 a 4096 campioni senza buchi; la latenza
-misurata dopo quella prova è 329 campioni contro 327 dichiarati: nessuna deriva del FIFO.
+**Windowed-sinc resampler.** Measurements (`exp2_edges` C, 48 k → 44.1 k): gain 0.00 dB at 1, 10 and 18 kHz;
+−16.5 dB at 21 kHz (transition band, below the new Nyquist of 22.05 kHz); −94 dB at 23 kHz. No audible aliasing;
+the table is normalised to unity gain at DC. The input-driven/output-driven bridge with a 256-sample prime held up
+through 60 s of mixed blocks from 3 to 4096 samples without gaps; the latency measured after that run is 329 samples
+against 327 reported: no FIFO drift.
 
-**Stabilità numerica.** L'anello è limitato da `fclamp(±20)` nella corda, `SoftClip` nell'overdrive e nel
-echo, `Limiter` in uscita; `juce::ScopedNoDenormals` nel `processBlock` copre i denormali sul thread audio
-(i test offline non lo attivano, ma non hanno mostrato rallentamenti). Ai valori massimi di tutto
-(reverb decay 1,0, feedback +12 dB, echo feedback 150 %, PONG drive +12 dB, coupling 10 %) 3 minuti di
-render restano finiti, picco ≤ 0,82, zero recuperi (`exp2_edges` B). Il controllo NaN/inf per blocco con
-`Recover` è una rete di sicurezza ragionevole per un sistema caotico.
+**Numerical stability.** The loop is bounded by `fclamp(±20)` in the string, `SoftClip` in the overdrive and in the
+echo, and the `Limiter` at the output; `juce::ScopedNoDenormals` in `processBlock` covers denormals on the audio
+thread (the offline tests do not enable it, but showed no slowdowns). With everything at maximum (reverb decay 1.0,
+feedback +12 dB, echo feedback 150 %, PONG drive +12 dB, coupling 10 %) 3 minutes of rendering stay finite, peak
+≤ 0.82, zero recoveries (`exp2_edges` B). The per-block NaN/inf check with `Recover` is a reasonable safety net for
+a chaotic system.
 
-**Headroom e clipping.** Il `Limiter` DaisySP usa `SoftLimit`, che non è limitato a ±1 sui transienti; il
-`jlimit(−1, 1)` finale nel `processBlock` è quindi giustificato. Nei 3 minuti ai massimi non si è mai
-superato 1,0 dopo il limiter. Il `0.5·(dry+wet)` dell'echo dimezza sempre il segnale diretto: è del
-firmware, non un errore.
+**Headroom and clipping.** The DaisySP `Limiter` uses `SoftLimit`, which is not bounded to ±1 on transients; the final
+`jlimit(−1, 1)` in `processBlock` is therefore justified. In the 3 minutes at maximum, 1.0 was never exceeded after
+the limiter. The echo's `0.5·(dry+wet)` always halves the direct signal: that is the firmware's, not a mistake.
 
-**Filtri.** Biquad TDF-II a singola precisione con coefficienti bilineari standard (`BiquadFilters.cpp`),
-Q 0,9 per LPF/HPF, cutoff limitato a `[1, fs/2]`. Il tracking band-pass (BPF24, Q 1,5) e la compensazione di
-fase complessa in `applyPitchAndBody` sono corretti: la nota 60 misura +0,1/+0,2 cent attraverso il VST3 a
-44,1/48/96 kHz. Lo smoothing della nota (t60 0,2 s) produce un portamento su ogni cambio di nota MIDI: è
-coerente col carattere del firmware ma vale la pena sapere che non è configurabile.
+**Filters.** Single-precision TDF-II biquads with standard bilinear coefficients (`BiquadFilters.cpp`), Q 0.9 for
+LPF/HPF, cutoff limited to `[1, fs/2]`. The tracking band-pass (BPF24, Q 1.5) and the complex phase compensation in
+`applyPitchAndBody` are correct: note 60 measures +0.1/+0.2 cents through the VST3 at 44.1/48/96 kHz. The note's
+smoothing (t60 0.2 s) produces a portamento on every MIDI note change: it fits the firmware's character, but it is
+worth knowing that it is not configurable.
 
-**Aliasing.** La saturazione del PONG non è sovracampionata; il manuale lo dichiara (−54 dB di potenza
-inarmonica al massimo Drive). Per un echo "a nastro" è una scelta accettabile; un oversampling 2× sul solo
-`SoftClip` di `ReadShaped` costerebbe poco (Medium complessità) se in futuro si volesse ripulirlo.
+**Aliasing.** The PONG's saturation is not oversampled; the manual says so (−54 dB of inharmonic power at maximum
+Drive). For a "tape" echo this is an acceptable choice; 2× oversampling on `ReadShaped`'s `SoftClip` alone would
+cost little (medium complexity) if it ever needs cleaning up.
 
-**Continuità al cambio di parametri.** Tutto passa dal registro con smoothing a 12 kHz (nessun zipper);
-le rampe di polifonia e PONG (20 ms) e il blend di tuning (50 ms) sono verificati click-free dai test.
-Eccezione: D-02 all'avvio.
+**Continuity on parameter changes.** Everything goes through the registry with smoothing at 12 kHz (no zipper
+noise); the polyphony and PONG ramps (20 ms) and the tuning blend (50 ms) are verified click-free by the tests.
+Exception: D-02 at start-up.
 
-**Sound design.** Le scelte creative (Body che "snappa" ai periodi della nota, Coupling con make-up,
-WARP come doppler) sono deliberate e documentate nei design spec in `docs/superpowers/`. Non le classifico
-come problemi. Il manuale elenca con onestà i limiti (note 16–18 e 80 mute, reverb che stona le note
-MIDI, chord drift con Body alto).
+**Sound design.** The creative choices (Body "snapping" to the note's periods, Coupling with make-up gain, WARP as a
+doppler) are deliberate and documented in the design specs in `docs/superpowers/`. I do not class them as issues.
+The manual lists the limits honestly (notes 16–18 and 80 mute, the reverb detuning MIDI notes, chord drift with high
+Body).
 
 ---
 
-## 8. Problemi real-time
+## 8. Real-time issues
 
-Verifica del percorso `processBlock` → `renderChunk` → `DroseraCore::Render` → `Engine::Process`:
+Check of the `processBlock` → `renderChunk` → `DroseraCore::Render` → `Engine::Process` path:
 
-| Aspetto | Esito |
+| Aspect | Result |
 |---|---|
-| Allocazioni | Nessuna: vettori/tabelle allocati in `prepareToPlay`; `Engine::Init` alloca solo alla prima chiamata; `MidiMessage` costruito solo per messaggi ≤ 3 byte (i sysex allocherebbero, ed è evitato). Confermato da `render_test` (operator new contato: 0) e `ui_test` (`malloc_logger`: 0). |
-| Lock | Nessuno. `SpectrumTap` è SPSC lock-free con acquire/release corretti; la UI legge solo atomici. |
-| I/O, logging | Nessuno sul thread audio. |
-| Determinismo | Nessuna chiamata a tempo variabile; `std::pow/tan/atan2/log2` sono costanti nel tempo. |
-| Denormali | `ScopedNoDenormals`. |
-| UB | D-01 (overflow nel rumore). |
-| Costo in casi rari | `Recover()` (D-08). |
-| Comunicazione UI ↔ audio | Parametri via atomici APVTS letti una volta per blocco; `published_note_`/`published_body_s_` atomici relaxed; `uiTab`, `currentProgram`, `hostRate` atomici; `setStateInformation` usa `replaceState` (thread-safe, non RT, mai dal thread audio). `setCurrentProgram` vedi D-09. |
-| Race `prepared` | `bool` non atomico scritto in `prepareToPlay`/`releaseResources` e letto in `processBlock`: accettabile perché gli host serializzano queste chiamate, ma un `std::atomic<bool>` costa nulla. |
+| Allocations | None: vectors and tables allocated in `prepareToPlay`; `Engine::Init` allocates only on the first call; `MidiMessage` built only for messages ≤ 3 bytes (sysex would allocate, and is avoided). Confirmed by `render_test` (operator new counted: 0) and `ui_test` (`malloc_logger`: 0). |
+| Locks | None. `SpectrumTap` is a lock-free SPSC with correct acquire/release; the UI reads only atomics. |
+| I/O, logging | None on the audio thread. |
+| Determinism | No variable-time calls; `std::pow/tan/atan2/log2` are constant-time. |
+| Denormals | `ScopedNoDenormals`. |
+| UB | D-01 (overflow in the noise). |
+| Cost in rare cases | `Recover()` (D-08). |
+| UI ↔ audio communication | Parameters through APVTS atomics read once per block; `published_note_`/`published_body_s_` relaxed atomics; `uiTab`, `currentProgram`, `hostRate` atomics; `setStateInformation` uses `replaceState` (thread-safe, not real-time, never from the audio thread). `setCurrentProgram`: see D-09. |
+| `prepared` race | A non-atomic `bool` written in `prepareToPlay`/`releaseResources` and read in `processBlock`: acceptable because hosts serialise these calls, but a `std::atomic<bool>` costs nothing. |
 
 ---
 
-## 9. Ottimizzazioni di performance
+## 9. Performance optimisations
 
-Misure (`exp1_cpu`, 20 s di audio a 48 kHz, blocchi da 512, un core M-series, Release `-O3`):
+Measurements (`exp1_cpu`, 20 s of audio at 48 kHz, 512-sample blocks, one M-series core, Release `-O3`):
 
-| Modalità | CPU |
+| Mode | CPU |
 |---|---|
-| Default (mono, manopole) | 0,53 % |
-| Keys (mono, tracking MIDI) | 0,91 % |
-| Open Fifths (poly, LOCK) | 2,13 % |
-| Sympathetic (poly, libero) | 1,35 % |
-| Chord Keys (poly MIDI) | 2,19 % |
-| Ember Pong (PONG) | 0,59 % |
+| Default (mono, knobs) | 0.53 % |
+| Keys (mono, MIDI tracking) | 0.91 % |
+| Open Fifths (poly, LOCK) | 2.13 % |
+| Sympathetic (poly, free) | 1.35 % |
+| Chord Keys (poly MIDI) | 2.19 % |
+| Ember Pong (PONG) | 0.59 % |
 
-`render_test` riporta 9 ms per secondo di audio mono e 21 ms poly. A questo si aggiunge il resampler a
-host ≠ 48 kHz (96 tap × 3 canali ≈ 300 MAC/campione, trascurabile). Memoria per istanza: `Engine` 475 KB
-inline + 3 × `ReverbSc` 386 KB + echo 1,9 MB + tabelle del resampler 0,6 MB ≈ 3,5 MB.
+`render_test` reports 9 ms per second of mono audio and 21 ms poly. On top of this comes the resampler at host rates
+other than 48 kHz (96 taps × 3 channels ≈ 300 MACs per sample, negligible). Memory per instance: `Engine` 475 KB
+inline + 3 × `ReverbSc` 386 KB + echo 1.9 MB + resampler tables 0.6 MB ≈ 3.5 MB.
 
-**Conclusione:** nessuna correzione necessaria. Ottimizzazioni *opzionali*, in ordine di resa:
+**Conclusion:** no fix needed. *Optional* optimisations, in order of payoff:
 
-1. **Non ricalcolare i coefficienti a ogni tick** (`DroseraCore.h:212-215, 243-248`, `FeedbackVoice::SetFeedbackTracking`).
-   Oggi ogni 4 campioni ogni handler scrive nel motore anche se il valore è fermo: `tanf` per LPF/HPF ×3
-   voci, 4 `tanf` per i BPF24 di tracking per voce, `expf` per il livello PONG, più `pow`, `polar`, `atan2`,
-   `log2` in `applyPitchAndBody`. Rimedio: in `SmoothedValue::get` restituire anche "cambiato" (confronto
-   bit a bit, dopo la convergenza il one-pole è esattamente stabile) e saltare l'handler. Beneficio stimato:
-   −30/50 % sulla parte di controllo (che è una frazione del 2 %). Rischio: l'ordine/dipendenza fra handler
-   (D-03) va risolto prima, perché `applyPitchAndBody` dipende da più parametri. Complessità media.
-2. **`applyPitchAndBody(0)` chiamato due volte per tick** (handler di Frequency e di Body, `DroseraCore.h:207, 211`):
-   basta una chiamata dopo entrambi. Beneficio piccolo, rischio nullo se l'ordine è esplicito (D-03).
-3. **Registro senza hash e `std::function`** (parte di D-03): array indicizzato dall'enum, handler come
-   puntatore a membro o `switch`. Beneficio piccolo; vale per il determinismo più che per la CPU.
-4. **SIMD**: non consigliato. L'anello è ricorsivo campione per campione (feedback a ritardo frazionario),
-   non vettorizzabile; i tre voci sono indipendenti solo entro il campione. Il resampler è già un prodotto
-   scalare che il compilatore vettorizza da solo.
-
----
-
-## 10. Problemi architetturali e manutenibilità
-
-**Punti di forza.** Confine netto DSP/JUCE con test senza JUCE; `EditorBridge` tiene l'editor lontano dal
-processor; `Presets.h`, `Readouts.h`, `SpectrumBands.h` testabili da soli; proprietà chiara (`unique_ptr`
-per gli oggetti grandi, `Engine` non copiabile); nessun `new` nudo; ID parametri con `versionHint` per
-l'ordinamento AU; regole di progetto scritte (`CLAUDE.md`, `CONTRIBUTING.md`) e design spec per ogni
-funzionalità; CI con pluginval.
-
-**Da migliorare.**
-- `ParameterRegistry` (D-03): la generalità del template e della mappa non è usata (tre registri con enum
-  fissi); un array la sostituisce con meno codice e più garanzie.
-- `DroseraCore.h` è un header di 368 righe con matematica non banale (`applyPitchAndBody`,
-  `blendedStringNote`) e tre registri: resta leggibile grazie ai commenti, ma le funzioni di risposta in
-  frequenza (`stringLoopResponse`, `biquadResponse`) replicano a mano i coefficienti di `BiquadFilters.cpp` e
-  di `Tone`/`DcBlock`: se uno cambia, l'altro va aggiornato a mano. Un commento incrociato o una funzione
-  condivisa che restituisca i coefficienti eviterebbe la deriva.
-- `PluginProcessor.cpp` tiene insieme layout dei parametri, stato MIDI (`held[]`, allocatore, bend), ponte
-  di sample rate e programmi: 475 righe ancora gestibili, ma lo stato MIDI (`handleMidi`, `applyMidiState`,
-  `removeNote`) è un candidato naturale a una piccola classe testabile senza JUCE, come `VoiceAllocator`.
-- Cache di `std::atomic<float>*` per 25 parametri: funziona, ma un array indicizzato da un enum dei
-  parametri plugin ridurrebbe le 15 righe di `getRawParameterValue` ripetute.
-- `kSpecs` in `PluginProcessor.cpp` duplica range e curve di `DroseraCore::registerParams` ("Ranges/curves
-  mirror…"): una tabella condivisa nel DSP eviterebbe la duplicazione.
-- Il commento in `FeedbackVoice.h:21-22` ("Init leaves fb_delay_samp_…") e quello in `Engine::Init` sono
-  essenziali perché `Init` serve anche da reset sul thread audio: convenzione delicata ma documentata.
+1. **Do not recompute coefficients on every tick** (`DroseraCore.h:212-215, 243-248`, `FeedbackVoice::SetFeedbackTracking`).
+   Today every 4 samples every handler writes into the engine even when the value is still: `tanf` for LPF/HPF ×3
+   voices, 4 `tanf` for each voice's tracking BPF24s, `expf` for the PONG level, plus `pow`, `polar`, `atan2`, `log2`
+   in `applyPitchAndBody`. Remedy: have `SmoothedValue::get` also return "changed" (a bitwise comparison; once
+   converged the one-pole is exactly stable) and skip the handler. Estimated benefit: −30/50 % on the control part
+   (which is a fraction of the 2 %). Risk: the ordering and dependency between handlers (D-03) must be resolved first,
+   because `applyPitchAndBody` depends on several parameters. Medium complexity.
+2. **`applyPitchAndBody(0)` called twice per tick** (Frequency and Body handlers, `DroseraCore.h:207, 211`): one call
+   after both is enough. Small benefit, no risk if the order is explicit (D-03).
+3. **Registry without hashing and `std::function`** (part of D-03): an array indexed by the enum, handlers as
+   member-function pointers or a `switch`. Small benefit; it matters for determinism more than for CPU.
+4. **SIMD**: not recommended. The loop is recursive sample by sample (fractional-delay feedback) and cannot be
+   vectorised; the three voices are independent only within a sample. The resampler is already a dot product that
+   the compiler vectorises on its own.
 
 ---
 
-## 11. Compatibilità VST3 / AU
+## 10. Architecture and maintainability issues
 
-| Aspetto | Stato |
+**Strengths.** A clean DSP/JUCE boundary with tests that need no JUCE; `EditorBridge` keeps the editor away from the
+processor; `Presets.h`, `Readouts.h`, `SpectrumBands.h` testable on their own; clear ownership (`unique_ptr` for large
+objects, `Engine` non-copyable); no naked `new`; parameter IDs with `versionHint` for AU ordering; written project
+rules (`CLAUDE.md`, `CONTRIBUTING.md`) and a design spec for every feature; CI with pluginval.
+
+**To improve.**
+- `ParameterRegistry` (D-03): the generality of the template and the map is unused (three registries with fixed
+  enums); an array replaces it with less code and stronger guarantees.
+- `DroseraCore.h` is a 368-line header with non-trivial maths (`applyPitchAndBody`, `blendedStringNote`) and three
+  registries: it stays readable thanks to its comments, but the frequency-response functions (`stringLoopResponse`,
+  `biquadResponse`) replicate by hand the coefficients of `BiquadFilters.cpp` and of `Tone`/`DcBlock`: if one
+  changes, the other must be updated by hand. A cross-reference comment or a shared function returning the
+  coefficients would prevent drift.
+- `PluginProcessor.cpp` holds the parameter layout, the MIDI state (`held[]`, allocator, bend), the sample-rate
+  bridge and the programs together: 475 lines, still manageable, but the MIDI state (`handleMidi`, `applyMidiState`,
+  `removeNote`) is a natural candidate for a small class testable without JUCE, like `VoiceAllocator`.
+- A cache of `std::atomic<float>*` for 25 parameters: it works, but an array indexed by an enum of the plugin
+  parameters would cut the 15 repeated `getRawParameterValue` lines.
+- `kSpecs` in `PluginProcessor.cpp` duplicates the ranges and curves of `DroseraCore::registerParams` ("Ranges/curves
+  mirror…"): a shared table in the DSP would avoid the duplication.
+- The comment in `FeedbackVoice.h:21-22` ("Init leaves fb_delay_samp_…") and the one in `Engine::Init` are essential,
+  because `Init` also serves as a reset on the audio thread: a delicate convention, but documented.
+
+---
+
+## 11. VST3 / AU compatibility
+
+| Aspect | Status |
 |---|---|
-| Parametri | 25 parametri 0..1 con `ParameterID` versionati (1 e 2), nomi in inglese, formattazione testo coerente con il motore; test d'identità ID/nome che blocca regressioni. Nel VST3 l'host vede 2107 parametri: i 25 + Bypass + 2080 di emulazione MIDI CC/aftertouch/pitch-bend (`JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS`, default JUCE per i synth). Serve per ricevere il pitch bend in VST3; è normale per i synth JUCE, ma ingombra le liste di automazione degli host. Nessuna azione. |
-| Automazione | Letta una volta per blocco, poi smoothing interno a 12 kHz: nessun zipper, niente automazione sample-accurate (standard JUCE). |
-| Stato | XML in binario, tag verificato, parametri assenti → default (progetti vecchi caricano, test con fixture baseline), `uiTab` e `program` salvati. Stato corrotto o troncato ignorato senza crash (`host_probe`). |
-| Programmi | 16 preset come programmi; `setCurrentProgram` imposta i parametri notificando l'host; indice persistito. Vedi D-09. |
-| Bypass | Default JUCE; D-04 quando c'è latenza. |
-| Bus | Uscita solo stereo; ingresso disabilitato/mono/stereo. Un host che chieda un'uscita mono non istanzia: accettabile per un synth. L'ingresso mono è letto dal solo canale 0 (corretto, il canale 1 del buffer può contenere spazzatura). |
-| MIDI | Note on/off (velocity 0 = off), all notes/sound off, pitch wheel ±2 st, omni. Sysex ignorati senza allocare. Sample-accurate. D-11. |
-| Sample rate e buffer | Verificato 22,05–192 kHz, blocchi 1–8192 e 0, con latenza dichiarata corretta. |
-| Doppia precisione | Non supportata (dichiarato correttamente). |
-| Tail | 10 s dichiarati; il drone è auto-oscillante, il valore è nominale. |
-| AU | Bundle corretto (`aumu`/`Dros`/`Cdsk`, versione 257); mai validato (D-05). |
-| Standalone | Costruito e firmato; non eseguito (richiede un dispositivo audio). |
-| macOS | minOS 11.0; firma ad hoc rifatta dopo la build (corretto, perché JUCE aggiunge `moduleinfo.json` dopo la firma); la CI firma e notarizza se ci sono i segreti. |
+| Parameters | 25 parameters 0..1 with versioned `ParameterID`s (1 and 2), English names, text formatting consistent with the engine; an ID/name identity test that blocks regressions. In the VST3 the host sees 2107 parameters: the 25 + Bypass + 2080 for MIDI CC/aftertouch/pitch-bend emulation (`JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS`, JUCE's default for synths). It is needed to receive pitch bend in VST3; it is normal for JUCE synths, but it clutters hosts' automation lists. No action. |
+| Automation | Read once per block, then smoothed internally at 12 kHz: no zipper noise, no sample-accurate automation (JUCE standard). |
+| State | XML in binary, tag checked, missing parameters → defaults (old projects load, tested with the baseline fixture), `uiTab` and `program` saved. Corrupt or truncated state ignored without a crash (`host_probe`). |
+| Programs | 16 presets as programs; `setCurrentProgram` sets the parameters while notifying the host; index persisted. See D-09. |
+| Bypass | JUCE default; D-04 when there is latency. |
+| Buses | Stereo output only; input disabled/mono/stereo. A host asking for a mono output does not instantiate: acceptable for a synth. A mono input is read from channel 0 only (correct: channel 1 of the buffer may hold garbage). |
+| MIDI | Note on/off (velocity 0 = off), all notes/sound off, pitch wheel ±2 st, omni. Sysex ignored without allocating. Sample-accurate. D-11. |
+| Sample rate and buffer | Verified at 22.05–192 kHz, blocks of 1–8192 and 0, with correct reported latency. |
+| Double precision | Not supported (declared correctly). |
+| Tail | 10 s reported; the drone self-oscillates, so the value is nominal. |
+| AU | Correct bundle (`aumu`/`Dros`/`Cdsk`, version 257); never validated (D-05). |
+| Standalone | Built and signed; not run (needs an audio device). |
+| macOS | minOS 11.0; ad hoc signature redone after the build (correct, because JUCE adds `moduleinfo.json` after signing); CI signs and notarizes if the secrets exist. |
 
 ---
 
-## 12. Piano di intervento prioritizzato
+## 12. Prioritised plan
 
-| # | Intervento | ID | Tipo | Complessità | Effetto sui checksum |
+| # | Change | ID | Kind | Complexity | Effect on checksums |
 |---|---|---|---|---|---|
-| 1 | Moltiplicazione senza segno in `whitenoise.h` + nota in `PATCHES.txt`; aggiungere un job CI con ASan/UBSan su `render_test` e `ui_test` | D-01 | Correzione necessaria | Banale | Nessuno (verificato) |
-| 2 | `ParameterRegistry` su array con ordine esplicito | D-03 | Correzione consigliata | Bassa (~40 righe, meno codice) | Nessuno se si conserva l'ordine attuale |
-| 3 | Echo che salta subito al valore della manopola all'avvio e dopo `Recover` | D-02 | Correzione consigliata (udibile) | Bassa | Sì: rigenerare con motivazione |
-| 4 | `processBlockBypassed` con ritardo pari alla latenza | D-04 | Correzione consigliata | Bassa | Nessuno |
-| 5 | Validare l'AU in CI (`auval`, `pluginval`) o togliere `AU` dai formati | D-05 | Consigliata | Bassa (CI) | Nessuno |
-| 6 | Clamp del sample rate in `prepareToPlay` | D-06 | Correzione (1 riga) | Banale | Nessuno |
-| 7 | Pin di JUCE all'hash del commit | D-10 | Consigliata | Banale | Nessuno |
-| 8 | `std::atomic<bool> prepared` | §8 | Opzionale | Banale | Nessuno |
-| 9 | Readout dell'intervallo effettivo o nota nel manuale | D-07 | Opzionale | Banale | Nessuno |
-| 10 | Recupero da NaN più leggero | D-08 | Opzionale | Media | Nessuno (solo dopo NaN) |
-| 11 | `setCurrentProgram` sul thread messaggi | D-09 | Opzionale | Bassa | Nessuno |
-| 12 | Note tenute attraverso `prepareToPlay`; sustain pedal; RPN bend range | D-11 | Funzionalità | Bassa/Media | Nessuno |
-| 13 | Skip degli handler a valore fermo; una sola `applyPitchAndBody` per tick | §9 | Ottimizzazione opzionale | Media | Nessuno se fatto bit a bit |
-| 14 | Pulizia warning e clang-tidy | D-12 | Opzionale | Banale | Nessuno |
+| 1 | Unsigned multiplication in `whitenoise.h` + note in `PATCHES.txt`; add a CI job with ASan/UBSan on `render_test` and `ui_test` | D-01 | Required fix | Trivial | None (verified) |
+| 2 | `ParameterRegistry` on an array with explicit order | D-03 | Recommended fix | Low (~40 lines, less code) | None if the current order is kept |
+| 3 | Echo jumping straight to the knob's value at start-up and after `Recover` | D-02 | Recommended fix (audible) | Low | Yes: regenerate with a stated reason |
+| 4 | `processBlockBypassed` with a delay equal to the latency | D-04 | Recommended fix | Low | None |
+| 5 | Validate the AU in CI (`auval`, `pluginval`) or remove `AU` from the formats | D-05 | Recommended | Low (CI) | None |
+| 6 | Clamp the sample rate in `prepareToPlay` | D-06 | Fix (1 line) | Trivial | None |
+| 7 | Pin JUCE to the commit hash | D-10 | Recommended | Trivial | None |
+| 8 | `std::atomic<bool> prepared` | §8 | Optional | Trivial | None |
+| 9 | Effective-interval readout, or a note in the manual | D-07 | Optional | Trivial | None |
+| 10 | Lighter NaN recovery | D-08 | Optional | Medium | None (only after a NaN) |
+| 11 | `setCurrentProgram` on the message thread | D-09 | Optional | Low | None |
+| 12 | Held notes across `prepareToPlay`; sustain pedal; RPN bend range | D-11 | Feature | Low/Medium | None |
+| 13 | Skip handlers whose value is still; one `applyPitchAndBody` per tick | §9 | Optional optimisation | Medium | None if done bitwise |
+| 14 | Clean up warnings and clang-tidy findings | D-12 | Optional | Trivial | None |
 
 ---
 
-## 13. Interventi applicati (dopo la revisione)
+## 13. Changes applied (after the review)
 
-Su richiesta, gli interventi 1–7 del piano sono stati applicati nel worktree (non committati). Diff: 13 file,
-+144/−56 righe.
+On request, changes 1–7 of the plan were applied in the worktree (not committed). Diff: 13 files, +144/−56 lines.
 
-| # | ID | Cosa è cambiato | Verifica |
+| # | ID | What changed | Verification |
 |---|---|---|---|
-| 1 | D-01 | `whitenoise.h`: prodotto in `uint32_t` riconvertito a `int32_t`; nota in `PATCHES.txt` | 7 render senza echo identici al bit; `ui_test` e `voice_allocator_test` passano sotto ASan+UBSan senza report; `render_test` sotto ASan+UBSan: 472/472 OK, zero report |
-| 2 | D-03 | `ParameterRegistry` su `std::array<std::optional<ParamState>, N>`, `Process` scorre dall'id più alto al più basso (l'ordine che libc++ dava); gli enum hanno `NumVoiceParams`/`NumEchoParams`; −9 righe nette | I 7 render senza echo restano identici al bit; i 3 con echo cambiano solo per D-02 |
-| 3 | D-02 | `Engine::SetEchoDelayTime(t, immediate)`; `DroseraCore` fa saltare l'echo al primo tick dopo `Init` e dopo `Recover` (`echo_jump_`); nuovo test `echoStartsAtKnobTime` | Prima ripetizione a 0,248 s con manopola a 0,248 s (prima: 0,954 s). `SHA256SUMS` rigenerati: p05, p06, p10 cambiano, gli altri 7 no. Motivo nel CHANGELOG |
-| 4 | D-04 | `processBlockBypassed` con un ring per canale lungo `getLatencySamples()`, allocato in `prepareToPlay`; nuovo test `bypassKeepsLatency`/`bypassPassesThrough` | Bypass a 44,1 kHz: dichiarati 327, misurati 327; a 48 kHz passa inalterato |
-| 5 | D-05 | CI: build di `Drosera_AU`, installazione nella cartella Components del runner, `auval -v aumu Dros Cdsk`, `pluginval` sull'AU | Non eseguibile qui (vedi §3); va osservato al primo run della CI |
-| 6 | D-06 | `prepareToPlay`: sample rate ≤ 0 → 48 000 | Compila; comportamento a rate validi invariato (`plugin_host_test` ALL OK) |
-| 7 | D-10 | `GIT_TAG` di JUCE = hash del commit di 8.0.9 | Il configure del worktree ha scaricato JUCE per hash con `GIT_SHALLOW ON` |
+| 1 | D-01 | `whitenoise.h`: product in `uint32_t` converted back to `int32_t`; note in `PATCHES.txt` | 7 renders without echo bit-identical; `ui_test` and `voice_allocator_test` pass under ASan+UBSan with no reports; `render_test` under ASan+UBSan: 472/472 OK, zero reports |
+| 2 | D-03 | `ParameterRegistry` on `std::array<std::optional<ParamState>, N>`, `Process` runs from the highest id to the lowest (the order libc++ gave); the enums have `NumVoiceParams`/`NumEchoParams`; −9 lines net | The 7 renders without echo stay bit-identical; the 3 with echo change only because of D-02 |
+| 3 | D-02 | `Engine::SetEchoDelayTime(t, immediate)`; `DroseraCore` makes the echo jump on the first tick after `Init` and after `Recover` (`echo_jump_`); new test `echoStartsAtKnobTime` | First repeat at 0.248 s with the knob at 0.248 s (before: 0.954 s). `SHA256SUMS` regenerated: p05, p06, p10 change, the other 7 do not. Reason in the CHANGELOG |
+| 4 | D-04 | `processBlockBypassed` with a ring per channel `getLatencySamples()` long, allocated in `prepareToPlay`; new tests `bypassKeepsLatency`/`bypassPassesThrough` | Bypass at 44.1 kHz: 327 reported, 327 measured; at 48 kHz it passes unchanged |
+| 5 | D-05 | CI: build of `Drosera_AU`, install into the runner's Components folder, `auval -v aumu Dros Cdsk`, `pluginval` on the AU | Not runnable here (see §3); to be watched on the first CI run |
+| 6 | D-06 | `prepareToPlay`: sample rate ≤ 0 → 48,000 | Compiles; behaviour at valid rates unchanged (`plugin_host_test` ALL OK) |
+| 7 | D-10 | JUCE's `GIT_TAG` = hash of the 8.0.9 commit | The worktree's configure downloaded JUCE by hash with `GIT_SHALLOW ON` |
 
-Suite complete sul worktree dopo le modifiche: `voice_allocator_test` OK, `render_test` 472 verifiche OK,
-`ui_test` ALL OK, `plugin_host_test` ALL OK (identità parametri, fixture baseline, latenza), `check_reference.sh`
-10/10 con i nuovi checksum. `tests/fixtures/state-baseline.bin` non è stato toccato.
+Full suites on the worktree after the changes: `voice_allocator_test` OK, `render_test` 472 checks OK, `ui_test` ALL
+OK, `plugin_host_test` ALL OK (parameter identity, baseline fixture, latency), `check_reference.sh` 10/10 with the new
+checksums. `tests/fixtures/state-baseline.bin` was not touched.
 
-Restano aperti gli opzionali 8–14 del piano e la nota sullo scarto residuo del one-pole dell'echo (in D-02).
-
----
-
-## 14. Misure per il sound design
-
-Le misure automatiche su livelli dei preset, tessitura MIDI, ripetibilità del caricamento, compatibilità mono,
-durata, combinazioni estreme e sample rate sono in `review/2026-11-03-sound-design-measurements.md`. I due
-punti da portare nel piano: lo stesso progetto può assestarsi su una parziale diversa a seconda di quando
-l'host consegna lo stato (rimedio: salto immediato dei parametri al ripristino), e il riverbero nell'anello
-stona le note MIDI sotto il 48 fino a ±46 cent al 35 % di Mix.
+Still open: optional items 8–14 of the plan and the note on the residual gap of the echo's one-pole (in D-02).
 
 ---
 
-## Valutazione complessiva e roadmap
+## 14. Sound design measurements
 
-Il progetto è solido: il thread audio è pulito, il DSP è corretto e misurato (intonazione MIDI entro
-0,2 cent, resampler a −94 dB in banda attenuata, stabilità per minuti ai valori estremi), la persistenza è
-protetta da fixture, e le scelte sonore sono documentate con i loro limiti. I difetti trovati sono di
-contorno: un UB ereditato da una libreria vendorizzata (che oggi nasconde la possibilità di usare i
-sanitizer), un transitorio d'avvio ereditato dal firmware, un ordine di valutazione lasciato alla libreria
-standard, e un AU costruito ma non verificato.
+The automatic measurements of preset levels, MIDI note range, load repeatability, mono compatibility, duration,
+extreme combinations and sample rates are in `review/2026-11-03-sound-design-measurements.md`. The two points to
+carry into the plan: the same project can settle on a different partial depending on when the host delivers the
+state (remedy: make the parameters jump on restore), and the reverb inside the loop detunes MIDI notes below 48 by
+up to ±46 cents at 35 % Mix.
 
-Roadmap suggerita:
-- **Subito (una sessione):** 1, 6, 7, 8 — correzioni banali senza effetto sui render — più il job CI con sanitizer.
-- **Prossima release:** 2 e 3 (con rigenerazione dei checksum motivata nel changelog), 4, 5.
-- **Quando si tocca l'area:** 9–14.
+---
 
-Non controllato: pluginval e auval (vincoli della sandbox), build Intel, ThreadSanitizer, ascolto
-soggettivo dei preset.
+## Overall assessment and roadmap
+
+The project is solid: the audio thread is clean, the DSP is correct and measured (MIDI tuning within 0.2 cents,
+resampler at −94 dB in the stopband, stability for minutes at extreme values), persistence is protected by a
+fixture, and the sound choices are documented along with their limits. The defects found are peripheral: a UB
+inherited from a vendored library (which today rules out the sanitizers), a start-up transient inherited from the
+firmware, an evaluation order left to the standard library, and an AU built but not verified.
+
+Suggested roadmap:
+- **Now (one session):** 1, 6, 7, 8 — trivial fixes with no effect on the renders — plus the CI job with sanitizers.
+- **Next release:** 2 and 3 (with checksum regeneration explained in the changelog), 4, 5.
+- **When the area is touched:** 9–14.
+
+Not checked: pluginval and auval (sandbox constraints), the Intel build, ThreadSanitizer, subjective listening to the
+presets.
